@@ -1,0 +1,20 @@
+{
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.venv": true,
+        "**/.vscode": true
+    },
+    "search.exclude": {
+        "**/__pycache__": true,
+        "**/.venv": true,
+        "**/.vscode": true
+    },
+    "files.watcherExclude": {
+        "**/__pycache__": true
+    },
+    // Set the project's .venv as the default interpreter on Windows
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    // Backwards-compatible fallback for older versions of the Python extension
+    "python.pythonPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+}

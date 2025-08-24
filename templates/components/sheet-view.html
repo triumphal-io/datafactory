@@ -1,0 +1,468 @@
+{% load static %}
+
+<div class="sheet flex flex-column">
+    <div class="sheet-nav flex flex-row-center flex-space-between">
+        <div class="flex flex-row-center gap-15 pad-14 padr-15 padl-15">
+            <i class="icon-ic_fluent_chevron_left_48_regular i-normal-plus"></i>
+            <p>Sheet Name here</p>
+        </div>
+        <div class="flex flex-row-center">
+            <div class="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10">
+                <img src="{% static 'assets/star.svg' %}" alt="Star Icon" />
+                <p class="text--micro" id="enrich-text">Enrich</p>
+            </div>
+            <div onclick="openPopup('row')" class="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10">
+                <i class="icon-ic_fluent_add_circle_28_regular i-normal"></i>
+                <p class="text--micro">Add Row</p>
+            </div>
+            <div onclick="openPopup('column')" class="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10">
+                <i class="icon-ic_fluent_add_circle_28_regular i-normal"></i>
+                <p class="text--micro">Add Column</p>
+            </div>
+            <div class="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10">
+                <i class="icon-ic_fluent_arrow_export_ltr_20_regular i-normal"></i>
+                <p class="text--micro">Export</p>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-content flex-expanded scroll-x scroll-y thin-scroll">
+      <div class="sheet-grid-container">
+        <div class="sheet-row header-row">
+          <div class="sheet-row-head">
+            <input onchange="select_row(this.id, 'all')" type="checkbox" class="cbx" id="cbxbnall" style="display: none">
+            <label for="cbxbnall" class="check">
+                {% include 'components/atoms/checkbox.html' %}
+            </label>
+          </div>
+          <div class="sheet-row-item header-cell" data-col="0">Item 1</div>
+          <div class="sheet-row-item header-cell" data-col="1">Item 2</div>
+          <div class="sheet-row-item header-cell" data-col="2">Item 3</div>
+        </div>
+        <div class="sheet-row">
+          <div class="sheet-row-head" data-row="1">
+            <span class="row-number">1</span>
+            <input onchange="select_row(this.id, '1')" type="checkbox" class="cbx row-checkbox" id="cbxbn1" style="display: none">
+            <label for="cbxbn1" class="check row-check">
+                {% include 'components/atoms/checkbox.html' %}
+            </label>
+          </div>
+          <div class="sheet-row-item" contenteditable="false">Item 4</div>
+          <div class="sheet-row-item" contenteditable="false">Item 5</div>
+          <div class="sheet-row-item" contenteditable="false">Item 6</div>
+      </div>
+        <div class="sheet-row">
+          <div class="sheet-row-head" data-row="2">
+            <span class="row-number">2</span>
+            <input onchange="select_row(this.id, '2')" type="checkbox" class="cbx row-checkbox" id="cbxbn2" style="display: none">
+            <label for="cbxbn2" class="check row-check">
+                {% include 'components/atoms/checkbox.html' %}
+            </label>
+          </div>
+          <div class="sheet-row-item" contenteditable="false">Item 7</div>
+          <div class="sheet-row-item" contenteditable="false">Item 8</div>
+          <div class="sheet-row-item" contenteditable="false">Item 9</div>
+      </div>
+        <div class="sheet-row">
+          <div class="sheet-row-head" data-row="3">
+            <span class="row-number">3</span>
+            <input onchange="select_row(this.id, '3')" type="checkbox" class="cbx row-checkbox" id="cbxbn3" style="display: none">
+            <label for="cbxbn3" class="check row-check">
+                {% include 'components/atoms/checkbox.html' %}
+            </label>
+          </div>
+          <div class="sheet-row-item" contenteditable="false">Item 10</div>
+          <div class="sheet-row-item" contenteditable="false">Item 11</div>
+          <div class="sheet-row-item" contenteditable="false">Item 12</div>
+      </div>
+        <div class="sheet-row">
+          <div class="sheet-row-head" data-row="4">
+            <span class="row-number">4</span>
+            <input onchange="select_row(this.id, '4')" type="checkbox" class="cbx row-checkbox" id="cbxbn4" style="display: none">
+            <label for="cbxbn4" class="check row-check">
+                {% include 'components/atoms/checkbox.html' %}
+            </label>
+          </div>
+          <div class="sheet-row-item" contenteditable="false">Item 13</div>
+          <div class="sheet-row-item" contenteditable="false">Item 14</div>
+          <div class="sheet-row-item" contenteditable="false">Item 15</div>
+      </div>        
+    </div>
+
+</div>
+
+
+<div id="popup" class="popup">
+    <div class="popup-content">
+        <div class="pop-add-column flex flex-column">
+            <div class="flex flex-row-center flex-space-between">
+                <p class="text--mega-plus" id="popup-title">Add Column</p>
+                <i class="icon-ic_fluent_dismiss_48_regular text--black i-normal-plus pointer" onclick="closePopup()"></i>
+            </div>
+            <p class="text--micro mrgnt-15">Column Title</p>
+            <input type="text" id="column-title" class="form--input wdth-full mrgnt-7" placeholder="Enter column title" />
+
+            <p class="text--micro mrgnt-15">Column Prompt (generated)</p>
+            <textarea id="column-prompt" class="form--input wdth-full mrgnt-7 text--black" placeholder="Datafactory will generate a prompt based on the column title"></textarea>
+            <button onclick="addColumn()" class="button button-big button-dark wdth-full mrgnt-20" id="column-action-btn">Add Column</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedCells = new Set();
+    let isDragging = false;
+    let dragStartCell = null;
+    let currentEditingCell = null;
+    let isSelectionMode = false;
+
+    // Initialize event listeners when document is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeSheetCells();
+        initializeHeaderCells();
+        updateEnrichText();
+    });
+
+    function initializeHeaderCells() {
+        const headerCells = document.querySelectorAll('.header-cell');
+        
+        headerCells.forEach((headerCell, index) => {
+            let clickTimer = null;
+            
+            headerCell.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Clear any existing timer
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                    return; // This is a double-click, so don't proceed with single-click logic
+                }
+                
+                // Set a timer for single-click action
+                clickTimer = setTimeout(() => {
+                    // Single click - select entire column
+                    const colIndex = this.getAttribute('data-col');
+                    if (colIndex !== null) {
+                        selectColumn(parseInt(colIndex));
+                    }
+                    clickTimer = null;
+                }, 200); // 200ms delay to distinguish from double-click
+            });
+            
+            headerCell.addEventListener('dblclick', function(e) {
+                e.preventDefault();
+                
+                // Clear the single-click timer
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                }
+                
+                // Double click - open popup for column editing
+                openColumnPopup(this);
+            });
+        });
+    }
+
+    function initializeSheetCells() {
+        // Only select data cells, not header cells
+        const cells = document.querySelectorAll('.sheet-row-item:not(.header-cell)');
+        
+        // Calculate row and column positions for each cell
+        const rows = document.querySelectorAll('.sheet-row:not(.header-row)');
+        let cellIndex = 0;
+        
+        rows.forEach((row, rowIndex) => {
+            const rowCells = row.querySelectorAll('.sheet-row-item:not(.header-cell)');
+            rowCells.forEach((cell, colIndex) => {
+                // Add data attributes for easier selection
+                cell.setAttribute('data-cell-id', cellIndex);
+                cell.setAttribute('data-row', rowIndex);
+                cell.setAttribute('data-col', colIndex);
+                cellIndex++;
+                
+                // Handle mousedown for drag selection start
+                cell.addEventListener('mousedown', function(e) {
+                    // Don't start selection if we're in edit mode
+                    if (currentEditingCell) return;
+                    
+                    e.preventDefault();
+                    
+                    // If Ctrl is held, toggle individual cell selection
+                    if (e.ctrlKey) {
+                        toggleCellSelection(this);
+                        return;
+                    }
+                    
+                    // Start drag selection
+                    isDragging = true;
+                    dragStartCell = this;
+                    
+                    // Clear previous selection if not holding Ctrl
+                    if (!e.ctrlKey) {
+                        clearSelection();
+                    }
+                    
+                    selectCell(this);
+                    isSelectionMode = true;
+                });
+                
+                // Handle mouseover for drag selection
+                cell.addEventListener('mouseenter', function(e) {
+                    if (isDragging && dragStartCell) {
+                        selectCellRange(dragStartCell, this);
+                    }
+                });
+                
+                // Handle click events
+                cell.addEventListener('click', function(e) {
+                    // If we just finished dragging, don't trigger click
+                    if (isSelectionMode) {
+                        e.preventDefault();
+                        return;
+                    }
+                    
+                    // Single click just focuses the cell if not in selection mode
+                    if (!e.ctrlKey && selectedCells.size === 0) {
+                        this.focus();
+                    }
+                });
+
+                // Handle double click to enter edit mode
+                cell.addEventListener('dblclick', function(e) {
+                    e.preventDefault();
+                    clearSelection();
+                    this.contentEditable = 'true';
+                    currentEditingCell = this;
+                    this.focus();
+                    
+                    // Place cursor at the end of text on double click
+                    const range = document.createRange();
+                    const selection = window.getSelection();
+                    range.selectNodeContents(this);
+                    range.collapse(false); // false means collapse to end
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                });
+
+                // Handle blur (when cell loses focus)
+                cell.addEventListener('blur', function(e) {
+                    // Make cell non-editable when it loses focus
+                    this.contentEditable = 'false';
+                    if (currentEditingCell === this) {
+                        currentEditingCell = null;
+                    }
+                });
+
+                // Handle Enter and Escape keys
+                cell.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.blur(); // Exit edit mode
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        // Restore original content if needed (you might want to store original value)
+                        this.blur(); // Exit edit mode
+                    }
+                });
+            });
+        });
+        
+        // Global mouseup to end drag selection
+        document.addEventListener('mouseup', function(e) {
+            if (isDragging) {
+                isDragging = false;
+                dragStartCell = null;
+                // Small delay to prevent click event from firing
+                setTimeout(() => {
+                    isSelectionMode = false;
+                }, 10);
+            }
+        });
+        
+        // Handle Escape key to clear selection
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !currentEditingCell) {
+                clearSelection();
+            }
+        });
+        
+        // Handle clicking on empty space within sheet content to clear selection
+        const sheetContent = document.querySelector('.sheet-content');
+        if (sheetContent) {
+            sheetContent.addEventListener('click', function(e) {
+                // Only clear selection if we clicked on the sheet content itself or grid container
+                // and not on any cell or row head
+                if (e.target === this || 
+                    e.target.classList.contains('sheet-grid-container') ||
+                    (e.target.closest('.sheet-row') && !e.target.closest('.sheet-row-item') && !e.target.closest('.sheet-row-head'))) {
+                    
+                    // Don't clear if we're currently dragging or just finished dragging
+                    if (!isDragging && !isSelectionMode) {
+                        clearSelection();
+                    }
+                }
+            });
+        }
+    }
+
+    function selectCell(cell) {
+        cell.classList.add('selected');
+        selectedCells.add(cell);
+        updateEnrichText();
+    }
+
+    function deselectCell(cell) {
+        cell.classList.remove('selected');
+        selectedCells.delete(cell);
+        updateEnrichText();
+    }
+
+    function toggleCellSelection(cell) {
+        if (selectedCells.has(cell)) {
+            deselectCell(cell);
+        } else {
+            selectCell(cell);
+        }
+    }
+
+    function clearSelection() {
+        selectedCells.forEach(cell => {
+            cell.classList.remove('selected');
+        });
+        selectedCells.clear();
+        clearColumnSelection();
+        updateEnrichText();
+    }
+
+    function selectCellRange(startCell, endCell) {
+        // Get row and column positions
+        const startRow = parseInt(startCell.getAttribute('data-row'));
+        const startCol = parseInt(startCell.getAttribute('data-col'));
+        const endRow = parseInt(endCell.getAttribute('data-row'));
+        const endCol = parseInt(endCell.getAttribute('data-col'));
+        
+        // Calculate the rectangular selection bounds
+        const minRow = Math.min(startRow, endRow);
+        const maxRow = Math.max(startRow, endRow);
+        const minCol = Math.min(startCol, endCol);
+        const maxCol = Math.max(startCol, endCol);
+        
+        // Clear current selection
+        clearSelection();
+        
+        // Select all cells in the rectangular area
+        const allCells = document.querySelectorAll('.sheet-row-item:not(.header-cell)');
+        
+        allCells.forEach(cell => {
+            const cellRow = parseInt(cell.getAttribute('data-row'));
+            const cellCol = parseInt(cell.getAttribute('data-col'));
+            
+            if (cellRow >= minRow && cellRow <= maxRow && 
+                cellCol >= minCol && cellCol <= maxCol) {
+                selectCell(cell);
+            }
+        });
+    }
+
+    function updateEnrichText() {
+        const enrichText = document.getElementById('enrich-text');
+        if (selectedCells.size > 0) {
+            enrichText.textContent = `Enrich ${selectedCells.size} cells`;
+        } else {
+            enrichText.textContent = 'Enrich';
+        }
+    }
+
+    function selectColumn(colIndex) {
+        // Clear current selection
+        clearSelection();
+        
+        // Select all cells in the specified column
+        const allCells = document.querySelectorAll('.sheet-row-item:not(.header-cell)');
+        
+        allCells.forEach(cell => {
+            const cellCol = parseInt(cell.getAttribute('data-col'));
+            if (cellCol === colIndex) {
+                selectCell(cell);
+            }
+        });
+        
+        // Also highlight the header cell
+        const headerCell = document.querySelector(`.header-cell[data-col="${colIndex}"]`);
+        if (headerCell) {
+            headerCell.classList.add('column-selected');
+        }
+    }
+
+    function clearColumnSelection() {
+        // Remove column selection styling from header cells
+        document.querySelectorAll('.header-cell').forEach(header => {
+            header.classList.remove('column-selected');
+        });
+    }
+
+    function openColumnPopup(headerCell) {
+        // Get column information
+        const colIndex = headerCell.getAttribute('data-col');
+        const columnTitle = headerCell.textContent.trim();
+        
+        // Update popup title and button for editing
+        document.getElementById("popup-title").textContent = "Edit Column";
+        document.getElementById("column-action-btn").textContent = "Update Column";
+        
+        // Pre-fill the popup with current column data
+        document.getElementById("column-title").value = columnTitle;
+        document.getElementById("column-prompt").value = `Generate data for ${columnTitle} column`;
+        
+        // Store the column index for potential editing
+        document.getElementById("popup").setAttribute('data-editing-col', colIndex);
+        
+        // Show the popup
+        document.getElementById("popup").style.display = "block";
+    }
+
+    function openPopup(type) {
+        // Reset popup for adding new column
+        document.getElementById("popup-title").textContent = "Add Column";
+        document.getElementById("column-action-btn").textContent = "Add Column";
+        document.getElementById("column-title").value = "";
+        document.getElementById("column-prompt").value = "";
+        document.getElementById("popup").removeAttribute('data-editing-col');
+        
+        document.getElementById("popup").style.display = "block";
+    }
+
+    function closePopup() {
+        document.getElementById("popup").style.display = "none";
+    }
+
+    function addColumn() {
+        const columnTitle = document.getElementById("column-title").value;
+        const columnPrompt = document.getElementById("column-prompt").value;
+        const popup = document.getElementById("popup");
+        const editingCol = popup.getAttribute('data-editing-col');
+
+        if (editingCol !== null) {
+            // Editing existing column
+            const headerCell = document.querySelector(`.header-cell[data-col="${editingCol}"]`);
+            if (headerCell) {
+                headerCell.textContent = columnTitle;
+            }
+            console.log("Editing column:", editingCol, columnTitle, columnPrompt);
+        } else {
+            // Adding new column
+            console.log("Adding column:", columnTitle, columnPrompt);
+        }
+        
+        // Close the popup
+        closePopup();
+        
+        // Re-initialize cells after adding/editing column
+        setTimeout(() => {
+            initializeSheetCells();
+            initializeHeaderCells();
+        }, 100);
+    }
+
+</script>
