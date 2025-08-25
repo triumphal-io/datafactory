@@ -1,4 +1,5 @@
 import asyncio
+import time
 from io import BytesIO
 from unittest import result
 from google.genai import types
@@ -6,6 +7,7 @@ from google import genai
 from datafactory import settings
 from PIL import Image
 from crawl4ai import *
+from google.api_core.exceptions import ResourceExhausted
 
 
 
@@ -52,15 +54,23 @@ def assistant(message):
     conversation = [prompt]
     
     while True:
-        # Generate response based on full conversation history
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=conversation,
-            config=types.GenerateContentConfig(
-                temperature=0,
-                tools=[get_ai_tools()]
+        try:
+            # Generate response based on full conversation history
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=conversation,
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    tools=[get_ai_tools()]
+                )
             )
-        )
+        except Exception as e:
+            exception_code = e.code if hasattr(e, 'code') else None
+            if exception_code == 429:
+                print(f"Rate limit exceeded: {e}")
+                # Implement your retry logic here, like a time delay
+                time.sleep(1)
+            print(f"An unexpected error occurred: {e}")
         
         # Check for function call
         if response.candidates[0].content.parts[0].function_call:
