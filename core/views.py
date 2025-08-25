@@ -21,3 +21,11 @@ def api_assistant(request, action):
         response['status'] = 'success'
     return JsonResponse(response)
        
+
+def api_enrich(request, action):
+    response = {'status': 'error'}
+    data = json.loads(request.POST.get('data', '{}'))
+    response['result'] = ai.enrichment(data)
+    response['status'] = 'success'
+    print(data)
+    return JsonResponse(response)

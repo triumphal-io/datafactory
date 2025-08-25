@@ -1,5 +1,6 @@
 from io import BytesIO
 from unittest import result
+from google.genai import types
 from google import genai
 from datafactory import settings
 from PIL import Image
@@ -12,12 +13,31 @@ def assistant(message):
     client = genai.Client(api_key=GEMINI_API_KEY)
     response = client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=prompt
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0,
+            # max_tokens=1024
+        )
     )
     print(response.text)
     result = response.text.strip()
 
     print(f"Assistant response: {result}")
+    return result
+
+
+def enrichment(data):
+    # exampledata = {
+    #     'context': {'Product Name': 'Zendesk'}, 
+    #     'position': {'Row': '0', 'Column': '1'}, 
+    #     'title': 'Product Category', 
+    #     'description': 'Category of the Product', 
+    #     'value': ''
+    # }
+    prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}. Provide a concise answer."
+    # use ai to find the value
+    result = assistant(prompt)
+    print(f"Enrichment result: {result}")
     return result
 
 

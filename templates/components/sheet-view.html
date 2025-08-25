@@ -13,7 +13,7 @@
         
         <!-- Navigation Menu Items -->
         <div class="flex flex-row-center">
-            <div class="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10">
+            <div onclick="enrichSelectedCells()" class="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10">
                 <img src="{% static 'assets/star.svg' %}" alt="Star Icon" />
                 <p class="text--micro" id="enrich-text">Enrich</p>
             </div>
@@ -60,9 +60,9 @@
                         {% include 'components/atoms/checkbox.html' %}
                     </label>
                 </div>
-                <div class="sheet-row-item header-cell" data-col="0">Item 1</div>
-                <div class="sheet-row-item header-cell" data-col="1">Item 2</div>
-                <div class="sheet-row-item header-cell" data-col="2">Item 3</div>
+                <div class="sheet-row-item header-cell" data-col="0" data-description="Name of the Product">Product Name</div>
+                <div class="sheet-row-item header-cell" data-col="1" data-description="Category of the Product">Product Category</div>
+                <div class="sheet-row-item header-cell" data-col="2" data-description="Price of the Product">Product Price</div>
             </div>
             
             <!-- Data Rows -->
@@ -78,9 +78,9 @@
                         {% include 'components/atoms/checkbox.html' %}
                     </label>
                 </div>
-                <div class="sheet-row-item" contenteditable="false">Item 4</div>
-                <div class="sheet-row-item" contenteditable="false">Item 5</div>
-                <div class="sheet-row-item" contenteditable="false">Item 6</div>
+                <div class="sheet-row-item" contenteditable="false">Zendesk</div>
+                <div class="sheet-row-item" contenteditable="false"></div>
+                <div class="sheet-row-item" contenteditable="false"></div>
             </div>
             
             <div class="sheet-row">
@@ -95,9 +95,9 @@
                         {% include 'components/atoms/checkbox.html' %}
                     </label>
                 </div>
-                <div class="sheet-row-item" contenteditable="false">Item 7</div>
-                <div class="sheet-row-item" contenteditable="false">Item 8</div>
-                <div class="sheet-row-item" contenteditable="false">Item 9</div>
+                <div class="sheet-row-item" contenteditable="false">Trello</div>
+                <div class="sheet-row-item" contenteditable="false"></div>
+                <div class="sheet-row-item" contenteditable="false"></div>
             </div>
             
             <div class="sheet-row">
@@ -112,9 +112,9 @@
                         {% include 'components/atoms/checkbox.html' %}
                     </label>
                 </div>
-                <div class="sheet-row-item" contenteditable="false">Item 10</div>
-                <div class="sheet-row-item" contenteditable="false">Item 11</div>
-                <div class="sheet-row-item" contenteditable="false">Item 12</div>
+                <div class="sheet-row-item" contenteditable="false">Asana</div>
+                <div class="sheet-row-item" contenteditable="false"></div>
+                <div class="sheet-row-item" contenteditable="false"></div>
             </div>
             
             <div class="sheet-row">
@@ -129,9 +129,9 @@
                         {% include 'components/atoms/checkbox.html' %}
                     </label>
                 </div>
-                <div class="sheet-row-item" contenteditable="false">Item 13</div>
-                <div class="sheet-row-item" contenteditable="false">Item 14</div>
-                <div class="sheet-row-item" contenteditable="false">Item 15</div>
+                <div class="sheet-row-item" contenteditable="false">Canva</div>
+                <div class="sheet-row-item" contenteditable="false"></div>
+                <div class="sheet-row-item" contenteditable="false"></div>
             </div>
             
         </div>
@@ -184,6 +184,19 @@
     let currentEditingCell = null;
     let isSelectionMode = false;
     let lastClickedCell = null; // Track the last clicked cell for paste operations
+
+    // Add CSS for status indicators
+    if (!document.getElementById('enrichment-styles')) {
+        const style = document.createElement('style');
+        style.id = 'enrichment-styles';
+        style.textContent = `
+            .enrichment-status {
+                pointer-events: none;
+                user-select: none;
+            }
+        `;
+        document.head.appendChild(style);
+    }
 
     // ===========================
     // INITIALIZATION
@@ -1322,5 +1335,281 @@
             });
         });
     }
+
+
+    function enrichSelectedCells() {
+        if (selectedCells.size === 0) {
+            alert('No cells selected for enrichment');
+            return;
+        }
+        
+        // Cache DOM queries for better performance
+        const headerCells = new Map();
+        const rowDataCache = new Map();
+        
+        // Pre-cache all header cells to avoid repeated DOM queries
+        document.querySelectorAll('.header-cell').forEach(header => {
+            const col = header.getAttribute('data-col');
+            headerCells.set(col, {
+                name: header.textContent.trim(),
+                description: header.getAttribute('data-description') || `No description found for column ${col}`
+            });
+        });
+        
+        // Group selected cells by column and row for efficient processing
+        const columnData = new Map();
+        const rowGroups = new Map();
+        
+        selectedCells.forEach(cell => {
+            const row = cell.getAttribute('data-row');
+            const col = cell.getAttribute('data-col');
+            const value = cell.textContent.trim();
+            
+            // Group by column
+            if (!columnData.has(col)) {
+                const headerInfo = headerCells.get(col) || {
+                    name: `Column ${col}`,
+                    description: `No description found for column ${col}`
+                };
+                columnData.set(col, {
+                    ...headerInfo,
+                    values: []
+                });
+            }
+            columnData.get(col).values.push(value);
+            
+            // Group by row
+            if (!rowGroups.has(row)) {
+                rowGroups.set(row, []);
+            }
+            rowGroups.get(row).push({ col, value });
+        });
+        
+        // Pre-cache full row data for unique rows
+        rowGroups.forEach((cells, row) => {
+            if (!rowDataCache.has(row)) {
+                const rowCells = document.querySelectorAll(`.sheet-row-item[data-row="${row}"]`);
+                const fullRowData = {};
+                
+                rowCells.forEach(cell => {
+                    const colIndex = cell.getAttribute('data-col');
+                    const cellValue = cell.textContent.trim();
+                    
+                    // Only include non-empty values in context
+                    if (cellValue) {
+                        const headerInfo = headerCells.get(colIndex);
+                        const colName = headerInfo ? headerInfo.name : `Column ${colIndex}`;
+                        fullRowData[colName] = cellValue;
+                    }
+                });
+                
+                rowDataCache.set(row, fullRowData);
+            }
+        });
+        
+        // Build formatted data efficiently
+        const formattedData = [];
+        selectedCells.forEach(cell => {
+            const row = cell.getAttribute('data-row');
+            const col = cell.getAttribute('data-col');
+            const value = cell.textContent.trim();
+            const columnInfo = columnData.get(col);
+            
+            formattedData.push({
+                context: rowDataCache.get(row),
+                position: {
+                    Row: row,
+                    Column: col
+                },
+                title: columnInfo.name,
+                description: columnInfo.description,
+                value: value
+            });
+        });
+
+        console.log('Formatted data for enrichment:', formattedData);
+
+        startEnriching(formattedData);
+    }
+
+
+    function startEnriching(data) {
+        console.log('Starting enrichment process with data:', data);
+        console.log(data.length + ' cells to enrich');
+
+        if (data.length === 0) {
+            return;
+        }
+
+        // First, set all selected cells to "Queued" status immediately
+        data.forEach(cellData => {
+            const cell = findCell(cellData.position.Row, cellData.position.Column);
+            if (cell) {
+                setCellStatus(cell, 'queued');
+            }
+        });
+
+        // Clear the selection after setting queued status
+        clearSelection();
+
+        // Start processing cells sequentially
+        processEnrichmentQueue(data, 0);
+    }
+
+    /**
+     * Process enrichment queue sequentially
+     */
+    async function processEnrichmentQueue(data, currentIndex) {
+        if (currentIndex >= data.length) {
+            console.log('All cells enriched successfully');
+            return;
+        }
+
+        const cellData = data[currentIndex];
+        const cell = findCell(cellData.position.Row, cellData.position.Column);
+        
+        if (!cell) {
+            console.error('Cell not found:', cellData.position);
+            // Continue with next cell
+            processEnrichmentQueue(data, currentIndex + 1);
+            return;
+        }
+
+        try {
+            // Set cell to "Generating" status (no need to set queued again)
+            setCellStatus(cell, 'generating');
+            
+            // Simulate API call with 2 second delay
+            await sleep(2000);
+            
+            // Generate mock enriched value
+            {% comment %} const enrichedValue = generateMockEnrichedValue(cellData); {% endcomment %}
+            
+            var payload = {
+                action: 'enrich',
+                data: JSON.stringify(cellData),
+                csrfmiddlewaretoken: '{{ csrf_token }}'
+            }
+
+            $.post('/api/enrich/do', payload, function(response) {
+                console.log('Enrichment response:', response);
+                if (response.status === 'success') {
+                    // Update cell content with enriched value
+                    setCellContent(cell, response.result);
+                } else {
+                    // Handle error case
+                    setCellStatus(cell, 'error');
+                }
+            });
+            
+            {% comment %} console.log(`Enriched cell at row ${cellData.position.Row}, col ${cellData.position.Column}: "${enrichedValue}"`); {% endcomment %}
+            
+        } catch (error) {
+            console.error('Error enriching cell:', error);
+            // Reset cell to original state on error
+            setCellStatus(cell, 'error');
+            await sleep(1000);
+            setCellContent(cell, cellData.value); // Restore original value
+        }
+        
+        // Process next cell in queue
+        processEnrichmentQueue(data, currentIndex + 1);
+    }
+
+    /**
+     * Set visual status indicator for a cell
+     */
+    function setCellStatus(cell, status) {
+        // Remove any existing status indicators
+        const existingIndicator = cell.querySelector('.enrichment-status');
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+
+        // Create status indicator element
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = 'enrichment-status';
+        
+        let statusText = '';
+        let statusColor = '';
+        
+        switch (status) {
+            case 'queued':
+                statusText = 'Queued';
+                statusColor = '#f59e0b'; // Yellow
+                break;
+            case 'generating':
+                statusText = 'Generating...';
+                statusColor = '#10b981'; // Green
+                break;
+            case 'error':
+                statusText = 'Error';
+                statusColor = '#ef4444'; // Red
+                break;
+            default:
+                return; // No status to show
+        }
+
+        statusIndicator.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: white;">
+                <div style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusColor};"></div>
+                <span>${statusText}</span>
+            </div>
+        `;
+
+        // Clear cell content and add status indicator
+        cell.innerHTML = '';
+        cell.appendChild(statusIndicator);
+    }
+
+    /**
+     * Set cell content and remove status indicator
+     */
+    function setCellContent(cell, content) {
+        // Remove any existing status indicators
+        const existingIndicator = cell.querySelector('.enrichment-status');
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+
+        // Set the new content
+        cell.textContent = content;
+    }
+
+    /**
+     * Generate mock enriched value for demonstration
+     */
+    function generateMockEnrichedValue(cellData) {
+        const { title, value, context } = cellData;
+        
+        // Generate different types of mock data based on column name
+        const columnLower = title.toLowerCase();
+        
+        if (columnLower.includes('category')) {
+            const categories = ['Software', 'Productivity', 'Communication', 'Design', 'Project Management'];
+            return categories[Math.floor(Math.random() * categories.length)];
+        } else if (columnLower.includes('price')) {
+            const prices = ['$9.99/month', '$19.99/month', '$29.99/month', '$49.99/month', '$99.99/month'];
+            return prices[Math.floor(Math.random() * prices.length)];
+        } else if (columnLower.includes('description')) {
+            return `AI-generated description for ${value}`;
+        } else if (columnLower.includes('email') || columnLower.includes('contact')) {
+            return `contact@${value.toLowerCase().replace(/\s+/g, '')}.com`;
+        } else if (columnLower.includes('website') || columnLower.includes('url')) {
+            return `https://www.${value.toLowerCase().replace(/\s+/g, '')}.com`;
+        } else {
+            // Generic enrichment
+            return `Enriched: ${value}`;
+        }
+    }
+
+    /**
+     * Sleep utility function for delays
+     */
+    function sleep(milliseconds) {
+        return new Promise(resolve => setTimeout(resolve, milliseconds));
+    }
+
+
 
 </script>
