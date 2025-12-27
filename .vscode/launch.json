@@ -2,15 +2,33 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Django: runserver 80",
+      "name": "Backend",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/manage.py",
-      "args": ["runserver", "0.0.0.0:80"],
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver", "0.0.0.0:50"],
       "django": true,
       "console": "integratedTerminal",
       "envFile": "${workspaceFolder}/.env",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Frontend",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "80"],
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack",
+      "configurations": ["Backend", "Frontend"],
+      "presentation": {
+        "group": "full-stack"
+      }
     }
   ]
 }

@@ -64,6 +64,32 @@ def assistant(message):
                     tools=[get_ai_tools()]
                 )
             )
+
+                   # Check for function call
+            if response.candidates[0].content.parts[0].function_call:
+                function_call = response.candidates[0].content.parts[0].function_call
+                print(f"Function to call: {function_call.name}")
+                print(f"Arguments: {function_call.args}")
+                
+                # Execute the tool
+                tool_result = globals()[function_call.name](**function_call.args)
+                
+                # Add tool result to conversation
+                conversation.append(
+                    types.Content(
+                        parts=[types.Part(function_response=types.FunctionResponse(
+                            name=function_call.name,
+                            response={"result": tool_result}
+                        ))]
+                    )
+                )
+                # Continue the loop to let AI process the tool result
+            else:
+                # No more tool calls needed, return the final response
+                print("No more function calls needed.")
+                print(response.text)
+                return response.text.strip()
+
         except Exception as e:
             exception_code = e.code if hasattr(e, 'code') else None
             if exception_code == 429:
@@ -72,33 +98,8 @@ def assistant(message):
                 time.sleep(1)
             print(f"An unexpected error occurred: {e}")
         
-        # Check for function call
-        if response.candidates[0].content.parts[0].function_call:
-            function_call = response.candidates[0].content.parts[0].function_call
-            print(f"Function to call: {function_call.name}")
-            print(f"Arguments: {function_call.args}")
-            
-            # Execute the tool
-            tool_result = globals()[function_call.name](**function_call.args)
-            
-            # Add tool result to conversation
-            conversation.append(
-                types.Content(
-                    parts=[types.Part(function_response=types.FunctionResponse(
-                        name=function_call.name,
-                        response={"result": tool_result}
-                    ))]
-                )
-            )
-            # Continue the loop to let AI process the tool result
-        else:
-            # No more tool calls needed, return the final response
-            print("No more function calls needed.")
-            print(response.text)
-            return response.text.strip()
-
-    print(f"Assistant response: {result}")
-    return result
+ 
+ 
 
 
 def enrichment(data):

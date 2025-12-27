@@ -3,7 +3,13 @@
         "**/__pycache__": true,
         "**/*.pyc": true,
         "**/.venv": true,
-        "**/.vscode": true
+        "**/.vscode": true,    
+        "frontend/eslint.config.js": true,
+        "frontend/vite.config.js": false,
+        "frontend/package.json": true,
+        "frontend/package-lock.json": true,
+        "frontend/node_modules/": true,
+        "frontend/.prettierrc": true
     },
     "search.exclude": {
         "**/__pycache__": true,

@@ -1,0 +1,222 @@
+body{
+    font-family: Inter, sans-serif;
+    line-height: 1.6;
+    font-size: 13px;
+    margin: 0;
+    padding: 0;
+    background: #222222;
+    color: white;
+    overflow: hidden;
+}
+
+textarea{
+    color: white;
+}
+
+section{
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+    width: 100vw;
+}
+
+main {
+    flex: 1;
+    overflow: auto;
+    width: 100%;
+}
+
+aside {
+     width: var(--aside-width, 300px);
+     min-width: 400px;
+     /* width: 400px; */
+     max-width: 60%;
+}
+
+
+
+
+/* ASSISTANT START */
+
+.assistant {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.assistant-head {
+    padding: 1rem;
+}
+
+.assistant-body {
+    display: flex;
+    flex: 1;
+    padding: 1rem;
+    flex-direction: column;
+    /* align items to the start; we'll use a spacer to push messages to the bottom */
+    justify-content: flex-start;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+.assistant-body p{
+    font-size: 13px;
+}
+
+.assistant-footer {
+    padding: 1rem;
+}
+
+.assistant-input-pad {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    background: #2B2B2B;
+    /* border: 4px SOLID #464646; */
+}
+
+.message {
+    margin-bottom: 1rem;
+}
+
+.message-user {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.message-user p {
+    background: #2B2B2B;
+    padding: 0.5rem 1rem;
+    max-width: 80%;
+    align-self: flex-end;
+}
+/* ASSISTANT END */
+
+
+
+
+/* SHEET START */
+
+.sheet{
+    height: 100vh;
+}
+
+
+.sheet-nav-menu-item:hover{
+    background-color: #323232;
+}
+
+
+.sheet-content{
+    border-top: 2px solid #323232;
+    width: 100%;
+}
+
+.sheet-grid-container{
+    width: min-content;
+    border-bottom: 1px solid #323232;
+}
+
+.sheet-row{
+    display: flex;
+    flex-direction: row;
+}
+
+.sheet-row-item, .sheet-row-head {
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid #323232;
+    border-right: 1px solid #323232;
+}
+.sheet-row:last-child .sheet-row-item {
+    border-bottom: 0;
+}
+
+.sheet-row-head {
+    width: 15px;
+    text-align: center;
+    border-bottom: 0;
+    position: relative;
+    cursor: pointer;
+}
+
+/* Row number and checkbox positioning */
+.sheet-row-head .row-number {
+    display: block;
+}
+
+.sheet-row-head .row-check {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Show checkbox on hover */
+.sheet-row-head:hover .row-number {
+    display: none;
+}
+
+.sheet-row-head:hover .row-check {
+    display: block;
+}
+
+/* Keep checkbox visible when checked */
+.sheet-row-head:has(.row-checkbox:checked) .row-number {
+    display: none;
+}
+
+.sheet-row-head:has(.row-checkbox:checked) .row-check {
+    display: block;
+}
+
+/* Fallback for browsers that don't support :has() */
+.sheet-row-head.checked .row-number {
+    display: none;
+}
+
+.sheet-row-head.checked .row-check {
+    display: block;
+}
+.sheet-row-item {
+    width: 160px;
+    user-select: none; /* Prevent text selection during drag */
+    cursor: default;
+}
+
+.sheet-row-item.header-cell {
+    /* background-color: #2B2B2B; */
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.sheet-row-item.header-cell:hover {
+    background-color: #0066cc20;
+}
+
+.sheet-row-item.header-cell.column-selected {
+    background-color: #0066cc60 !important;
+    /* outline: 1px solid #0066cc !important; */
+}
+
+.sheet-row-item.selected {
+    background-color: #0066cc40 !important;
+    outline: 1px solid #0066cc40 !important;
+    /* box-sizing: border-box; */
+}
+
+.sheet-row-item:hover:not(.header-cell):not(.selected) {
+    background-color: #0066cc20;
+}
+
+.sheet-row-item[contenteditable]:focus {
+   outline: 1px SOLID #0066cc;
+   cursor: text;
+}
+
+.sheet-row-item[contenteditable]:hover:not(:focus) {
+    outline: 1px SOLID #0066cc80;
+}
+
+
+/* SHEET END */
