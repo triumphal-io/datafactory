@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import IconStar from '../assets/logo-icon.svg';
 import IconDelete from '../assets/delete.svg';
 import IconAdd from '../assets/add-circle.svg';
@@ -23,7 +24,9 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
     document.head.appendChild(style);
 }
 
-export default function SheetView() {
+export default function SheetView({ documentId: propDocumentId, sheetId: propSheetId }) {
+    const navigate = useNavigate();
+
     // State management
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [selectedRows, setSelectedRows] = useState(new Set());
@@ -44,13 +47,15 @@ export default function SheetView() {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [sheetId, setSheetId] = useState('default-sheet'); // Can be dynamic
+    const [documentId, setDocumentId] = useState(propDocumentId);
+    const [sheetId, setSheetId] = useState(propSheetId);
     const [lastSaved, setLastSaved] = useState(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [columnWidths, setColumnWidths] = useState({});
     const [isResizing, setIsResizing] = useState(false);
     const [resizingColumn, setResizingColumn] = useState(null);
     const [overlayEditor, setOverlayEditor] = useState(null);
+    const [sheetsList, setSheetsList] = useState([]);
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -60,18 +65,47 @@ export default function SheetView() {
     const resizeStartXRef = useRef(null);
     const resizeStartWidthRef = useRef(null);
 
+    // Sync props to state when they change (for navigation)
+    useEffect(() => {
+        setDocumentId(propDocumentId);
+    }, [propDocumentId]);
+
+    useEffect(() => {
+        setSheetId(propSheetId);
+    }, [propSheetId]);
+
+    // Load sheets list from backend
+    useEffect(() => {
+        const loadSheetsList = async () => {
+            try {
+                const response = await apiFetch(`/api/documents/${documentId}/sheets/list`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'success' && data.sheets) {
+                        setSheetsList(data.sheets);
+                        console.log('Sheets list loaded:', data.sheets);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading sheets list:', error);
+            }
+        };
+
+        loadSheetsList();
+    }, [documentId]);
+
     // Load data from JSON on mount
     useEffect(() => {
         const loadSheetData = async () => {
             try {
                 setIsLoading(true);
-                const response = await apiFetch(`/api/sheets/${sheetId}`);
+                const response = await apiFetch(`/api/documents/${documentId}/sheets/${sheetId}`);
                 
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.sheetData) {
-                        setSheetData(data.sheetData);
-                        setLastSaved(new Date(data.lastModified));
+                    if (data.sheet_data) {
+                        setSheetData(data.sheet_data);
+                        setLastSaved(new Date(data.last_modified));
                         console.log('Sheet data loaded from server');
                     }
                 } else if (response.status === 404) {
@@ -91,7 +125,7 @@ export default function SheetView() {
         };
 
         loadSheetData();
-    }, [sheetId]);
+    }, [documentId, sheetId]);
 
     // Update enrich text based on selection
     useEffect(() => {
@@ -116,17 +150,17 @@ export default function SheetView() {
         saveTimerRef.current = setTimeout(async () => {
             try {
                 setIsSaving(true);
-                const response = await apiFetch(`/api/sheets/${sheetId}`, {
+                const response = await apiFetch(`/api/documents/${documentId}/sheets/${sheetId}`, {
                     method: 'POST',
                     body: {
-                        sheetData: sheetData,
-                        lastModified: new Date().toISOString()
+                        sheet_data: sheetData,
+                        last_modified: new Date().toISOString()
                     }
                 });
 
                 if (response.ok) {
                     const result = await response.json();
-                    setLastSaved(new Date());
+                    setLastSaved(new Date(result.last_modified));
                     console.log('Sheet data saved successfully');
                 } else {
                     throw new Error('Failed to save sheet data');
@@ -145,7 +179,7 @@ export default function SheetView() {
                 clearTimeout(saveTimerRef.current);
             }
         };
-    }, [sheetData, isLoading, sheetId]);
+    }, [sheetData, isLoading, documentId, sheetId]);
 
     // Update row checkbox states based on cell selection
     useEffect(() => {
@@ -828,6 +862,7 @@ export default function SheetView() {
     // Export data as JSON file
     const handleExportJSON = useCallback(() => {
         const dataToExport = {
+            documentId: documentId,
             sheetId: sheetId,
             sheetData: sheetData,
             exportedAt: new Date().toISOString(),
@@ -840,14 +875,14 @@ export default function SheetView() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `sheet-${sheetId}-${new Date().toISOString().slice(0, 10)}.json`;
+        link.download = `document-${documentId}-${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         
         console.log('Sheet data exported as JSON');
-    }, [sheetData, sheetId]);
+    }, [sheetData, documentId, sheetId]);
 
     // Keyboard shortcuts and paste handler
     useEffect(() => {
@@ -1099,15 +1134,18 @@ export default function SheetView() {
                         <img src={IconAdd} alt="Add Icon" height="16" />
                     </div>
                     <div className="sheet-footer-tab-group wdth-100">
-                       
-                        <div className="sheet-footer-tab active flex flex-row-center gap-10">
-                            <img src={IconSheet} alt="Sheet Icon" height="16" />
-                            <p className="text--micro">Sheet 1</p>
-                        </div>
-                        <div className="sheet-footer-tab flex flex-row-center gap-10">
-                            <img src={IconSheet} alt="Sheet Icon" height="16" />
-                            <p className="text--micro">Sheet 2</p>
-                        </div>
+                        {sheetsList.map((sheet, index) => (
+                            <div 
+                                key={sheet.sheet_id}
+                                className={`sheet-footer-tab flex flex-row-center gap-10 pointer ${
+                                    sheet.sheet_id === sheetId || (sheetId === 'default-sheet' && index === 0) ? 'active' : ''
+                                }`}
+                                onClick={() => navigate(`/document/${documentId}/sheet/${sheet.sheet_id}`)}
+                            >
+                                <img src={IconSheet} alt="Sheet Icon" height="16" />
+                                <p className="text--micro">{sheet.name}</p>
+                            </div>
+                        ))}
                         <div className='spacere'></div>
                         <div className="sheet-footer-tab flex flex-row-center gap-10">
                             <img src={IconProject} alt="Project Icon" height="16" />

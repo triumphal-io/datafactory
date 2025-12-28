@@ -5,23 +5,38 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.response import Response
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
+from core.models import Document, Sheet
 from core.handlers import ai
 
 
-# Create directory for storing sheet data
-SHEET_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sheet_data')
-if not os.path.exists(SHEET_DATA_DIR):
-    os.makedirs(SHEET_DATA_DIR)
+@api_view(['GET', 'POST'])
+def api_documents(request, action):
+    response = {'status': 'error'}
 
-def get_sheet_file_path(sheet_id):
-    """Get the file path for a sheet's JSON data"""
-    # Sanitize sheet_id to prevent directory traversal
-    safe_sheet_id = "".join(c for c in sheet_id if c.isalnum() or c in ('-', '_'))
-    return os.path.join(SHEET_DATA_DIR, f"{safe_sheet_id}.json")
+    if action == "list":
+        documents = Document.objects.all()
+        response['documents'] = []
+        for doc in documents:
+            response['documents'].append({
+                'id': str(doc.uuid),
+                'name': doc.name,
+                'uuid': str(doc.uuid),
+                'created_at': doc.created_at.isoformat(),
+                'last_modified': doc.last_modified.isoformat(),
+                'user': doc.user.username if doc.user else 'Anonymous'
+            })
+        response['status'] = 'success'
+    return Response(response)
 
-
-
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def api_assistant(request, action):
     response = {'status': 'error'}
     message = request.POST.get('message', '')
@@ -32,8 +47,10 @@ def api_assistant(request, action):
         response['status'] = 'success'
     return JsonResponse(response)
        
-@csrf_exempt
-@require_http_methods(["POST"])
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def api_enrich(request, action):
     response = {'status': 'error'}
     body = json.loads(request.body)
@@ -44,65 +61,76 @@ def api_enrich(request, action):
     return JsonResponse(response)
 
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def api_sheets(request, sheet_id):
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def api_sheets(request, did, sheet_id):
     """Handle sheet data GET (load) and POST (save) operations"""
     
     if request.method == 'GET':
-        # Load sheet data
-        file_path = get_sheet_file_path(sheet_id)
-        
-        if not os.path.exists(file_path):
-            return JsonResponse(
-                {'status': 'error', 'message': 'Sheet not found'},
-                status=404
-            )
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        if sheet_id == 'list':
+            # Return list of sheets for the document
+            sheets = Sheet.objects.filter(document__uuid=did)
+            sheet_list = []
+            for sheet in sheets:
+                sheet_list.append({
+                    'sheet_id': str(sheet.uuid),
+                    'name': sheet.name,
+                    'last_modified': sheet.last_modified.isoformat()
+                })
             return JsonResponse({
                 'status': 'success',
-                'sheetData': data.get('sheetData', {'columns': [], 'rows': []}),
-                'lastModified': data.get('lastModified', ''),
-                'sheetId': sheet_id
+                'sheets': sheet_list
             })
-        except Exception as e:
-            return JsonResponse(
-                {'status': 'error', 'message': str(e)},
-                status=500
-            )
-    
+        else:
+        # Load sheet data from database
+            if sheet_id == 'default-sheet':
+                # Get the first sheet for the document
+                sheet = Sheet.objects.filter(document__uuid=did).first()
+            else:
+                sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+            if not sheet:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Sheet not found'},
+                    status=404
+                )
+            data = sheet.data if sheet.data else {'columns': [], 'rows': []}
+            
+            return JsonResponse({
+                'status': 'success',
+                'sheet_data': data,
+                'last_modified': sheet.last_modified.isoformat(),
+                'sheet_id': str(sheet.uuid)
+            })
     elif request.method == 'POST':
-        # Save sheet data
-        try:
-            # Parse JSON body
+        
+        if sheet_id == 'new':
+            pass
+        else:
             body = json.loads(request.body)
-            sheet_data = body.get('sheetData', {'columns': [], 'rows': []})
-            last_modified = body.get('lastModified', '')
-            
-            # Prepare data to save
-            data_to_save = {
-                'sheetId': sheet_id,
-                'sheetData': sheet_data,
-                'lastModified': last_modified,
-                'version': '1.0'
-            }
-            
-            # Save to file
-            file_path = get_sheet_file_path(sheet_id)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-            
-            return JsonResponse({
-                'status': 'success',
-                'message': 'Sheet saved successfully',
-                'sheetId': sheet_id,
-                'lastModified': last_modified
-            })
-        except Exception as e:
-            return JsonResponse(
-                {'status': 'error', 'message': str(e)},
-                status=500
-            )
+            sheet_data = body.get('sheet_data', {'columns': [], 'rows': []})
+
+            if sheet_id == 'default-sheet':
+                # Get the first sheet for the document
+                sheet = Sheet.objects.filter(document__uuid=did).first()
+            else:
+                sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+            if sheet:
+                sheet.data = sheet_data
+                sheet.save()
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Sheet saved successfully',
+                    'sheet_id': str(sheet.uuid),
+                    'last_modified': sheet.last_modified.isoformat()
+                })
+            else:
+                # return error if sheet not found
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Sheet not found'},
+                    status=404
+                )
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)
+    

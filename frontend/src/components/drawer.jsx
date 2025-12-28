@@ -5,10 +5,12 @@ import IconLogo from '../assets/logo-icon.svg';
 import IconNew from '../assets/add.svg';
 import IconSettings from '../assets/settings.svg';
 import IconLogout from '../assets/sign-out.svg';
+import { apiFetch } from '../utils/api';
 
 export default function Drawer({ isOpen, onClose }) {
     const [opacity, setOpacity] = useState(isOpen ? 1 : 0);
     const [transition, setTransition] = useState(isOpen ? 'opacity 0.2s ease' : 'none');
+    const [documents, setDocuments] = useState([]);
 
     useEffect(() => {
         if (isOpen) {
@@ -17,6 +19,25 @@ export default function Drawer({ isOpen, onClose }) {
         } else {
             setOpacity(0);
             setTransition('none');
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        const fetchDocuments = async () => {
+            try {
+                const response = await apiFetch('/api/documents/list');
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Fetched documents:', data);
+                    setDocuments(data.documents);
+                }
+            } catch (error) {
+                console.error('Error fetching documents:', error);
+            }
+        };
+
+        if (isOpen) {
+            fetchDocuments();
         }
     }, [isOpen]);
 
@@ -44,10 +65,19 @@ export default function Drawer({ isOpen, onClose }) {
         <div style={{ color: '#ccc' }}>
             <p className='text--micro text__semibold opacity-5 mrgnt-15' style={{ padding: "0 15px" }}>History</p>
             <ul className='mrgnt-10 text--micro document-history'>
-                <Link to="/sheet" style={{ textDecoration: 'none', color: 'inherit' }}><li>Lorem ipsum dolor sit</li></Link>
-                <Link to="/sheet" style={{ textDecoration: 'none', color: 'inherit' }}><li>Amet consectetur adipiscing elit</li></Link>
-                <Link to="/sheet" style={{ textDecoration: 'none', color: 'inherit' }}><li>Sed do eiusmod tempor consectetur</li></Link>
-                <Link to="/sheet" style={{ textDecoration: 'none', color: 'inherit' }}><li>Incididunt ut labore et ipsum</li></Link>
+                {documents.length > 0 ? (
+                    documents.map((doc) => (
+                        <Link 
+                            key={doc.id} 
+                            to={`/document/${doc.id}/sheet/default-sheet`} 
+                            style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
+                            <li>{doc.name || doc.title}</li>
+                        </Link>
+                    ))
+                ) : (
+                    <li style={{ opacity: 0.5, paddingLeft: '15px' }}>No documents yet</li>
+                )}
             </ul>
         </div>
         <div className='spacer'></div>

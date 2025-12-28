@@ -64,7 +64,7 @@ aside {
 .assistant-body {
     display: flex;
     flex: 1;
-    padding: 10px 14px;
+    padding: 10px 14px 0px 14px;
     flex-direction: column;
     /* align items to the start; we'll use a spacer to push messages to the bottom */
     justify-content: flex-start;
