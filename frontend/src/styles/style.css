@@ -64,7 +64,7 @@ aside {
 }
 
 .assistant-footer {
-    padding: 1rem;
+    padding: 12px;
 }
 
 .assistant-input-pad {
@@ -218,5 +218,47 @@ aside {
     outline: 1px SOLID #0066cc80;
 }
 
+/* Sheet Footer */
+.sheet-footer {
+    padding: 0px 0 0px 0;
+    border-top: 2px solid #323232;
+}
+
+.sheet-footer-add{
+    padding: 6px 12px 8px 12px;
+    cursor: pointer;
+}
+
+
+.sheet-footer-tab{
+    padding: 9px 16px;
+    cursor: pointer;
+    position: relative;
+    top: -1px;
+    margin: -1px 0 0 0;
+}
+
+.sheet-footer-tab-group {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+}
+
+.sheet-footer-tab.active {
+    padding: 0px 16px;
+    position: relative;
+    top: -1px;
+    margin: -1px 0 0px 0;
+    background-color: #222222;
+    border-top: 2px solid transparent;
+    border-left: 2px solid #3a3a3a;
+    border-right: 2px solid #3a3a3a;
+    border-bottom: 0px solid #3a3a3a;
+    border-radius:  0 0 0px 0px;
+}
+
+.sheet-footer-tab:hover {
+    background-color: #3a3a3a;
+}
 
 /* SHEET END */

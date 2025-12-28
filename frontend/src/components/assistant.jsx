@@ -3,6 +3,7 @@ import { apiFetch } from '../utils/api.js';
 import Showdown from 'showdown';
 import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
+import LogoIcon from '../assets/logo-icon.svg';
 
 export default function Assistant() {
     const [messages, setMessages] = useState([]);
@@ -80,8 +81,14 @@ export default function Assistant() {
 
     return (
         <div className="assistant">
-            <div className="assistant-head"></div>
+            <div className="assistant-head">
+                <div className="flex flex-row-center gap-10">
+                    <img src={LogoIcon} alt="Assistant Logo" height="14" />
+                    <h2>Assistant</h2>
+                </div>
+            </div>
             <div className="assistant-body scroll-y thin-scroll" ref={bodyRef}>
+                
                 <div className="spacer"></div>
 
                 {messages.map((msg, index) => (
