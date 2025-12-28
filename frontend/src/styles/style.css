@@ -28,11 +28,24 @@ main {
 
 aside {
      width: var(--aside-width, 300px);
-     min-width: 400px;
+     min-width: 360px;
      /* width: 400px; */
      max-width: 50%;
 }
 
+
+/* NAVIGATION START */
+
+.document-history li, .drawer-item{
+    padding: 7px 15px;
+    cursor: pointer;
+}
+
+.document-history li:hover, .drawer-item:hover{
+    background-color: #323232;
+}
+
+/* NAVIGATION END */
 
 
 
@@ -51,7 +64,7 @@ aside {
 .assistant-body {
     display: flex;
     flex: 1;
-    padding: 0 1rem;
+    padding: 10px 14px;
     flex-direction: column;
     /* align items to the start; we'll use a spacer to push messages to the bottom */
     justify-content: flex-start;
@@ -123,7 +136,7 @@ aside {
 }
 
 .sheet-row-item, .sheet-row-head {
-    padding: 0.5rem 0.8rem;
+    padding: 0.6rem 0.8rem;
     border-bottom: 1px solid #323232;
     border-right: 1px solid #323232;
 }
@@ -132,6 +145,7 @@ aside {
 }
 
 .sheet-row-head {
+    font-size: 12px;
     width: 15px;
     text-align: center;
     border-bottom: 0;
@@ -180,14 +194,41 @@ aside {
 }
 .sheet-row-item {
     width: 160px;
+    overflow: hidden;
     user-select: none; /* Prevent text selection during drag */
     cursor: default;
+    font-size: 12px;
+    position: relative;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.sheet-row-item::-webkit-scrollbar {
+    height: 4px;
 }
 
 .sheet-row-item.header-cell {
     /* background-color: #2B2B2B; */
     font-weight: 500;
     cursor: pointer;
+}
+
+/* Column resize handle */
+.column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+}
+
+.column-resize-handle:hover {
+    background-color: #0066cc;
+}
+
+.column-resize-handle:active {
+    background-color: #0066cc;
 }
 
 .sheet-row-item.header-cell:hover {

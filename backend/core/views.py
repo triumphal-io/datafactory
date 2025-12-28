@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from core.handlers import ai
 
+
 # Create directory for storing sheet data
 SHEET_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sheet_data')
 if not os.path.exists(SHEET_DATA_DIR):
@@ -19,10 +20,6 @@ def get_sheet_file_path(sheet_id):
     safe_sheet_id = "".join(c for c in sheet_id if c.isalnum() or c in ('-', '_'))
     return os.path.join(SHEET_DATA_DIR, f"{safe_sheet_id}.json")
 
-# Create your views here.
-
-def home(request):
-    return render(request, 'home.html')
 
 
 def api_assistant(request, action):

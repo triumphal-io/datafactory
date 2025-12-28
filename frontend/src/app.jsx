@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { TokenContext } from "./utils/token-context.jsx";
 import { ToastContainer } from "react-toastify";
 import SheetPage from "./pages/sheet.jsx";
+import SettingsPage from "./pages/settings.jsx";
 
 const toURL = "/sheet";
 
@@ -70,6 +71,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/sheet" element={<SheetPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         {/*<Route path="/connectors" element={<Connectors />} />
         <Route path="/connectors/:connectorId" element={<ConnectorDetail />} />
         <Route path="/workflows" element={<Workflows />} />

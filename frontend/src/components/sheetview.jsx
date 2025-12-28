@@ -4,9 +4,11 @@ import IconDelete from '../assets/delete.svg';
 import IconAdd from '../assets/add-circle.svg';
 import IconExport from '../assets/export.svg';
 import IconLeft from '../assets/chevron-left.svg';
+import IconPanOpen from '../assets/pan-open.svg';
 import { apiFetch, getApiUrl } from '../utils/api';
 import IconProject from '../assets/folder.svg';
 import IconSheet from '../assets/sheet.svg';
+import Drawer from './drawer';
 
 // Inject CSS for enrichment status indicators
 if (typeof document !== 'undefined' && !document.getElementById('enrichment-styles')) {
@@ -44,12 +46,19 @@ export default function SheetView() {
     const [isSaving, setIsSaving] = useState(false);
     const [sheetId, setSheetId] = useState('default-sheet'); // Can be dynamic
     const [lastSaved, setLastSaved] = useState(null);
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [columnWidths, setColumnWidths] = useState({});
+    const [isResizing, setIsResizing] = useState(false);
+    const [resizingColumn, setResizingColumn] = useState(null);
+    const [overlayEditor, setOverlayEditor] = useState(null);
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
     const isSelectionModeRef = useRef(false);
     const clickTimerRef = useRef(null);
     const saveTimerRef = useRef(null);
+    const resizeStartXRef = useRef(null);
+    const resizeStartWidthRef = useRef(null);
 
     // Load data from JSON on mount
     useEffect(() => {
@@ -532,7 +541,7 @@ export default function SheetView() {
 
     // Handle mouse events for cell selection
     const handleCellMouseDown = useCallback((rowIndex, colIndex, event) => {
-        if (currentEditingCell) return;
+        if (currentEditingCell || overlayEditor) return;
         
         event.preventDefault();
         
@@ -553,7 +562,7 @@ export default function SheetView() {
         setDragStartCell({ row: rowIndex, col: colIndex });
         selectCell(rowIndex, colIndex);
         isSelectionModeRef.current = true;
-    }, [currentEditingCell, toggleCellSelection, clearSelection, selectCell]);
+    }, [currentEditingCell, overlayEditor, toggleCellSelection, clearSelection, selectCell]);
 
     const handleCellMouseUp = useCallback(() => {
         // Handled by global mouseup
@@ -603,6 +612,35 @@ export default function SheetView() {
         
         openPopupForEditColumn(colIndex);
     }, [openPopupForEditColumn]);
+    
+    const handleResizeMouseDown = useCallback((colIndex, event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        setIsResizing(true);
+        setResizingColumn(colIndex);
+        resizeStartXRef.current = event.clientX;
+        resizeStartWidthRef.current = columnWidths[colIndex] || 160;
+    }, [columnWidths]);
+    
+    const handleResizeMouseMove = useCallback((event) => {
+        if (!isResizing || resizingColumn === null) return;
+        
+        const deltaX = event.clientX - resizeStartXRef.current;
+        const newWidth = Math.max(60, resizeStartWidthRef.current + deltaX);
+        
+        setColumnWidths(prev => ({
+            ...prev,
+            [resizingColumn]: newWidth
+        }));
+    }, [isResizing, resizingColumn]);
+    
+    const handleResizeMouseUp = useCallback(() => {
+        setIsResizing(false);
+        setResizingColumn(null);
+        resizeStartXRef.current = null;
+        resizeStartWidthRef.current = null;
+    }, []);
     
     const handleSelectAllRows = useCallback((checked) => {
         if (checked) {
@@ -675,9 +713,36 @@ export default function SheetView() {
         return () => document.removeEventListener('mouseup', handleGlobalMouseUp);
     }, [isDragging]);
 
-    // Click outside to deselect cells
+    // Column resize listeners
+    useEffect(() => {
+        if (isResizing) {
+            document.addEventListener('mousemove', handleResizeMouseMove);
+            document.addEventListener('mouseup', handleResizeMouseUp);
+            return () => {
+                document.removeEventListener('mousemove', handleResizeMouseMove);
+                document.removeEventListener('mouseup', handleResizeMouseUp);
+            };
+        }
+    }, [isResizing, handleResizeMouseMove, handleResizeMouseUp]);
+
+    // Click outside to deselect cells and close overlay editor
     useEffect(() => {
         const handleClickOutside = (event) => {
+            // Close overlay editor if clicking outside of it
+            if (overlayEditor) {
+                const textarea = event.target.closest('textarea[data-overlay-editor]');
+                if (!textarea) {
+                    // Save and close the overlay editor
+                    const editorTextarea = document.querySelector('textarea[data-overlay-editor]');
+                    if (editorTextarea) {
+                        handleCellEdit(overlayEditor.row, overlayEditor.col, editorTextarea.value);
+                    }
+                    setOverlayEditor(null);
+                    return;
+                }
+                return; // If clicking inside the textarea, do nothing
+            }
+            
             // Don't deselect if currently editing a cell
             if (currentEditingCell) return;
             
@@ -710,7 +775,7 @@ export default function SheetView() {
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [currentEditingCell, clearSelection]);
+    }, [currentEditingCell, overlayEditor, clearSelection, handleCellEdit]);
 
     // Paste handling helper
     const handleMultiLinePaste = useCallback((cellRef, pastedText) => {
@@ -791,6 +856,22 @@ export default function SheetView() {
                 clearSelection();
                 setCurrentEditingCell(null);
             }
+            
+            // Clear selected cells on Backspace or Delete (only when not editing)
+            if ((e.key === 'Backspace' || e.key === 'Delete') && !currentEditingCell && !overlayEditor && selectedCells.size > 0) {
+                e.preventDefault();
+                
+                // Clear all selected cells
+                setSheetData(prev => ({
+                    ...prev,
+                    rows: prev.rows.map((row, rowIndex) =>
+                        row.map((cell, colIndex) => {
+                            const cellKey = `${rowIndex}-${colIndex}`;
+                            return selectedCells.has(cellKey) ? '' : cell;
+                        })
+                    )
+                }));
+            }
         };
 
         const handlePaste = (e) => {
@@ -809,14 +890,21 @@ export default function SheetView() {
             document.removeEventListener('keydown', handleKeyDown);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [clearSelection, currentEditingCell, handleMultiLinePaste]);
+    }, [clearSelection, currentEditingCell, overlayEditor, handleMultiLinePaste, selectedCells]);
 
     return (
-        <div className="sheet flex flex-column">
-            {/* Sheet Navigation Bar */}
-            <div className="sheet-nav flex flex-row-center flex-space-between">
+        <div className="sheet flex flex-row">
+            {/* Sidebar Drawer */}
+            <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+
+            {/* Main Content */}
+            <div className="flex flex-column" style={{ flex: 1, height: '100vh', overflow: 'hidden' }}>
+                {/* Sheet Navigation Bar */}
+                <div className="sheet-nav flex flex-row-center flex-space-between">
                 <div className="flex flex-row-center gap-15 pad-14 padr-15 padl-15">
-                    <img src={IconLeft} alt="Back Icon" height="16" />
+                    {!isDrawerOpen && (
+                    <img src={IconPanOpen} alt="Back Icon" height="18" className='pointer' onClick={() => setIsDrawerOpen(!isDrawerOpen)} />
+                    )}
                     <p>Sheet Name here</p>
 
                     {isSaving && (
@@ -926,12 +1014,17 @@ export default function SheetView() {
                                 className={`sheet-row-item header-cell ${
                                     selectedColumns.has(colIndex) ? 'column-selected' : ''
                                 }`}
+                                style={{ width: `${columnWidths[colIndex] || 160}px` }}
                                 data-col={colIndex}
                                 data-description={column.prompt}
                                 onClick={(e) => handleHeaderClick(colIndex, e)}
                                 onDoubleClick={(e) => handleHeaderDoubleClick(colIndex, e)}
                             >
                                 {column.title}
+                                <div
+                                    className="column-resize-handle"
+                                    onMouseDown={(e) => handleResizeMouseDown(colIndex, e)}
+                                />
                             </div>
                         ))}
                     </div>
@@ -962,8 +1055,7 @@ export default function SheetView() {
                                     className={`sheet-row-item ${
                                         selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
                                     }`}
-                                    contentEditable={currentEditingCell === `${rowIndex}-${colIndex}`}
-                                    suppressContentEditableWarning
+                                    style={{ width: `${columnWidths[colIndex] || 160}px` }}
                                     data-row={rowIndex}
                                     data-col={colIndex}
                                     onMouseDown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
@@ -972,41 +1064,18 @@ export default function SheetView() {
                                     onClick={(e) => handleCellClick(rowIndex, colIndex, e)}
                                     onDoubleClick={(e) => {
                                         e.preventDefault();
-                                        clearSelection();
-                                        setCurrentEditingCell(`${rowIndex}-${colIndex}`);
-                                        // Focus and place cursor at end
-                                        setTimeout(() => {
-                                            if (e.target) {
-                                                e.target.focus();
-                                                const range = document.createRange();
-                                                const selection = window.getSelection();
-                                                if (e.target.childNodes.length > 0) {
-                                                    range.selectNodeContents(e.target);
-                                                    range.collapse(false);
-                                                    selection.removeAllRanges();
-                                                    selection.addRange(range);
-                                                }
-                                            }
-                                        }, 0);
-                                    }}
-                                    onBlur={(e) => {
-                                        if (currentEditingCell === `${rowIndex}-${colIndex}`) {
-                                            handleCellEdit(rowIndex, colIndex, e.target.textContent);
-                                            setCurrentEditingCell(null);
-                                        }
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            e.target.blur();
-                                        } else if (e.key === 'Escape') {
-                                            e.preventDefault();
-                                            const originalValue = sheetData.rows[rowIndex][colIndex];
-                                            e.target.textContent = originalValue.startsWith('__STATUS__') 
-                                                ? originalValue.replace('__STATUS__', '') 
-                                                : originalValue;
-                                            e.target.blur();
-                                        }
+                                        
+                                        // Don't open editor if already editing
+                                        if (overlayEditor) return;
+                                        
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const cellValue = cell.startsWith('__STATUS__') ? '' : cell;
+                                        setOverlayEditor({
+                                            row: rowIndex,
+                                            col: colIndex,
+                                            value: cellValue,
+                                            rect: rect
+                                        });
                                     }}
                                 >
                                     {cell.startsWith('__STATUS__') ? (
@@ -1047,6 +1116,64 @@ export default function SheetView() {
                     </div>
                 </div>
             </div>
+
+            {/* Overlay Editor */}
+            {overlayEditor && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: overlayEditor.rect.top,
+                        left: overlayEditor.rect.left,
+                        width: overlayEditor.rect.width,
+                        // minHeight: '120px',
+                        display: 'flex',
+                        zIndex: 1000,
+                        border: '1.5px solid #0066cc',
+                        backgroundColor: '#1e1e1e',
+                        boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                    }}
+                >
+                    <textarea
+                        key={`${overlayEditor.row}-${overlayEditor.col}`}
+                        autoFocus
+                        rows={1}
+                        data-overlay-editor
+                        ref={(el) => {
+                            if (el) {
+                                el.style.height = 'auto';
+                                el.style.height = Math.max(0, el.scrollHeight-18) + 'px';
+                            }
+                        }}
+                        defaultValue={overlayEditor.value}
+                        style={{
+                            width: '100%',
+                            padding: '8px 8px 8px 8px',
+                            fontSize: '12px',
+                            border: 'none',
+                            outline: 'none',
+                            resize: 'vertical',
+                            backgroundColor: '#1e1e1e',
+                            color: '#e0e0e0',
+                            fontFamily: 'inherit',
+                            overflow: 'hidden'
+                        }}
+                        onInput={(e) => {
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.max(0, e.target.scrollHeight-18) + 'px';
+                        }}
+                        onBlur={(e) => {
+                            handleCellEdit(overlayEditor.row, overlayEditor.col, e.target.value);
+                            setOverlayEditor(null);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setOverlayEditor(null);
+                            }
+                        }}
+                    />
+                </div>
+            )}
 
             {/* Column Add/Edit Popup */}
             {showPopup && (
@@ -1098,6 +1225,7 @@ export default function SheetView() {
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }

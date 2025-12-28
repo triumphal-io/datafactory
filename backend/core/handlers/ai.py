@@ -1,94 +1,106 @@
 import asyncio
 import time
+import json
 from io import BytesIO
-from unittest import result
-from google.genai import types
-from google import genai
-from datafactory import settings
 from PIL import Image
-from crawl4ai import *
-from google.api_core.exceptions import ResourceExhausted
+from crawl4ai import AsyncWebCrawler
+import litellm
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 
+# Load .env from root folder
+env_path = Path(__file__).resolve().parents[3] / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 def get_ai_tools():
     search_tool = {
-        "name": "tool_search",
-        "description": "Searches for information related to a specific keyword. This tool can only gets urls matching the keyword.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "keyword": {
-                    "type": "string",
-                    "description": "The keyword to search for."
+        "type": "function",
+        "function": {
+            "name": "tool_search",
+            "description": "Searches for information related to a specific keyword. This tool can only gets urls matching the keyword.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "The keyword to search for."
+                    },
                 },
+                "required": ["keyword"],
             },
-            "required": ["keyword"],
-        },
+        }
     }
     web_scraper_tool = {
-        "name": "tool_web_scraper",
-        "description": "Scrapes a webpage for deeper insights and information.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "The URL of the website to scrape."
+        "type": "function",
+        "function": {
+            "name": "tool_web_scraper",
+            "description": "Scrapes a webpage for deeper insights and information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL of the website to scrape."
+                    },
                 },
+                "required": ["url"],
             },
-            "required": ["url"],
-        },
+        }
     }
 
-    tools = types.Tool(function_declarations=[search_tool, web_scraper_tool])
-    return tools
+    return [search_tool, web_scraper_tool]
 
 
 def assistant(message):
-    prompt = message
-    GEMINI_API_KEY = "AIzaSyAXgeXuiNS1mo0VZXUXcEXK3LdK87dhR00"
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    
     # Initialize conversation history with the original prompt
-    conversation = [prompt]
+    conversation = [{"role": "user", "content": message}]
     
     while True:
         try:
             # Generate response based on full conversation history
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=conversation,
-                config=types.GenerateContentConfig(
-                    temperature=0,
-                    tools=[get_ai_tools()]
-                )
+            response = litellm.completion(
+                model="gpt-5-mini",
+                messages=conversation,
+                tools=get_ai_tools(),
+                tool_choice="auto"
             )
-
-                   # Check for function call
-            if response.candidates[0].content.parts[0].function_call:
-                function_call = response.candidates[0].content.parts[0].function_call
-                print(f"Function to call: {function_call.name}")
-                print(f"Arguments: {function_call.args}")
+            
+            response_message = response.choices[0].message
+            tool_calls = response_message.tool_calls
+            
+            # Check for function call
+            if tool_calls:
+                # Add assistant's response to conversation
+                conversation.append(response_message)
                 
-                # Execute the tool
-                tool_result = globals()[function_call.name](**function_call.args)
+                # Execute each tool call
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    
+                    print(f"Function to call: {function_name}")
+                    print(f"Arguments: {function_args}")
+                    
+                    # Execute the tool
+                    tool_result = globals()[function_name](**function_args)
+                    
+                    # Add tool result to conversation
+                    conversation.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": str(tool_result)
+                    })
                 
-                # Add tool result to conversation
-                conversation.append(
-                    types.Content(
-                        parts=[types.Part(function_response=types.FunctionResponse(
-                            name=function_call.name,
-                            response={"result": tool_result}
-                        ))]
-                    )
-                )
                 # Continue the loop to let AI process the tool result
             else:
                 # No more tool calls needed, return the final response
                 print("No more function calls needed.")
-                print(response.text)
-                return response.text.strip()
+                final_content = response_message.content
+                print(final_content)
+                return final_content.strip() if final_content else ""
 
         except Exception as e:
             exception_code = e.code if hasattr(e, 'code') else None
@@ -96,8 +108,9 @@ def assistant(message):
                 print(f"Rate limit exceeded: {e}")
                 # Implement your retry logic here, like a time delay
                 time.sleep(1)
-            print(f"An unexpected error occurred: {e}")
-        
+            else:
+                print(f"An unexpected error occurred: {e}")
+                raise
  
  
 
