@@ -261,7 +261,7 @@ aside {
 
 /* Sheet Footer */
 .sheet-footer {
-    padding: 0px 0 0px 0;
+    padding: 0;
     border-top: 2px solid #323232;
 }
 
@@ -283,13 +283,14 @@ aside {
     display: flex;
     flex-direction: row;
     align-items: stretch;
+    gap: 0px;
 }
 
 .sheet-footer-tab.active {
     padding: 0px 16px;
     position: relative;
     top: -1px;
-    margin: -1px 0 0px 0;
+    margin: -1px 5px 0 5px;
     background-color: #222222;
     border-top: 2px solid transparent;
     border-left: 2px solid #3a3a3a;
@@ -299,7 +300,7 @@ aside {
 }
 
 .sheet-footer-tab:hover {
-    background-color: #3a3a3a;
+    /* background-color: #3a3a3a; */
 }
 
 /* SHEET END */

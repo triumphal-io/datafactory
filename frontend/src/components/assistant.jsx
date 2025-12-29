@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { apiFetch } from '../utils/api.js';
-import Showdown from 'showdown';
+import { convertMarkdownToHtml } from '../utils/utils.js';
 import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
 import LogoIcon from '../assets/logo-icon.svg';
@@ -18,21 +18,6 @@ export default function Assistant() {
             });
         }
     }, [messages]);
-
-    const convertMarkdownToHtml = (text) => {
-        Showdown.setFlavor('github');
-        Showdown.extension('targetlink', function () {
-            return [{
-                type: 'html',
-                regex: /(<a [^>]+?)(>.*<\/a>)/g,
-                replace: '$1 target="_blank"$2'
-            }];
-        });
-        const converter = new Showdown.Converter({
-            extensions: ['targetlink']
-        });
-        return converter.makeHtml(text);
-    };
 
     const sendMessage = async () => {
         const message = inputValue.trim();

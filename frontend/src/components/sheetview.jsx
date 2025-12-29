@@ -7,6 +7,7 @@ import IconExport from '../assets/export.svg';
 import IconLeft from '../assets/chevron-left.svg';
 import IconPanOpen from '../assets/pan-open.svg';
 import { apiFetch, getApiUrl } from '../utils/api';
+import { getTimeAgo } from '../utils/utils';
 import IconProject from '../assets/folder.svg';
 import IconSheet from '../assets/sheet.svg';
 import Drawer from './drawer';
@@ -56,6 +57,7 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
     const [resizingColumn, setResizingColumn] = useState(null);
     const [overlayEditor, setOverlayEditor] = useState(null);
     const [sheetsList, setSheetsList] = useState([]);
+    const [documentName, setDocumentName] = useState('Loading...');
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -76,13 +78,14 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
 
     // Load sheets list from backend
     useEffect(() => {
-        const loadSheetsList = async () => {
+        const loadDocumentData = async () => {
             try {
-                const response = await apiFetch(`/api/documents/${documentId}/sheets/list`);
+                const response = await apiFetch(`/api/documents/${documentId}`);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === 'success' && data.sheets) {
                         setSheetsList(data.sheets);
+                        setDocumentName(data.name);
                         console.log('Sheets list loaded:', data.sheets);
                     }
                 }
@@ -91,7 +94,7 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
             }
         };
 
-        loadSheetsList();
+        loadDocumentData();
     }, [documentId]);
 
     // Load data from JSON on mount
@@ -940,21 +943,12 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                     {!isDrawerOpen && (
                     <img src={IconPanOpen} alt="Back Icon" height="18" className='pointer' onClick={() => setIsDrawerOpen(!isDrawerOpen)} />
                     )}
-                    <p>Sheet Name here</p>
-
-                    {isSaving && (
-                        <div className="sheet-nav-menu-item padl-10 flex flex-row-center gap-10">
-                            <p className="text--micro" style={{ color: '#10b981' }}>Saving...</p>
-                        </div>
-                    )}
-                    
-                    {!isSaving && lastSaved && (
-                        <div className="sheet-nav-menu-item padl-10 flex flex-row-center gap-10">
-                            <p className="text--micro" style={{ color: '#6b7280', fontSize: '11px' }}>
-                                Saved {lastSaved.toLocaleTimeString()}
-                            </p>
-                        </div>
-                    )}
+                    <input 
+                        type="text" 
+                        className='input-empty text--white' 
+                        value={documentName}
+                        onChange={(e) => setDocumentName(e.target.value)}
+                    />
                 </div>
                 
                 <div className="flex flex-row-center">
@@ -1136,22 +1130,33 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                     <div className="sheet-footer-tab-group wdth-100">
                         {sheetsList.map((sheet, index) => (
                             <div 
-                                key={sheet.sheet_id}
-                                className={`sheet-footer-tab flex flex-row-center gap-10 pointer ${
-                                    sheet.sheet_id === sheetId || (sheetId === 'default-sheet' && index === 0) ? 'active' : ''
+                                key={sheet.id}
+                                className={`sheet-footer-tab flex flex-row-center gap-5 pointer ${
+                                    sheet.id === sheetId || (sheetId === 'default-sheet' && index === 0) ? 'active' : ''
                                 }`}
-                                onClick={() => navigate(`/document/${documentId}/sheet/${sheet.sheet_id}`)}
+                                onClick={() => navigate(`/document/${documentId}/sheet/${sheet.id}`)}
                             >
                                 <img src={IconSheet} alt="Sheet Icon" height="16" />
                                 <p className="text--micro">{sheet.name}</p>
                             </div>
                         ))}
-                        <div className='spacere'></div>
-                        <div className="sheet-footer-tab flex flex-row-center gap-10">
+                        <div className="sheet-footer-tab flex flex-row-center gap-5">
                             <img src={IconProject} alt="Project Icon" height="16" />
                             <p className="text--micro">Project Files</p>
                         </div>
+                        <div className='spacer'></div>
+                         <div className="flex flex-row-center padr-15">
+                            {isSaving && (
+                                <p className="text--micro" style={{ color: '#10b981' }}>Saving...</p>
+                            )}
+                            {!isSaving && lastSaved && (
+                                <p className="text--micro" style={{ color: '#6b7280', fontSize: '11px' }}>
+                                    Saved {getTimeAgo(lastSaved)}
+                                </p>
+                            )}
+                        </div>
                     </div>
+                   
                 </div>
             </div>
 

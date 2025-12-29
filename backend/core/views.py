@@ -11,7 +11,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from core.models import Document, Sheet
+from core.models import Document, Sheet, File, Conversation
 from core.handlers import ai
 
 
@@ -32,6 +32,47 @@ def api_documents(request, action):
                 'user': doc.user.username if doc.user else 'Anonymous'
             })
         response['status'] = 'success'
+    else:
+        document = Document.objects.filter(uuid=action).first()
+        if not document:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Document not found'},
+                status=404
+            )
+        response = {
+            'status': 'success',
+            'id': str(document.uuid),
+            'name': document.name,
+            'created_at': document.created_at.isoformat(),
+            'last_modified': document.last_modified.isoformat()
+        }
+        
+        sheets = Sheet.objects.filter(document=document)
+        response['sheets'] = []
+        for sheet in sheets:
+            response['sheets'].append({
+                'id': str(sheet.uuid),
+                'name': sheet.name,
+                'last_modified': sheet.last_modified.isoformat()
+            })
+        files = File.objects.filter(document=document)
+        response['files'] = []
+        for file in files:
+            response['files'].append({
+                'id': str(file.uuid),
+                'file': str(file.file),
+                'uploaded_at': file.uploaded_at.isoformat(),
+                'use': file.use
+            })
+        conversations = Conversation.objects.filter(document=document)
+        response['conversations'] = []
+        for conv in conversations:
+            response['conversations'].append({
+                'id': str(conv.uuid),
+                'title': conv.title,
+                'started_at': conv.started_at.isoformat(),
+                'last_interaction': conv.last_interaction.isoformat()
+            })
     return Response(response)
 
 @api_view(['POST'])

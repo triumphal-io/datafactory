@@ -2366,7 +2366,7 @@ textarea {
 /* The visible thin line */
 .resizer::before {
     content: "";
-    width: 6px;
+    width: 2.5px;
     height: 100%;
     background: #2B2B2B;
     transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
@@ -2377,11 +2377,13 @@ textarea {
 .resizer:hover::before,
 .resizer:focus::before {
     transform: translateX(0);
+    /* width: 5px; */
     background: #2d3bff;
 }
 
 /* When actively resizing give stronger visual feedback */
 .resizer.resizing::before {
+    /* width: 5px; */
     background: #2d3bff;
 }
 

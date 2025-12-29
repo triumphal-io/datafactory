@@ -48,7 +48,7 @@ export default function Drawer({ isOpen, onClose }) {
             background: '#222',
             transition: 'width 0.3s ease',
             overflow: 'hidden',
-            borderRight: isOpen ? '5px solid #2B2B2B' : 'none'
+            borderRight: isOpen ? '2.5px solid #2B2B2B' : 'none'
         }}>
         <div style={{ display: 'flex', padding: '15px', justifyContent: 'space-between', alignItems: 'center' }}>
             <img src={IconLogo} alt="Logo" height="20" />
