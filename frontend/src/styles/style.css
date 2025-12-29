@@ -277,6 +277,11 @@ aside {
     position: relative;
     top: -1px;
     margin: -1px 0 0 0;
+    border-top: 2px solid transparent;
+    border-left: 2px solid transparent;
+    border-right: 2px solid transparent;
+    border-bottom: 0px solid transparent;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 
 .sheet-footer-tab-group {
@@ -290,7 +295,7 @@ aside {
     padding: 0px 16px;
     position: relative;
     top: -1px;
-    margin: -1px 5px 0 5px;
+    margin: -1px 0px 0 0px;
     background-color: #222222;
     border-top: 2px solid transparent;
     border-left: 2px solid #3a3a3a;
@@ -304,3 +309,45 @@ aside {
 }
 
 /* SHEET END */
+
+
+/* MARKDOWN TABLE STYLES */
+
+.markdown-html table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    background-color: #2B2B2B;
+}
+
+.markdown-html th,
+.markdown-html td {
+    border: 1px solid #444;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-html th {
+    background-color: #363636;
+    font-weight: 600;
+    color: #fff;
+}
+
+.markdown-html td {
+    color: #e0e0e0;
+}
+
+.markdown-html tr:hover {
+    background-color: #323232;
+}
+
+.markdown-html.thumbnail table {
+    font-size: 0.85em;
+}
+
+.markdown-html.thumbnail th,
+.markdown-html.thumbnail td {
+    padding: 4px 6px;
+}
+
+/* MARKDOWN TABLE STYLES END */

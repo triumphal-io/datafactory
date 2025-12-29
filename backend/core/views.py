@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import uuid as uuid_lib
 from urllib import response
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -10,9 +12,11 @@ from rest_framework.response import Response
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.core.files.base import ContentFile
 
 from core.models import Document, Sheet, File, Conversation
 from core.handlers import ai
+from core.handlers.extraction import start_background_processing
 
 
 @api_view(['GET', 'POST'])
@@ -74,6 +78,87 @@ def api_documents(request, action):
                 'last_interaction': conv.last_interaction.isoformat()
             })
     return Response(response)
+
+
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def api_files(request, did, action):
+    response = {'status': 'error'}
+    if action == "list":
+        files = File.objects.filter(document__uuid=did)
+        response['files'] = []
+        for file in files:
+            response['files'].append({
+                'id': str(file.uuid),
+                'name': file.filename,
+                'file': str(file.file),
+                'content': file.extracted_content,
+                'size': file.calculated_size,
+                'uploaded_at': file.uploaded_at.isoformat(),
+                'is_processing': file.is_processing,
+                'use': file.use
+            })
+        response['status'] = 'success'
+    elif action == "upload":
+        uploaded_files = request.FILES.getlist('files')
+        print( uploaded_files)
+        if not uploaded_files:
+            return JsonResponse({'status': 'error', 'message': 'No files uploaded'}, status=400)
+        
+        document = Document.objects.filter(uuid=did).first()
+        if not document:
+            return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
+        
+        uploaded_file_ids = []
+        for uploaded_file in uploaded_files:
+            # Get original filename and extension
+            original_name = uploaded_file.name
+            name_parts = os.path.splitext(original_name)
+            base_name = name_parts[0]
+            extension = name_parts[1]
+            
+            # Sanitize filename to only contain a-z, A-Z, 0-9, -, _
+            sanitized_name = re.sub(r'[^a-zA-Z0-9\-_]', '', base_name)
+            if not sanitized_name:
+                sanitized_name = 'file'
+            
+            # Generate UUID and create new filename
+            file_uuid = uuid_lib.uuid4()
+            new_filename = f"{sanitized_name}-{file_uuid}{extension}"
+            
+            # Create file instance
+            file_instance = File.objects.create(
+                document=document,
+                filename=original_name,
+                calculated_size=uploaded_file.size,
+                extracted_content="",  # Will be populated by background processing
+                is_processing=True
+            )
+            
+            # Save file with new name
+            file_instance.file.save(new_filename, uploaded_file, save=True)
+            
+            uploaded_file_ids.append({
+                'id': str(file_instance.uuid),
+                'original_name': original_name,
+                'stored_name': new_filename
+            })
+        
+        response = {
+            'status': 'success',
+            'uploaded_files': uploaded_file_ids,
+            'count': len(uploaded_file_ids)
+        }
+        
+        # Start background processing of uploaded files
+        print(f"Triggering background processing for {len(uploaded_file_ids)} uploaded file(s)...")
+        start_background_processing()
+        
+    return JsonResponse(response)
+
+
 
 @api_view(['POST'])
 @authentication_classes([])

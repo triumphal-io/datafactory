@@ -39,7 +39,8 @@ export async function apiFetch(path, options = {}, authToken = null) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  if (options.body && typeof options.body === 'object') {
+  // Don't set Content-Type or stringify body for FormData
+  if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(options.body);
   }

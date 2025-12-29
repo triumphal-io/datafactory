@@ -34,9 +34,12 @@ class Sheet(models.Model):
 class File(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='files')
-
+    
+    filename = models.CharField(max_length=255)
+    calculated_size = models.BigIntegerField()
     extracted_content = models.TextField()
-    file = models.FileField(upload_to='uploads/')
+    file = models.FileField(upload_to='backend/storage/userdata/')
+    is_processing = models.BooleanField(default=True)
     use = models.BooleanField(default=True)
     uploaded_at = models.DateTimeField('Uploaded at', auto_now_add=True)
 

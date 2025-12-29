@@ -1,4 +1,5 @@
 import Showdown from 'showdown';
+import { toast } from 'react-toastify';
 
 /**
  * Convert a date to a relative time string (e.g., "2 hours ago", "just now")
@@ -45,3 +46,32 @@ export const convertMarkdownToHtml = (text) => {
     });
     return converter.makeHtml(text);
 };
+
+/**
+ * Show a toast notification using react-toastify
+ * @param {string} message - The message to display
+ * @param {string} type - The type of toast ('success', 'error', 'info', 'warning')
+ * @param {number} duration - Duration in milliseconds (default: 3000)
+ */
+export const showToast = (message, type = 'info', duration = 3000) => {
+    const options = {
+        autoClose: duration,
+    };
+
+    switch (type) {
+        case 'success':
+            toast.success(message, options);
+            break;
+        case 'error':
+            toast.error(message, options);
+            break;
+        case 'warning':
+            toast.warning(message, options);
+            break;
+        case 'info':
+        default:
+            toast.info(message, options);
+            break;
+    }
+};
+

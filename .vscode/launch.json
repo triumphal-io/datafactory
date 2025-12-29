@@ -6,7 +6,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/backend/manage.py",
-      "args": ["runserver", "0.0.0.0:50", "--skip-checks"],
+      "args": ["runserver", "0.0.0.0:50"],
       "django": true,
       "console": "integratedTerminal",
       "envFile": "${workspaceFolder}/.env",

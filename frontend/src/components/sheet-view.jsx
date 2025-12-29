@@ -1,16 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import IconStar from '../assets/logo-icon.svg';
 import IconDelete from '../assets/delete.svg';
 import IconAdd from '../assets/add-circle.svg';
 import IconExport from '../assets/export.svg';
-import IconLeft from '../assets/chevron-left.svg';
-import IconPanOpen from '../assets/pan-open.svg';
-import { apiFetch, getApiUrl } from '../utils/api';
-import { getTimeAgo } from '../utils/utils';
-import IconProject from '../assets/folder.svg';
-import IconSheet from '../assets/sheet.svg';
-import Drawer from './drawer';
+import { apiFetch } from '../utils/api';
 
 // Inject CSS for enrichment status indicators
 if (typeof document !== 'undefined' && !document.getElementById('enrichment-styles')) {
@@ -25,9 +18,7 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
     document.head.appendChild(style);
 }
 
-export default function SheetView({ documentId: propDocumentId, sheetId: propSheetId }) {
-    const navigate = useNavigate();
-
+const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
     // State management
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [selectedRows, setSelectedRows] = useState(new Set());
@@ -47,17 +38,10 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
         rows: []
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [documentId, setDocumentId] = useState(propDocumentId);
-    const [sheetId, setSheetId] = useState(propSheetId);
-    const [lastSaved, setLastSaved] = useState(null);
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [columnWidths, setColumnWidths] = useState({});
     const [isResizing, setIsResizing] = useState(false);
     const [resizingColumn, setResizingColumn] = useState(null);
     const [overlayEditor, setOverlayEditor] = useState(null);
-    const [sheetsList, setSheetsList] = useState([]);
-    const [documentName, setDocumentName] = useState('Loading...');
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -66,36 +50,7 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
     const saveTimerRef = useRef(null);
     const resizeStartXRef = useRef(null);
     const resizeStartWidthRef = useRef(null);
-
-    // Sync props to state when they change (for navigation)
-    useEffect(() => {
-        setDocumentId(propDocumentId);
-    }, [propDocumentId]);
-
-    useEffect(() => {
-        setSheetId(propSheetId);
-    }, [propSheetId]);
-
-    // Load sheets list from backend
-    useEffect(() => {
-        const loadDocumentData = async () => {
-            try {
-                const response = await apiFetch(`/api/documents/${documentId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.status === 'success' && data.sheets) {
-                        setSheetsList(data.sheets);
-                        setDocumentName(data.name);
-                        console.log('Sheets list loaded:', data.sheets);
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading sheets list:', error);
-            }
-        };
-
-        loadDocumentData();
-    }, [documentId]);
+    const loadedDataRef = useRef(null);
 
     // Load data from JSON on mount
     useEffect(() => {
@@ -108,27 +63,34 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                     const data = await response.json();
                     if (data.sheet_data) {
                         setSheetData(data.sheet_data);
-                        setLastSaved(new Date(data.last_modified));
+                        loadedDataRef.current = JSON.stringify(data.sheet_data);
+                        if (onLastSavedChange) {
+                            onLastSavedChange(new Date(data.last_modified));
+                        }
                         console.log('Sheet data loaded from server');
                     }
                 } else if (response.status === 404) {
                     // Sheet doesn't exist yet, start with empty data
+                    const emptyData = { columns: [], rows: [] };
                     console.log('No existing sheet found, starting with empty data');
-                    setSheetData({ columns: [], rows: [] });
+                    setSheetData(emptyData);
+                    loadedDataRef.current = JSON.stringify(emptyData);
                 } else {
                     throw new Error('Failed to load sheet data');
                 }
             } catch (error) {
                 console.error('Error loading sheet data:', error);
                 // Fall back to empty data on error
-                setSheetData({ columns: [], rows: [] });
+                const emptyData = { columns: [], rows: [] };
+                setSheetData(emptyData);
+                loadedDataRef.current = JSON.stringify(emptyData);
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadSheetData();
-    }, [documentId, sheetId]);
+    }, [documentId, sheetId, onLastSavedChange]);
 
     // Update enrich text based on selection
     useEffect(() => {
@@ -143,6 +105,10 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
     useEffect(() => {
         // Don't save if still loading initial data
         if (isLoading) return;
+        
+        // Don't save if data hasn't actually changed from what was loaded
+        const currentData = JSON.stringify(sheetData);
+        if (currentData === loadedDataRef.current) return;
 
         // Clear existing timer
         if (saveTimerRef.current) {
@@ -152,7 +118,7 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
         // Set new timer for debounced save (500ms after last change)
         saveTimerRef.current = setTimeout(async () => {
             try {
-                setIsSaving(true);
+                if (onSavingChange) onSavingChange(true);
                 const response = await apiFetch(`/api/documents/${documentId}/sheets/${sheetId}`, {
                     method: 'POST',
                     body: {
@@ -163,7 +129,10 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
 
                 if (response.ok) {
                     const result = await response.json();
-                    setLastSaved(new Date(result.last_modified));
+                    loadedDataRef.current = JSON.stringify(sheetData);
+                    if (onLastSavedChange) {
+                        onLastSavedChange(new Date(result.last_modified));
+                    }
                     console.log('Sheet data saved successfully');
                 } else {
                     throw new Error('Failed to save sheet data');
@@ -172,7 +141,7 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                 console.error('Error saving sheet data:', error);
                 // Could show a toast notification here
             } finally {
-                setIsSaving(false);
+                if (onSavingChange) onSavingChange(false);
             }
         }, 500);
 
@@ -182,7 +151,7 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                 clearTimeout(saveTimerRef.current);
             }
         };
-    }, [sheetData, isLoading, documentId, sheetId]);
+    }, [sheetData, isLoading, documentId, sheetId, onSavingChange, onLastSavedChange]);
 
     // Update row checkbox states based on cell selection
     useEffect(() => {
@@ -930,84 +899,74 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
         };
     }, [clearSelection, currentEditingCell, overlayEditor, handleMultiLinePaste, selectedCells]);
 
-    return (
-        <div className="sheet flex flex-row">
-            {/* Sidebar Drawer */}
-            <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
-
-            {/* Main Content */}
-            <div className="flex flex-column" style={{ flex: 1, height: '100vh', overflow: 'hidden' }}>
-                {/* Sheet Navigation Bar */}
-                <div className="sheet-nav flex flex-row-center flex-space-between">
-                <div className="flex flex-row-center gap-15 pad-14 padr-15 padl-15">
-                    {!isDrawerOpen && (
-                    <img src={IconPanOpen} alt="Back Icon" height="18" className='pointer' onClick={() => setIsDrawerOpen(!isDrawerOpen)} />
-                    )}
-                    <input 
-                        type="text" 
-                        className='input-empty text--white' 
-                        value={documentName}
-                        onChange={(e) => setDocumentName(e.target.value)}
-                    />
+    // Update parent component with navigation menu whenever it changes
+    useEffect(() => {
+        if (onNavigationChange) {
+            onNavigationChange(
+                <div className="flex flex-row-center">
+                <div 
+                    onClick={handleEnrichCells}
+                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                >
+                    <img src={IconStar} alt="Star Icon" height="16" />
+                    <p className="text--micro">{enrichText}</p>
                 </div>
                 
-                <div className="flex flex-row-center">
+                {showDeleteRow && (
                     <div 
-                        onClick={handleEnrichCells}
+                        onClick={handleDeleteRows}
                         className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
                     >
-                        <img src={IconStar} alt="Star Icon" height="16" />
-                        <p className="text--micro">{enrichText}</p>
+                        <img src={IconDelete} alt="Delete Icon" height="16" />
+                        <p className="text--micro">Delete Row</p>
                     </div>
-                    
-                    {showDeleteRow && (
-                        <div 
-                            onClick={handleDeleteRows}
-                            className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                        >
-                            <img src={IconDelete} alt="Delete Icon" height="16" />
-                            <p className="text--micro">Delete Row</p>
-                        </div>
-                    )}
-                    
-                    {showDeleteColumn && (
-                        <div 
-                            onClick={handleDeleteColumns}
-                            className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                        >
-                            <img src={IconDelete} alt="Delete Icon" height="16" />
-                            <p className="text--micro">Delete Column</p>
-                        </div>
-                    )}
-                    
+                )}
+                
+                {showDeleteColumn && (
                     <div 
-                        onClick={handleAddRow}
+                        onClick={handleDeleteColumns}
                         className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
                     >
-                        <img src={IconAdd} alt="Add Icon" height="16" />
-                        <p className="text--micro">Add Row</p>
+                        <img src={IconDelete} alt="Delete Icon" height="16" />
+                        <p className="text--micro">Delete Column</p>
                     </div>
-                    
-                    <div 
-                        onClick={openPopupForNewColumn}
-                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                    >
-                        <img src={IconAdd} alt="Add Icon" height="16" />
-                        <p className="text--micro">Add Column</p>
-                    </div>
-                    
-                    <div 
-                        onClick={handleExportJSON}
-                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                    >
-                        <img src={IconExport} alt="Export Icon" height="16" />
-                        <p className="text--micro">Export JSON</p>
-                    </div>
-                    
-                    
+                )}
+                
+                <div 
+                    onClick={handleAddRow}
+                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                >
+                    <img src={IconAdd} alt="Add Icon" height="16" />
+                    <p className="text--micro">Add Row</p>
+                </div>
+                
+                <div 
+                    onClick={openPopupForNewColumn}
+                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                >
+                    <img src={IconAdd} alt="Add Icon" height="16" />
+                    <p className="text--micro">Add Column</p>
+                </div>
+                
+                <div 
+                    onClick={handleExportJSON}
+                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                >
+                    <img src={IconExport} alt="Export Icon" height="16" />
+                    <p className="text--micro">Export JSON</p>
                 </div>
             </div>
-            
+            );
+        }
+    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportJSON]);
+
+    // Expose navigation menu to parent component (for imperative access if needed)
+    useImperativeHandle(ref, () => ({
+        // Can add imperative methods here if needed in future
+    }), []);
+
+    return (
+        <>
             {/* Sheet Content Area */}
             <div 
                 ref={sheetContentRef}
@@ -1018,146 +977,107 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                         <p style={{ color: '#6b7280' }}>Loading sheet data...</p>
                     </div>
                 ) : (
-                <div className="sheet-grid-container">
-                    {/* Header Row */}
-                    <div className="sheet-row header-row">
-                        <div className="sheet-row-head">
-                            <input 
-                                type="checkbox" 
-                                className="cbx" 
-                                id="cbxbnall"
-                                style={{ display: 'none' }}
-                                checked={sheetData.rows.length > 0 && selectedRows.size === sheetData.rows.length}
-                                onChange={(e) => handleSelectAllRows(e.target.checked)}
-                            />
-                            <label className="check" htmlFor="cbxbnall">
-                                <svg width="16px" height="16px" viewBox="0 0 18 18">
-                                    <path d="M1,9 L1,3.5 C1,2 2,1 3.5,1 L14.5,1 C16,1 17,2 17,3.5 L17,14.5 C17,16 16,17 14.5,17 L3.5,17 C2,17 1,16 1,14.5 L1,9 Z"></path>
-                                    <polyline points="1 9 7 14 15 4"></polyline>
-                                </svg>
-                            </label>
-                        </div>
-                        {sheetData.columns.map((column, colIndex) => (
-                            <div
-                                key={colIndex}
-                                className={`sheet-row-item header-cell ${
-                                    selectedColumns.has(colIndex) ? 'column-selected' : ''
-                                }`}
-                                style={{ width: `${columnWidths[colIndex] || 160}px` }}
-                                data-col={colIndex}
-                                data-description={column.prompt}
-                                onClick={(e) => handleHeaderClick(colIndex, e)}
-                                onDoubleClick={(e) => handleHeaderDoubleClick(colIndex, e)}
-                            >
-                                {column.title}
-                                <div
-                                    className="column-resize-handle"
-                                    onMouseDown={(e) => handleResizeMouseDown(colIndex, e)}
-                                />
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Data Rows */}
-                    {sheetData.rows.map((row, rowIndex) => (
-                        <div key={rowIndex} className="sheet-row">
-                            <div className="sheet-row-head" data-row={rowIndex}>
-                                <span className="row-number">{rowIndex + 1}</span>
+                    <div className="sheet-grid-container">
+                        {/* Header Row */}
+                        <div className="sheet-row header-row">
+                            <div className="sheet-row-head">
                                 <input 
-                                    type="checkbox"
-                                    className="cbx row-checkbox"
-                                    id={`cbxbn${rowIndex + 1}`}
+                                    type="checkbox" 
+                                    className="cbx" 
+                                    id="cbxbnall"
                                     style={{ display: 'none' }}
-                                    checked={selectedRows.has(rowIndex)}
-                                    onChange={(e) => handleRowCheckboxChange(rowIndex, e.target.checked)}
+                                    checked={sheetData.rows.length > 0 && selectedRows.size === sheetData.rows.length}
+                                    onChange={(e) => handleSelectAllRows(e.target.checked)}
                                 />
-                                <label className="check row-check" htmlFor={`cbxbn${rowIndex + 1}`}>
+                                <label className="check" htmlFor="cbxbnall">
                                     <svg width="16px" height="16px" viewBox="0 0 18 18">
                                         <path d="M1,9 L1,3.5 C1,2 2,1 3.5,1 L14.5,1 C16,1 17,2 17,3.5 L17,14.5 C17,16 16,17 14.5,17 L3.5,17 C2,17 1,16 1,14.5 L1,9 Z"></path>
                                         <polyline points="1 9 7 14 15 4"></polyline>
                                     </svg>
                                 </label>
                             </div>
-                            {row.map((cell, colIndex) => (
+                            {sheetData.columns.map((column, colIndex) => (
                                 <div
-                                    key={`${rowIndex}-${colIndex}`}
-                                    className={`sheet-row-item ${
-                                        selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
+                                    key={colIndex}
+                                    className={`sheet-row-item header-cell ${
+                                        selectedColumns.has(colIndex) ? 'column-selected' : ''
                                     }`}
                                     style={{ width: `${columnWidths[colIndex] || 160}px` }}
-                                    data-row={rowIndex}
                                     data-col={colIndex}
-                                    onMouseDown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
-                                    onMouseEnter={() => handleCellMouseEnter(rowIndex, colIndex)}
-                                    onMouseUp={handleCellMouseUp}
-                                    onClick={(e) => handleCellClick(rowIndex, colIndex, e)}
-                                    onDoubleClick={(e) => {
-                                        e.preventDefault();
-                                        
-                                        // Don't open editor if already editing
-                                        if (overlayEditor) return;
-                                        
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        const cellValue = cell.startsWith('__STATUS__') ? '' : cell;
-                                        setOverlayEditor({
-                                            row: rowIndex,
-                                            col: colIndex,
-                                            value: cellValue,
-                                            rect: rect
-                                        });
-                                    }}
+                                    data-description={column.prompt}
+                                    onClick={(e) => handleHeaderClick(colIndex, e)}
+                                    onDoubleClick={(e) => handleHeaderDoubleClick(colIndex, e)}
                                 >
-                                    {cell.startsWith('__STATUS__') ? (
-                                        <div 
-                                            className="enrichment-status"
-                                            dangerouslySetInnerHTML={{ __html: cell.replace('__STATUS__', '') }}
-                                        />
-                                    ) : cell}
+                                    {column.title}
+                                    <div
+                                        className="column-resize-handle"
+                                        onMouseDown={(e) => handleResizeMouseDown(colIndex, e)}
+                                    />
                                 </div>
                             ))}
                         </div>
-                    ))}
-                </div>
-                )}
-            </div>
 
-            {/* Sheet Footer */}
-            <div>
-                <div className="sheet-footer flex flex-row-center flex-space-betweenw">
-                    <div className="sheet-footer-add pointer">
-                        <img src={IconAdd} alt="Add Icon" height="16" />
-                    </div>
-                    <div className="sheet-footer-tab-group wdth-100">
-                        {sheetsList.map((sheet, index) => (
-                            <div 
-                                key={sheet.id}
-                                className={`sheet-footer-tab flex flex-row-center gap-5 pointer ${
-                                    sheet.id === sheetId || (sheetId === 'default-sheet' && index === 0) ? 'active' : ''
-                                }`}
-                                onClick={() => navigate(`/document/${documentId}/sheet/${sheet.id}`)}
-                            >
-                                <img src={IconSheet} alt="Sheet Icon" height="16" />
-                                <p className="text--micro">{sheet.name}</p>
+                        {/* Data Rows */}
+                        {sheetData.rows.map((row, rowIndex) => (
+                            <div key={rowIndex} className="sheet-row">
+                                <div className="sheet-row-head" data-row={rowIndex}>
+                                    <span className="row-number">{rowIndex + 1}</span>
+                                    <input 
+                                        type="checkbox"
+                                        className="cbx row-checkbox"
+                                        id={`cbxbn${rowIndex + 1}`}
+                                        style={{ display: 'none' }}
+                                        checked={selectedRows.has(rowIndex)}
+                                        onChange={(e) => handleRowCheckboxChange(rowIndex, e.target.checked)}
+                                    />
+                                    <label className="check row-check" htmlFor={`cbxbn${rowIndex + 1}`}>
+                                        <svg width="16px" height="16px" viewBox="0 0 18 18">
+                                            <path d="M1,9 L1,3.5 C1,2 2,1 3.5,1 L14.5,1 C16,1 17,2 17,3.5 L17,14.5 C17,16 16,17 14.5,17 L3.5,17 C2,17 1,16 1,14.5 L1,9 Z"></path>
+                                            <polyline points="1 9 7 14 15 4"></polyline>
+                                        </svg>
+                                    </label>
+                                </div>
+                                {row.map((cell, colIndex) => (
+                                    <div
+                                        key={`${rowIndex}-${colIndex}`}
+                                        className={`sheet-row-item ${
+                                            selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
+                                        }`}
+                                        style={{ width: `${columnWidths[colIndex] || 160}px` }}
+                                        data-row={rowIndex}
+                                        data-col={colIndex}
+                                        onMouseDown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
+                                        onMouseEnter={() => handleCellMouseEnter(rowIndex, colIndex)}
+                                        onMouseUp={handleCellMouseUp}
+                                        onClick={(e) => handleCellClick(rowIndex, colIndex, e)}
+                                        onDoubleClick={(e) => {
+                                            e.preventDefault();
+                                            
+                                            // Don't open editor if already editing
+                                            if (overlayEditor) return;
+                                            
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const cellValue = cell.startsWith('__STATUS__') ? '' : cell;
+                                            setOverlayEditor({
+                                                row: rowIndex,
+                                                col: colIndex,
+                                                value: cellValue,
+                                                rect: rect
+                                            });
+                                        }}
+                                    >
+                                        {cell.startsWith('__STATUS__') ? (
+                                            <div 
+                                                className="enrichment-status"
+                                                dangerouslySetInnerHTML={{ __html: cell.replace('__STATUS__', '') }}
+                                            />
+                                        ) : cell}
+                                    </div>
+                                ))}
                             </div>
                         ))}
-                        <div className="sheet-footer-tab flex flex-row-center gap-5">
-                            <img src={IconProject} alt="Project Icon" height="16" />
-                            <p className="text--micro">Project Files</p>
-                        </div>
-                        <div className='spacer'></div>
-                         <div className="flex flex-row-center padr-15">
-                            {isSaving && (
-                                <p className="text--micro" style={{ color: '#10b981' }}>Saving...</p>
-                            )}
-                            {!isSaving && lastSaved && (
-                                <p className="text--micro" style={{ color: '#6b7280', fontSize: '11px' }}>
-                                    Saved {getTimeAgo(lastSaved)}
-                                </p>
-                            )}
-                        </div>
                     </div>
-                   
-                </div>
+                )}
             </div>
 
             {/* Overlay Editor */}
@@ -1168,7 +1088,6 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                         top: overlayEditor.rect.top,
                         left: overlayEditor.rect.left,
                         width: overlayEditor.rect.width,
-                        // minHeight: '120px',
                         display: 'flex',
                         zIndex: 1000,
                         border: '1.5px solid #0066cc',
@@ -1268,7 +1187,8 @@ export default function SheetView({ documentId: propDocumentId, sheetId: propShe
                     </div>
                 </div>
             )}
-            </div>
-        </div>
+        </>
     );
-}
+});
+
+export default SheetView;
