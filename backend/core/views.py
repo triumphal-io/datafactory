@@ -20,6 +20,8 @@ from core.handlers.extraction import start_background_processing
 
 
 @api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def api_documents(request, action):
     response = {'status': 'error'}
 
@@ -36,6 +38,34 @@ def api_documents(request, action):
                 'user': doc.user.username if doc.user else 'Anonymous'
             })
         response['status'] = 'success'
+    elif action == "create":
+        # Create a new document with a default sheet
+        from django.contrib.auth.models import User
+        
+        # Get or create a default user (you may want to use actual authenticated user)
+        user = User.objects.get(username='rohanashik')
+        
+        # Create the document
+        document = Document.objects.create(
+            user=user,
+            name='Untitled Document',
+            data={}
+        )
+        
+        # Create a default sheet for the document
+        sheet = Sheet.objects.create(
+            document=document,
+            name='Sheet 1',
+            data={'columns': [], 'rows': []}
+        )
+        
+        response = {
+            'status': 'success',
+            'document_id': str(document.uuid),
+            'sheet_id': str(sheet.uuid),
+            'name': document.name
+        }
+        return Response(response)
     else:
         document = Document.objects.filter(uuid=action).first()
         if not document:

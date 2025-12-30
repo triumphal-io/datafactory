@@ -193,6 +193,7 @@ aside {
 }
 .sheet-row-item {
     width: 160px;
+    min-height: 20.8px;
     overflow: hidden;
     user-select: none; /* Prevent text selection during drag */
     cursor: default;

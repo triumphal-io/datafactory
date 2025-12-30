@@ -19,7 +19,7 @@ def get_ai_tools():
         "type": "function",
         "function": {
             "name": "tool_search",
-            "description": "Searches for information related to a specific keyword. This tool can only gets urls matching the keyword.",
+            "description": "Searches for information related to a specific keyword. This tool can get you relevant web results.",
             "parameters": {
                 "type": "object",
                 "properties": {
