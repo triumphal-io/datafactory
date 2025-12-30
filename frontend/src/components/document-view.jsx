@@ -21,7 +21,7 @@ export default function DocumentView({ documentId: propDocumentId, sheetId: prop
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [sheetsList, setSheetsList] = useState([]);
     const [documentName, setDocumentName] = useState('Loading...');
-    const [activeView, setActiveView] = useState('sheet'); // 'sheet' or 'project-files'
+    const [activeView, setActiveView] = useState(propSheetId ? 'sheet' : 'project-files'); // 'sheet' or 'project-files'
     const [lastSaved, setLastSaved] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [sheetNavState, setSheetNavState] = useState(null);
@@ -33,6 +33,7 @@ export default function DocumentView({ documentId: propDocumentId, sheetId: prop
 
     useEffect(() => {
         setSheetId(propSheetId);
+        setActiveView(propSheetId ? 'sheet' : 'project-files');
     }, [propSheetId]);
 
     // Load sheets list from backend
@@ -129,7 +130,10 @@ export default function DocumentView({ documentId: propDocumentId, sheetId: prop
                                 className={`sheet-footer-tab flex flex-row-center gap-5 pointer ${
                                     activeView === 'project-files' ? 'active' : ''
                                 }`}
-                                onClick={() => setActiveView('project-files')}
+                                onClick={() => {
+                                    setActiveView('project-files');
+                                    navigate(`/document/${documentId}/files`);
+                                }}
                             >
                                 <img src={IconProject} alt="Project Icon" height="16" />
                                 <p className="text--micro">Project Files</p>

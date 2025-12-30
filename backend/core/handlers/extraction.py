@@ -3,54 +3,173 @@ import os
 import threading
 from django.conf import settings
 from core.models import File
+from openpyxl import load_workbook
 
 
-def csv_to_markdown(file_path):
+class FileExtractor:
     """
-    Convert CSV file to markdown table format.
+    A class to handle extraction and conversion of various file types to markdown format.
+    Supports CSV, XLSX, and can be extended for PDF, PPT, images, etc.
+    """
     
-    Args:
-        file_path: Path to the CSV file
+    def __init__(self, file_path, filename):
+        """
+        Initialize the FileExtractor.
         
-    Returns:
-        Markdown formatted string representation of the CSV
-    """
-    try:
-        with open(file_path, 'r', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            rows = list(reader)
+        Args:
+            file_path: Path to the file to extract
+            filename: Original filename (used to determine file type)
+        """
+        self.file_path = file_path
+        self.filename = filename
+        self.file_extension = os.path.splitext(filename)[1].lower()
+    
+    def extract(self):
+        """
+        Main extraction method that routes to appropriate converter based on file type.
+        
+        Returns:
+            Markdown formatted string representation of the file content
+        """
+        try:
+            if self.file_extension == '.csv':
+                return self.csv_to_md()
+            elif self.file_extension in ['.xlsx', '.xls']:
+                return self.xlsx_to_md()
+            # Future file types can be added here:
+            # elif self.file_extension == '.pdf':
+            #     return self.pdf_to_md()
+            # elif self.file_extension in ['.ppt', '.pptx']:
+            #     return self.ppt_to_md()
+            # elif self.file_extension in ['.png', '.jpg', '.jpeg']:
+            #     return self.image_to_md()
+            else:
+                return f"Unsupported file type: {self.file_extension}"
+        except Exception as e:
+            return f"Error extracting {self.file_extension}: {str(e)}"
+    
+    def csv_to_md(self):
+        """
+        Convert CSV file to markdown table format.
+        
+        Returns:
+            Markdown formatted string representation of the CSV
+        """
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                rows = list(reader)
+                
+                if not rows:
+                    return "Empty CSV file"
+                
+                # Build markdown table
+                markdown_lines = []
+                
+                # Header row
+                if len(rows) > 0:
+                    header = rows[0]
+                    markdown_lines.append('| ' + ' | '.join(header) + ' |')
+                    markdown_lines.append('| ' + ' | '.join(['---'] * len(header)) + ' |')
+                
+                # Data rows
+                for row in rows[1:]:
+                    # Pad row if it has fewer columns than header
+                    if len(row) < len(header):
+                        row = row + [''] * (len(header) - len(row))
+                    # Truncate if it has more columns
+                    elif len(row) > len(header):
+                        row = row[:len(header)]
+                    markdown_lines.append('| ' + ' | '.join(row) + ' |')
+                
+                return '\n'.join(markdown_lines)
+                
+        except Exception as e:
+            raise Exception(f"CSV extraction failed: {str(e)}")
+    
+    def xlsx_to_md(self):
+        """
+        Convert XLSX file to markdown table format.
+        Calculates all formulas and displays them as text.
+        If there are multiple sheets, they are combined with sheet names as headings.
+        
+        Returns:
+            Markdown formatted string representation of the XLSX
+        """
+        try:
+            workbook = load_workbook(self.file_path, data_only=True)
+            markdown_sections = []
             
-            if not rows:
-                return "Empty CSV file"
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                
+                # Add sheet name as heading for multiple sheets
+                if len(workbook.sheetnames) > 1:
+                    markdown_sections.append(f"## {sheet_name}\n")
+                
+                # Get all rows with data
+                rows = []
+                for row in sheet.iter_rows(values_only=True):
+                    # Convert all cells to strings, handling None values
+                    row_data = [str(cell) if cell is not None else '' for cell in row]
+                    # Skip completely empty rows
+                    if any(cell for cell in row_data):
+                        rows.append(row_data)
+                
+                if not rows:
+                    markdown_sections.append("*Empty sheet*\n")
+                    continue
+                
+                # Determine the maximum number of columns
+                max_cols = max(len(row) for row in rows) if rows else 0
+                
+                # Normalize all rows to have the same number of columns
+                for i in range(len(rows)):
+                    if len(rows[i]) < max_cols:
+                        rows[i] = rows[i] + [''] * (max_cols - len(rows[i]))
+                
+                # Build markdown table
+                markdown_lines = []
+                
+                if rows:
+                    # First row as header
+                    header = rows[0]
+                    # Escape pipe characters in cells
+                    header = [str(cell).replace('|', '\\|') for cell in header]
+                    markdown_lines.append('| ' + ' | '.join(header) + ' |')
+                    markdown_lines.append('| ' + ' | '.join(['---'] * len(header)) + ' |')
+                    
+                    # Data rows
+                    for row in rows[1:]:
+                        # Escape pipe characters in cells
+                        row = [str(cell).replace('|', '\\|') for cell in row]
+                        markdown_lines.append('| ' + ' | '.join(row) + ' |')
+                
+                markdown_sections.append('\n'.join(markdown_lines))
             
-            # Build markdown table
-            markdown_lines = []
+            # Join all sections with double newlines
+            return '\n\n'.join(markdown_sections)
             
-            # Header row
-            if len(rows) > 0:
-                header = rows[0]
-                markdown_lines.append('| ' + ' | '.join(header) + ' |')
-                markdown_lines.append('| ' + ' | '.join(['---'] * len(header)) + ' |')
-            
-            # Data rows
-            for row in rows[1:]:
-                # Pad row if it has fewer columns than header
-                if len(row) < len(header):
-                    row = row + [''] * (len(header) - len(row))
-                # Truncate if it has more columns
-                elif len(row) > len(header):
-                    row = row[:len(header)]
-                markdown_lines.append('| ' + ' | '.join(row) + ' |')
-            
-            return '\n'.join(markdown_lines)
-            
-    except Exception as e:
-        return f"Error extracting CSV: {str(e)}"
+        except Exception as e:
+            raise Exception(f"XLSX extraction failed: {str(e)}")
+    
+    # Placeholder methods for future file type support
+    # def pdf_to_md(self):
+    #     """Convert PDF file to markdown format."""
+    #     pass
+    
+    # def ppt_to_md(self):
+    #     """Convert PowerPoint file to markdown format."""
+    #     pass
+    
+    # def image_to_md(self):
+    #     """Convert image file to markdown format (with OCR or description)."""
+    #     pass
 
 
 def extract_file_content(file_instance):
     """
-    Extract content from a file based on its type.
+    Extract content from a file based on its type using FileExtractor class.
     
     Args:
         file_instance: File model instance
@@ -58,13 +177,8 @@ def extract_file_content(file_instance):
     Returns:
         Extracted content as markdown string
     """
-    file_path = file_instance.file.path
-    file_extension = os.path.splitext(file_instance.filename)[1].lower()
-    
-    if file_extension == '.csv':
-        return csv_to_markdown(file_path)
-    else:
-        return f"Unsupported file type: {file_extension}"
+    extractor = FileExtractor(file_instance.file.path, file_instance.filename)
+    return extractor.extract()
 
 
 def process_pending_files():

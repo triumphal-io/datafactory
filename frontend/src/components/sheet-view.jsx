@@ -95,7 +95,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     // Update enrich text based on selection
     useEffect(() => {
         if (selectedCells.size > 0) {
-            setEnrichText(`Enrich ${selectedCells.size} cells`);
+            const cellText = selectedCells.size === 1 ? 'cell' : 'cells';
+            setEnrichText(`Enrich ${selectedCells.size} ${cellText}`);
         } else {
             setEnrichText('Enrich');
         }

@@ -48,7 +48,6 @@ aside {
 /* NAVIGATION END */
 
 
-
 /* ASSISTANT START */
 
 .assistant {
@@ -313,11 +312,33 @@ aside {
 
 /* MARKDOWN TABLE STYLES */
 
+.markdown-html-container {
+    border-bottom: 3px solid #2B2B2B;
+    padding: 20px 20px 0 20px;
+    height: 100px;
+    font-size: 10px;
+    margin: 0px 0 10px 0;
+    border-radius: 8px 8px 0 0;
+    transition-duration: 0.3s;
+    overflow: hidden;
+    /* background: linear-gradient(to top, #141414, #17171733) !important; */
+}
+
+.file:hover .markdown-html-container {
+    padding-top: 15px;
+    height: 105px;
+}
+
 .markdown-html table {
     border-collapse: collapse;
     width: 100%;
-    margin: 10px 0;
+    color: #e0e0e0 !important;
+    /* margin: 10px 0; */
     background-color: #2B2B2B;
+}
+.markdown-html a{
+    color: #e0e0e0 !important;
+    text-decoration: none;
 }
 
 .markdown-html th,

@@ -3,8 +3,7 @@ import IconAdd from '../assets/add-circle.svg';
 import IconFile from '../assets/file.svg';
 import IconLoader from '../assets/loader.gif';
 import { apiFetch } from '../utils/api';
-import { showToast } from '../utils/utils';
-import { convertMarkdownToHtml } from '../utils/utils';
+import { showToast, getTimeAgo, convertMarkdownToHtml } from '../utils/utils';
 
 const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
     // State management
@@ -84,6 +83,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
+        input.accept = '.csv,.xlsx,.xls';
         input.onchange = async (e) => {
             const files = Array.from(e.target.files);
             if (files.length > 0) {
@@ -167,42 +167,46 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                             return (
                                 <div 
                                     key={index}
-                                    className="flex flex-row-center flex-space-between"
+                                    className="file flex flex-row-center flex-space-between"
                                     style={{
-                                        padding: '12px 16px',
-                                        backgroundColor: '#2B2B2B',
-                                        borderRadius: '6px',
+                                        // padding: '12px 16px',
+                                        border: '3px solid #2b2b2b',
+                                        // borderRadius: '6px',
                                         cursor: 'pointer'
                                     }}
                                 >
-                                    <div className="flex flex-column">
+                                    <div className="flex flex-column wdth-100">
                                         {file.is_processing ? (
-                                            <img src={IconLoader} alt="Processing" width="50" className='mrgnt-5 mrgnb-20' style={{padding: '31px 31px 31px 6px'}} />
+                                            <div className='flex flex-column flex-row-center' style={{ height: '133px', justifyContent: 'center' }}>
+                                                <img src={IconLoader} alt="Processing" width="50"/>
+                                            </div>
                                         ) : (
                                             // <img src={IconFile} alt="File" width="50" className='mrgnt-5 mrgnb-20' />
                                             // <div className='flex flex-row flex-row-center flex-horizontal-center wdth-100'>
-                                            <div style={{
-                                                border: '2px solid #dedcd126',
-                                                padding: '15px 15px 0 15px',
-                                                maxWidth: '150px',
-                                                maxHeight: '100px',
-                                                fontSize: '10px',
-                                                margin: '5px 0 12px 0',
-                                                borderRadius: '8px 8px 0 0',
-                                                transitionDuration: '0.3s',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                backgroundImage: 'linear-gradient(to bottom, #363636, #36363633)',
-                                            }}>
+                                            <div className='markdown-html-container'>
+                                                <div style={{
+                                                    border: '1px solid #dedcd126',
+                                                    fontSize: '10px',
+                                                    // maxWidth: '150px',
+                                                    margin: 'auto',
+                                                    borderRadius: '8px 8px 0 0',
+                                                    transitionDuration: '0.3s',
+                                                    overflow: 'hidden',
+                                                    // transform: 'scale(0.5)',
+                                                    textOverflow: 'ellipsis',
+                                                }}>
                                                 {<div className='markdown-html thumbnail' dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(file.content) }} />
                                                  || (<div style={{ color: '#6b7280' }}>No preview available</div>)}
                                             </div>
-                                            // </div>
+                                            </div>
                                         )}
-                                        <p style={{ color: '#fff' }}>{file.name}</p>
-                                        <p style={{ color: '#6b7280', fontSize: '12px' }}>
-                                            {formatFileSize(file.size)} • {getFileType(file.name)}
-                                        </p>
+                                        <div className='flex flex-column gap-5 padl-15 padr-15 padb-10'>
+                                            <div className='flex flex-row-center flex-space-between'>
+                                                <p className='text--micro'>{file.name}</p>
+                                                <p className='text--nano opacity-5'>{formatFileSize(file.size)} • {getFileType(file.name)}</p>
+                                            </div>
+                                            <p className='text--micro opacity-5'>{getTimeAgo(new Date(file.uploaded_at))}</p>
+                                        </div>
                                     </div>
                                 </div>
                             );

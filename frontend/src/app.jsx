@@ -71,6 +71,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/document/:documentId/sheet/:sheetId" element={<DocumentPage />} />
+        <Route path="/document/:documentId/files" element={<DocumentPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         {/*<Route path="/connectors" element={<Connectors />} />
         <Route path="/connectors/:connectorId" element={<ConnectorDetail />} />

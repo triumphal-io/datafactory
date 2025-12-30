@@ -90,6 +90,8 @@ def api_files(request, did, action):
         files = File.objects.filter(document__uuid=did)
         response['files'] = []
         for file in files:
+            # if file.is_processing:
+                # start_background_processing()
             response['files'].append({
                 'id': str(file.uuid),
                 'name': file.filename,
@@ -110,6 +112,16 @@ def api_files(request, did, action):
         document = Document.objects.filter(uuid=did).first()
         if not document:
             return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
+        
+        # Validate file types (only CSV and XLSX allowed)
+        allowed_extensions = ['.csv', '.xlsx', '.xls']
+        for uploaded_file in uploaded_files:
+            file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+            if file_ext not in allowed_extensions:
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': f'Invalid file type: {uploaded_file.name}. Only CSV and XLSX files are allowed.'
+                }, status=400)
         
         uploaded_file_ids = []
         for uploaded_file in uploaded_files:
