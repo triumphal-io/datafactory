@@ -61,6 +61,28 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                             }
                             break;
                         
+                        case 'tool_add_column':
+                            if (sheetViewRef.current && activeView === 'sheet') {
+                                result = await sheetViewRef.current.addColumns(
+                                    tool.arguments.columns, 
+                                    tool.arguments.position || 'end'
+                                );
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: result.success 
+                                        ? result.message
+                                        : `Failed: ${result.error}`
+                                });
+                            } else {
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: 'Error: No sheet is currently open'
+                                });
+                            }
+                            break;
+                        
                         // Add more tool cases here as needed
                         default:
                             toolResults.push({

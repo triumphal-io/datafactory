@@ -150,7 +150,47 @@ def get_sheet_tools():
         }
     }
     
-    return [add_rows_tool]
+    add_column_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_add_column",
+            "description": "Add one or more columns to the currently open spreadsheet. Each column must have a title and can optionally have a prompt/description for AI enrichment. Use this when user asks to add columns, insert columns, or create new columns.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "description": "Array of column objects to add. Each column must have a title and optional prompt.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {
+                                    "type": "string",
+                                    "description": "The column header/title that will be displayed."
+                                },
+                                "prompt": {
+                                    "type": "string",
+                                    "description": "Optional description or prompt for AI-assisted data enrichment in this column.",
+                                    "default": ""
+                                }
+                            },
+                            "required": ["title"]
+                        },
+                        "minItems": 1
+                    },
+                    "position": {
+                        "type": "string",
+                        "description": "Where to add the columns: 'end' adds at right, 'beginning' adds at left",
+                        "enum": ["end", "beginning"],
+                        "default": "end"
+                    }
+                },
+                "required": ["columns"],
+            },
+        }
+    }
+    
+    return [add_rows_tool, add_column_tool]
 
 
 def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None):

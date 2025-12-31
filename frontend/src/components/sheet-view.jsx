@@ -993,6 +993,54 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             } catch (error) {
                 return { success: false, error: error.message };
             }
+        },
+        
+        addColumns: async (columns, position = 'end') => {
+            try {
+                if (!Array.isArray(columns) || columns.length === 0) {
+                    return { success: false, error: 'Invalid columns array' };
+                }
+
+                // Validate each column has a title
+                for (const col of columns) {
+                    if (!col.title || col.title.trim() === '') {
+                        return { success: false, error: 'Each column must have a title' };
+                    }
+                }
+
+                // Add the columns
+                setSheetData(prev => {
+                    const newColumns = columns.map(col => ({
+                        title: col.title,
+                        prompt: col.prompt || ''
+                    }));
+                    
+                    // Extend existing rows to accommodate new columns
+                    const extendedRows = prev.rows.map(row => {
+                        const newCells = Array(columns.length).fill('');
+                        return position === 'beginning'
+                            ? [...newCells, ...row]  // Add cells at beginning
+                            : [...row, ...newCells]   // Add cells at end
+                    });
+
+                    return {
+                        ...prev,
+                        columns: position === 'beginning'
+                            ? [...newColumns, ...prev.columns]  // Add at beginning
+                            : [...prev.columns, ...newColumns],  // Add at end
+                        rows: extendedRows
+                    };
+                });
+
+                const positionText = position === 'beginning' ? ' at the beginning' : '';
+                const columnNames = columns.map(c => c.title).join(', ');
+                return { 
+                    success: true, 
+                    message: `Added ${columns.length} column${columns.length > 1 ? 's' : ''} (${columnNames})${positionText}` 
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
         }
     }), []);
 
