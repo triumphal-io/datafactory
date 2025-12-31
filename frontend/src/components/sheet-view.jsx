@@ -454,7 +454,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 method: 'POST',
                 body: {
                     action: 'enrich',
-                    data: cellData
+                    data: cellData,
+                    documentId: documentId
                 }
             });
             
@@ -866,20 +867,20 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             }
             
             // Clear selected cells on Backspace or Delete (only when not editing)
-            if ((e.key === 'Backspace' || e.key === 'Delete') && !currentEditingCell && !overlayEditor && selectedCells.size > 0) {
-                e.preventDefault();
-                
-                // Clear all selected cells
-                setSheetData(prev => ({
-                    ...prev,
-                    rows: prev.rows.map((row, rowIndex) =>
-                        row.map((cell, colIndex) => {
-                            const cellKey = `${rowIndex}-${colIndex}`;
-                            return selectedCells.has(cellKey) ? '' : cell;
-                        })
-                    )
-                }));
-            }
+            // if ((e.key === 'Backspace' || e.key === 'Delete') && !currentEditingCell && !overlayEditor && selectedCells.size > 0) {
+            //     e.preventDefault();
+            //     
+            //     // Clear all selected cells
+            //     setSheetData(prev => ({
+            //         ...prev,
+            //         rows: prev.rows.map((row, rowIndex) =>
+            //             row.map((cell, colIndex) => {
+            //                 const cellKey = `${rowIndex}-${colIndex}`;
+            //                 return selectedCells.has(cellKey) ? '' : cell;
+            //             })
+            //         )
+            //     }));
+            // }
         };
 
         const handlePaste = (e) => {
@@ -963,7 +964,36 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
 
     // Expose navigation menu to parent component (for imperative access if needed)
     useImperativeHandle(ref, () => ({
-        // Can add imperative methods here if needed in future
+        // Expose sheet manipulation methods for AI assistant
+        addRows: async (count, position = 'end') => {
+            try {
+                const numRows = parseInt(count);
+                if (isNaN(numRows) || numRows <= 0) {
+                    return { success: false, error: 'Invalid row count' };
+                }
+
+                // Add the specified number of rows
+                setSheetData(prev => {
+                    const newRows = Array(numRows).fill(null).map(() => 
+                        new Array(prev.columns.length).fill('')
+                    );
+                    return {
+                        ...prev,
+                        rows: position === 'beginning' 
+                            ? [...newRows, ...prev.rows]  // Add at beginning
+                            : [...prev.rows, ...newRows]   // Add at end
+                    };
+                });
+
+                const positionText = position === 'beginning' ? ' at the beginning' : '';
+                return { 
+                    success: true, 
+                    message: `Added ${numRows} row${numRows > 1 ? 's' : ''}${positionText}` 
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
     }), []);
 
     return (

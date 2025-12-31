@@ -205,15 +205,84 @@ def api_files(request, did, action):
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def api_assistant(request, action):
-    response = {'status': 'error'}
-    message = request.POST.get('message', '')
-    print(f"Received message for action '{action}': {message}")
-
-    if action == "ask":
-        response['message'] = ai.assistant(message)
-        response['status'] = 'success'
-    return JsonResponse(response)
+def api_assistant(request, did, action):
+    """
+    Handle assistant messages with conversation persistence and sheet tool support.
+    
+    POST data:
+        - message: User message text (for user_message type)
+        - message_type: 'user_message' or 'tool_result'
+        - conversation_id: UUID of existing conversation (optional for first message)
+        - tool_results: Array of {id, name, result} for tool_result type
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+        message = body.get('message', '')
+        message_type = body.get('message_type', 'user_message')
+        conversation_id = body.get('conversation_id')
+        tool_results = body.get('tool_results', [])
+        
+        print(f"Assistant {action}: type={message_type}, conv_id={conversation_id}")
+        
+        # Get or create conversation
+        if conversation_id:
+            conversation = Conversation.objects.filter(uuid=conversation_id).first()
+            if not conversation:
+                return JsonResponse({'status': 'error', 'message': 'Conversation not found'}, status=404)
+        else:
+            # Create new conversation for this document
+            document = Document.objects.filter(uuid=did).first()
+            if not document:
+                return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
+            
+            conversation = Conversation.objects.create(
+                document=document,
+                title=message[:50] if message else 'New Conversation',
+                conversations=[]
+            )
+        
+        # Handle different message types
+        if message_type == 'user_message':
+            # User sent a new message
+            result = ai.assistant(
+                message=message,
+                conversation_obj=conversation,
+                include_sheet_tools=True
+            )
+        elif message_type == 'tool_result':
+            # Frontend executed tools and is sending results back
+            # Add tool results to conversation
+            conversations = conversation.conversations
+            for tool_result in tool_results:
+                conversations.append({
+                    "tool_call_id": tool_result['id'],
+                    "role": "tool",
+                    "name": tool_result['name'],
+                    "content": tool_result['result']
+                })
+            conversation.conversations = conversations
+            conversation.save()
+            
+            # Continue conversation to get AI's final response
+            result = ai.assistant(
+                message=None,
+                conversation_obj=conversation,
+                include_sheet_tools=True
+            )
+        else:
+            return JsonResponse({'status': 'error', 'message': 'Invalid message_type'}, status=400)
+        
+        # Return the result from assistant
+        return JsonResponse({
+            'status': 'success',
+            **result
+        })
+        
+    except Exception as e:
+        print(f"Error in api_assistant: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
        
 
 @api_view(['POST'])
@@ -223,8 +292,9 @@ def api_enrich(request, action):
     response = {'status': 'error'}
     body = json.loads(request.body)
     data = body.get('data', {})
+    document_id = body.get('documentId', None)
     print(data)
-    response['result'] = ai.enrichment(data)
+    response['result'] = ai.enrichment(data, document_id=document_id)
     response['status'] = 'success'
     return JsonResponse(response)
 

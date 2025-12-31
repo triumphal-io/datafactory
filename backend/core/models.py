@@ -54,7 +54,7 @@ class Conversation(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='conversations')
 
-    conversations = models.JSONField()
+    conversations = models.JSONField(default=list)  # Stores conversation history as array of message objects
     title = models.CharField(max_length=255, default='New Conversation')
     started_at = models.DateTimeField('Started at', auto_now_add=True)
     last_interaction = models.DateTimeField('Last interaction', auto_now=True)

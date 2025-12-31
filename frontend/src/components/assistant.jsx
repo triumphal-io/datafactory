@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { apiFetch } from '../utils/api.js';
 import { convertMarkdownToHtml } from '../utils/utils.js';
 import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
 import LogoIcon from '../assets/logo-icon.svg';
 
-export default function Assistant() {
+const Assistant = forwardRef(({ documentId, onToolsRequested }, ref) => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
+    const [conversationId, setConversationId] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
     const bodyRef = useRef(null);
 
     // Auto-scroll to bottom when messages change
@@ -19,29 +21,89 @@ export default function Assistant() {
         }
     }, [messages]);
 
+    // Expose method to send tool results back
+    useImperativeHandle(ref, () => ({
+        sendToolResults: async (toolResults, conversationIdOverride) => {
+            const convId = conversationIdOverride || conversationId;
+            if (!convId) {
+                console.error('No conversation ID available');
+                return;
+            }
+
+            setIsProcessing(true);
+
+            try {
+                const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        message_type: 'tool_result',
+                        conversation_id: convId,
+                        tool_results: toolResults
+                    })
+                });
+
+                const data = await response.json();
+                console.log("Tool result response:", data);
+
+                if (data.status === 'success') {
+                    handleAssistantResponse(data);
+                }
+            } catch (error) {
+                console.error('Error sending tool results:', error);
+            } finally {
+                setIsProcessing(false);
+            }
+        }
+    }));
+
+    const handleAssistantResponse = (data) => {
+        if (data.type === 'message') {
+            // Regular text message from assistant
+            setMessages(prev => [...prev, { 
+                type: 'assistant', 
+                content: data.content 
+            }]);
+        } else if (data.type === 'tool_call') {
+            // Tool execution needed
+            // Add pending tool messages
+            const toolMessages = data.tools.map(tool => ({
+                type: 'tool_call',
+                toolName: tool.name,
+                arguments: tool.arguments,
+                id: tool.id,
+                status: 'pending'
+            }));
+            
+            setMessages(prev => [...prev, ...toolMessages]);
+            
+            // Update conversation ID if provided
+            if (data.conversation_id) {
+                setConversationId(data.conversation_id);
+            }
+            
+            // Notify parent to execute tools
+            if (onToolsRequested) {
+                onToolsRequested(data.tools, data.conversation_id);
+            }
+        }
+    };
+
     const sendMessage = async () => {
         const message = inputValue.trim();
-        if (!message) return;
+        if (!message || isProcessing) return;
 
         // Add user message to the list
         setMessages(prev => [...prev, { type: 'user', content: message }]);
         setInputValue('');
+        setIsProcessing(true);
 
         try {
-            // Get CSRF token from cookie
-            const csrfToken = document.cookie
-                .split('; ')
-                .find(row => row.startsWith('csrftoken='))
-                ?.split('=')[1];
-
-            const response = await fetch('/api/assistant/ask', {
+            const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
+                body: JSON.stringify({
                     message: message,
-                    csrfmiddlewaretoken: csrfToken || ''
+                    message_type: 'user_message',
+                    conversation_id: conversationId
                 })
             });
 
@@ -49,11 +111,21 @@ export default function Assistant() {
             console.log("Server response:", data);
 
             if (data.status === 'success') {
-                // Add assistant response to the list
-                setMessages(prev => [...prev, { type: 'assistant', content: data.message }]);
+                // Update conversation ID if this is a new conversation
+                if (data.conversation_id && !conversationId) {
+                    setConversationId(data.conversation_id);
+                }
+                
+                handleAssistantResponse(data);
             }
         } catch (error) {
             console.error('Error sending message:', error);
+            setMessages(prev => [...prev, { 
+                type: 'error', 
+                content: 'Failed to send message. Please try again.' 
+            }]);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -62,6 +134,42 @@ export default function Assistant() {
             e.preventDefault();
             sendMessage();
         }
+    };
+
+    const renderMessage = (msg, index) => {
+        if (msg.type === 'tool_call') {
+            // Render tool call as a special message
+            const toolDisplayName = msg.toolName.replace('tool_', '').replace(/_/g, ' ');
+            const args = Object.entries(msg.arguments || {})
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(', ');
+            
+            return (
+                <div key={index} className="message message-tool text--micro">
+                    <p>
+                        <span style={{marginRight: '6px'}}>🔧</span>
+                        <strong>{toolDisplayName}</strong>
+                        {args && <span style={{opacity: 0.7}}> ({args})</span>}
+                        {msg.status === 'pending' && <span style={{marginLeft: '6px', opacity: 0.5}}>...</span>}
+                    </p>
+                </div>
+            );
+        }
+        
+        return (
+            <div 
+                key={index} 
+                className={`message message-${msg.type} text--micro`}
+            >
+                {msg.type === 'assistant' ? (
+                    <p dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(msg.content) }} />
+                ) : msg.type === 'error' ? (
+                    <p style={{color: 'var(--error-color)'}}>{msg.content}</p>
+                ) : (
+                    <p>{msg.content}</p>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -76,18 +184,7 @@ export default function Assistant() {
                 
                 <div className="spacer"></div>
 
-                {messages.map((msg, index) => (
-                    <div 
-                        key={index} 
-                        className={`message message-${msg.type} text--micro`}
-                    >
-                        {msg.type === 'assistant' ? (
-                            <p dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(msg.content) }} />
-                        ) : (
-                            <p>{msg.content}</p>
-                        )}
-                    </div>
-                ))}
+                {messages.map(renderMessage)}
             </div>
             <div className="assistant-footer">
                 <div className="assistant-input-pad">
@@ -99,13 +196,24 @@ export default function Assistant() {
                         placeholder="Type your message..."
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
+                        disabled={isProcessing}
                     />
                     <div className="flex flex-row-center flex-space-between">
                         <img src={IconAdd} alt="Add Icon" height="20" />
-                        <img src={IconSend} alt="Send Icon" height="20" onClick={sendMessage} />
+                        <img 
+                            src={IconSend} 
+                            alt="Send Icon" 
+                            height="20" 
+                            onClick={sendMessage}
+                            style={{ opacity: isProcessing ? 0.5 : 1, cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                        />
                     </div>
                 </div>
             </div>
         </div>
     );
-}
+});
+
+Assistant.displayName = 'Assistant';
+
+export default Assistant;

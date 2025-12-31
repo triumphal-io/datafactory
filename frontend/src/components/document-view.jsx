@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useNavigate } from 'react-router-dom';
 import IconPanOpen from '../assets/pan-open.svg';
 import IconSheet from '../assets/sheet.svg';
@@ -10,7 +10,7 @@ import FilesView from './files-view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo } from '../utils/utils';
 
-export default function DocumentView({ documentId: propDocumentId, sheetId: propSheetId }) {
+const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId }, ref) => {
     const navigate = useNavigate();
     const sheetViewRef = useRef(null);
     const filesViewRef = useRef(null);
@@ -25,6 +25,62 @@ export default function DocumentView({ documentId: propDocumentId, sheetId: prop
     const [lastSaved, setLastSaved] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [sheetNavState, setSheetNavState] = useState(null);
+
+    // Expose tool execution methods to parent via ref
+    useImperativeHandle(ref, () => ({
+        executeTools: async (tools) => {
+            console.log('Executing tools:', tools);
+            
+            const toolResults = [];
+            
+            // Execute tools sequentially
+            for (const tool of tools) {
+                try {
+                    let result;
+                    
+                    switch (tool.name) {
+                        case 'tool_add_rows':
+                            if (sheetViewRef.current && activeView === 'sheet') {
+                                result = await sheetViewRef.current.addRows(
+                                    tool.arguments.count, 
+                                    tool.arguments.position || 'end'
+                                );
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: result.success 
+                                        ? result.message
+                                        : `Failed: ${result.error}`
+                                });
+                            } else {
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: 'Error: No sheet is currently open'
+                                });
+                            }
+                            break;
+                        
+                        // Add more tool cases here as needed
+                        default:
+                            toolResults.push({
+                                id: tool.id,
+                                name: tool.name,
+                                result: `Error: Unknown tool ${tool.name}`
+                            });
+                    }
+                } catch (error) {
+                    toolResults.push({
+                        id: tool.id,
+                        name: tool.name,
+                        result: `Error: ${error.message}`
+                    });
+                }
+            }
+            
+            return toolResults;
+        }
+    }), [activeView]);
 
     // Sync props to state when they change (for navigation)
     useEffect(() => {
@@ -155,4 +211,8 @@ export default function DocumentView({ documentId: propDocumentId, sheetId: prop
             </div>
         </div>
     );
-}
+});
+
+DocumentView.displayName = 'DocumentView';
+
+export default DocumentView;
