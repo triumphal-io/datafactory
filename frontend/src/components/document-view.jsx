@@ -10,10 +10,11 @@ import FilesView from './files-view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo } from '../utils/utils';
 
-const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId }, ref) => {
+const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId, onSelectionChange, onSheetNameChange }, ref) => {
     const navigate = useNavigate();
     const sheetViewRef = useRef(null);
     const filesViewRef = useRef(null);
+    const nameChangeTimeoutRef = useRef(null);
 
     // State management
     const [documentId, setDocumentId] = useState(propDocumentId);
@@ -25,6 +26,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
     const [lastSaved, setLastSaved] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [sheetNavState, setSheetNavState] = useState(null);
+    const [initialDocumentName, setInitialDocumentName] = useState('');
 
     // Expose tool execution methods to parent via ref
     useImperativeHandle(ref, () => ({
@@ -124,6 +126,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                     if (data.status === 'success' && data.sheets) {
                         setSheetsList(data.sheets);
                         setDocumentName(data.name);
+                        setInitialDocumentName(data.name);
                         console.log('Sheets list loaded:', data.sheets);
                     }
                 }
@@ -134,6 +137,60 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
 
         loadDocumentData();
     }, [documentId]);
+
+    // Update sheet name when sheetId or sheetsList changes
+    useEffect(() => {
+        if (sheetId && sheetsList.length > 0 && onSheetNameChange) {
+            const currentSheet = sheetsList.find(sheet => sheet.id === sheetId);
+            if (currentSheet && currentSheet.name) {
+                onSheetNameChange(currentSheet.name);
+            }
+        }
+    }, [sheetId, sheetsList, onSheetNameChange]);
+
+    // Auto-save document name when it changes (debounced)
+    useEffect(() => {
+        // Don't save if name hasn't loaded yet or hasn't changed
+        if (!initialDocumentName || documentName === initialDocumentName) return;
+
+        // Clear existing timer
+        if (nameChangeTimeoutRef.current) {
+            clearTimeout(nameChangeTimeoutRef.current);
+        }
+
+        // Set new timer for debounced save (500ms after last change)
+        nameChangeTimeoutRef.current = setTimeout(async () => {
+            try {
+                setIsSaving(true);
+                const response = await apiFetch(`/api/documents/${documentId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: documentName }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        setInitialDocumentName(documentName);
+                        setLastSaved(new Date());
+                    }
+                }
+            } catch (error) {
+                console.error('Error saving document name:', error);
+            } finally {
+                setIsSaving(false);
+            }
+        }, 500);
+
+        // Cleanup function
+        return () => {
+            if (nameChangeTimeoutRef.current) {
+                clearTimeout(nameChangeTimeoutRef.current);
+            }
+        };
+    }, [documentName, initialDocumentName, documentId]);
 
     return (
         <div className="sheet flex flex-row">
@@ -169,6 +226,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                         onSavingChange={setIsSaving}
                         onLastSavedChange={setLastSaved}
                         onNavigationChange={setSheetNavState}
+                        onSelectionChange={onSelectionChange}
                     />
                 )}
 

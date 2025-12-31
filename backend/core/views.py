@@ -19,7 +19,7 @@ from core.handlers import ai
 from core.handlers.extraction import start_background_processing
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'PATCH'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_documents(request, action):
@@ -73,6 +73,29 @@ def api_documents(request, action):
                 {'status': 'error', 'message': 'Document not found'},
                 status=404
             )
+        
+        # Handle PATCH request to update document
+        if request.method == 'PATCH':
+            try:
+                body = json.loads(request.body)
+                name = body.get('name')
+                
+                if name is not None:
+                    document.name = name
+                    document.save()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Document updated successfully',
+                    'last_modified': document.last_modified.isoformat()
+                })
+            except Exception as e:
+                return JsonResponse(
+                    {'status': 'error', 'message': str(e)},
+                    status=500
+                )
+        
+        # Handle GET request to retrieve document details
         response = {
             'status': 'success',
             'id': str(document.uuid),
@@ -110,8 +133,39 @@ def api_documents(request, action):
     return Response(response)
 
 
+@api_view(['PATCH'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def api_update_document(request, did):
+    """Update document properties like name"""
+    try:
+        document = Document.objects.filter(uuid=did).first()
+        if not document:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Document not found'},
+                status=404
+            )
+        
+        body = json.loads(request.body)
+        name = body.get('name')
+        
+        if name is not None:
+            document.name = name
+            document.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Document updated successfully',
+            'last_modified': document.last_modified.isoformat()
+        })
+    except Exception as e:
+        return JsonResponse(
+            {'status': 'error', 'message': str(e)},
+            status=500
+        )
 
-@api_view(['POST'])
+
+
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_files(request, did, action):

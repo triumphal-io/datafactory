@@ -18,7 +18,18 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
     document.head.appendChild(style);
 }
 
-const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
+// Helper function to convert column index to Excel-style letter (A, B, C, ..., Z, AA, AB, ...)
+const getColumnLetter = (index) => {
+    let letter = '';
+    let num = index;
+    while (num >= 0) {
+        letter = String.fromCharCode(65 + (num % 26)) + letter;
+        num = Math.floor(num / 26) - 1;
+    }
+    return letter;
+};
+
+const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange }, ref) => {
     // State management
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [selectedRows, setSelectedRows] = useState(new Set());
@@ -101,6 +112,13 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             setEnrichText('Enrich');
         }
     }, [selectedCells]);
+
+    // Notify parent of selection changes
+    useEffect(() => {
+        if (onSelectionChange) {
+            onSelectionChange(selectedCells);
+        }
+    }, [selectedCells, onSelectionChange]);
 
     // Auto-save sheet data to server whenever it changes (debounced)
     useEffect(() => {
@@ -754,8 +772,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             // Don't deselect if currently editing a cell
             if (currentEditingCell) return;
             
-            // Don't deselect if clicking on popup or buttons in the navigation bar
-            if (event.target.closest('.popup') || event.target.closest('.sheet-nav')) {
+            // Don't deselect if clicking on popup, buttons in the navigation bar, or assistant
+            if (event.target.closest('.popup') || event.target.closest('.sheet-nav') || event.target.closest('.assistant')) {
                 return;
             }
             
@@ -867,23 +885,35 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             }
             
             // Clear selected cells on Backspace or Delete (only when not editing)
-            // if ((e.key === 'Backspace' || e.key === 'Delete') && !currentEditingCell && !overlayEditor && selectedCells.size > 0) {
-            //     e.preventDefault();
-            //     
-            //     // Clear all selected cells
-            //     setSheetData(prev => ({
-            //         ...prev,
-            //         rows: prev.rows.map((row, rowIndex) =>
-            //             row.map((cell, colIndex) => {
-            //                 const cellKey = `${rowIndex}-${colIndex}`;
-            //                 return selectedCells.has(cellKey) ? '' : cell;
-            //             })
-            //         )
-            //     }));
-            // }
+            // Don't handle if target is assistant, textarea, or input elements
+            if ((e.key === 'Backspace' || e.key === 'Delete') && 
+                !currentEditingCell && 
+                !overlayEditor && 
+                selectedCells.size > 0 &&
+                !e.target.closest('.assistant') && 
+                e.target.tagName !== 'TEXTAREA' && 
+                e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                
+                // Clear all selected cells
+                setSheetData(prev => ({
+                    ...prev,
+                    rows: prev.rows.map((row, rowIndex) =>
+                        row.map((cell, colIndex) => {
+                            const cellKey = `${rowIndex}-${colIndex}`;
+                            return selectedCells.has(cellKey) ? '' : cell;
+                        })
+                    )
+                }));
+            }
         };
 
         const handlePaste = (e) => {
+            // Don't handle paste if target is assistant or other input/textarea elements
+            if (e.target.closest('.assistant') || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+                return;
+            }
+            
             if (!currentEditingCell && lastClickedCellRef.current) {
                 e.preventDefault();
                 const pastedText = (e.clipboardData || window.clipboardData).getData('text');
@@ -1087,7 +1117,14 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                     onClick={(e) => handleHeaderClick(colIndex, e)}
                                     onDoubleClick={(e) => handleHeaderDoubleClick(colIndex, e)}
                                 >
-                                    {column.title}
+                                    <div className="flex flex-row-center gap-10 flex-space-between">
+                                        <p style={{
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis'
+                                        }}>{column.title}</p> 
+                                        <p className='opacity-5'>{getColumnLetter(colIndex)}</p>
+                                    </div>
                                     <div
                                         className="column-resize-handle"
                                         onMouseDown={(e) => handleResizeMouseDown(colIndex, e)}

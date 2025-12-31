@@ -5,12 +5,13 @@ import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
 import LogoIcon from '../assets/logo-icon.svg';
 
-const Assistant = forwardRef(({ documentId, onToolsRequested }, ref) => {
+const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '' }, ref) => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [conversationId, setConversationId] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const bodyRef = useRef(null);
+    const textareaRef = useRef(null);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -20,6 +21,18 @@ const Assistant = forwardRef(({ documentId, onToolsRequested }, ref) => {
             });
         }
     }, [messages]);
+
+    // Blur textarea when clicking outside of it
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (textareaRef.current && !textareaRef.current.contains(event.target)) {
+                textareaRef.current.blur();
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Expose method to send tool results back
     useImperativeHandle(ref, () => ({
@@ -136,6 +149,105 @@ const Assistant = forwardRef(({ documentId, onToolsRequested }, ref) => {
         }
     };
 
+    // Helper function to convert column index to Excel-style letter
+    const getColumnLetter = (index) => {
+        let letter = '';
+        let num = index;
+        while (num >= 0) {
+            letter = String.fromCharCode(65 + (num % 26)) + letter;
+            num = Math.floor(num / 26) - 1;
+        }
+        return letter;
+    };
+
+    // Format selected cells into readable ranges
+    const formatCellSelection = () => {
+        if (!selectedCells || selectedCells.size === 0) {
+            return 'None';
+        }
+
+        // Parse cells from "rowIndex-colIndex" format
+        const cellsArray = Array.from(selectedCells).map(key => {
+            const [row, col] = key.split('-').map(Number);
+            return { row, col, key };
+        });
+
+        // Find bounding box for rectangular range detection
+        const minRow = Math.min(...cellsArray.map(c => c.row));
+        const maxRow = Math.max(...cellsArray.map(c => c.row));
+        const minCol = Math.min(...cellsArray.map(c => c.col));
+        const maxCol = Math.max(...cellsArray.map(c => c.col));
+
+        // Check if all cells form a complete rectangle
+        const expectedCells = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+        if (selectedCells.size === expectedCells) {
+            // Verify it's actually a complete rectangle
+            let isRectangle = true;
+            for (let r = minRow; r <= maxRow; r++) {
+                for (let c = minCol; c <= maxCol; c++) {
+                    if (!selectedCells.has(`${r}-${c}`)) {
+                        isRectangle = false;
+                        break;
+                    }
+                }
+                if (!isRectangle) break;
+            }
+
+            if (isRectangle) {
+                const startCell = `${getColumnLetter(minCol)}${minRow + 1}`;
+                const endCell = `${getColumnLetter(maxCol)}${maxRow + 1}`;
+                const prefix = sheetName ? `${sheetName}: ` : '';
+                return prefix + (startCell === endCell ? startCell : `${startCell}-${endCell}`);
+            }
+        }
+
+        // If not a rectangle, group into ranges intelligently
+        const processed = new Set();
+        const ranges = [];
+
+        cellsArray.sort((a, b) => a.row === b.row ? a.col - b.col : a.row - b.row);
+
+        for (const cell of cellsArray) {
+            if (processed.has(cell.key)) continue;
+
+            // Try to find a rectangular range starting from this cell
+            let rangeMinRow = cell.row, rangeMaxRow = cell.row;
+            let rangeMinCol = cell.col, rangeMaxCol = cell.col;
+
+            // Expand horizontally first
+            while (selectedCells.has(`${rangeMinRow}-${rangeMaxCol + 1}`) && !processed.has(`${rangeMinRow}-${rangeMaxCol + 1}`)) {
+                rangeMaxCol++;
+            }
+
+            // Try to expand vertically while maintaining width
+            let canExpandDown = true;
+            while (canExpandDown) {
+                for (let c = rangeMinCol; c <= rangeMaxCol; c++) {
+                    if (!selectedCells.has(`${rangeMaxRow + 1}-${c}`) || processed.has(`${rangeMaxRow + 1}-${c}`)) {
+                        canExpandDown = false;
+                        break;
+                    }
+                }
+                if (canExpandDown) rangeMaxRow++;
+            }
+
+            // Mark all cells in this range as processed
+            for (let r = rangeMinRow; r <= rangeMaxRow; r++) {
+                for (let c = rangeMinCol; c <= rangeMaxCol; c++) {
+                    processed.add(`${r}-${c}`);
+                }
+            }
+
+            // Format the range
+            const startCell = `${getColumnLetter(rangeMinCol)}${rangeMinRow + 1}`;
+            const endCell = `${getColumnLetter(rangeMaxCol)}${rangeMaxRow + 1}`;
+            ranges.push(startCell === endCell ? startCell : `${startCell}-${endCell}`);
+        }
+
+        const prefix = sheetName ? `${sheetName}: ` : '';
+        return prefix + ranges.join(', ');
+    };
+
     const renderMessage = (msg, index) => {
         if (msg.type === 'tool_call') {
             // Render tool call as a special message
@@ -180,7 +292,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested }, ref) => {
                     <h2>Assistant</h2>
                 </div>
             </div>
-            <div className="assistant-body scroll-y thin-scroll" ref={bodyRef}>
+            <div className="assistant-body scroll-y thin-scroll" ref={bodyRef} onMouseDown={(e) => e.stopPropagation()}>
                 
                 <div className="spacer"></div>
 
@@ -188,7 +300,16 @@ const Assistant = forwardRef(({ documentId, onToolsRequested }, ref) => {
             </div>
             <div className="assistant-footer">
                 <div className="assistant-input-pad">
+                    {selectedCells && selectedCells.size > 0 && (
+                        <p style={{
+                            border: '1px solid #aaa',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            width: 'fit-content',
+                        }} className='mrgnb-10 text--nano opacity-5'>{formatCellSelection()}</p>
+                    )}
                     <textarea 
+                        ref={textareaRef}
                         className={`flex-expanded input-empty`}
                         id="assistant-input"
                         onKeyDown={handleKeyDown}

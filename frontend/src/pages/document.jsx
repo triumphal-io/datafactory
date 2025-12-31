@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import Resizer from '../components/resizer.jsx';
 import Assistant from '../components/assistant.jsx';
 import DocumentView from '../components/document-view.jsx';
@@ -8,6 +8,18 @@ export default function DocumentPage() {
     const { sheetId, documentId } = useParams();
     const documentViewRef = useRef(null);
     const assistantRef = useRef(null);
+    const [selectedCells, setSelectedCells] = useState(new Set());
+    const [sheetName, setSheetName] = useState('');
+
+    // Handle selection changes from SheetView
+    const handleSelectionChange = (cells) => {
+        setSelectedCells(cells);
+    };
+
+    // Handle sheet name changes
+    const handleSheetNameChange = (name) => {
+        setSheetName(name);
+    };
 
     // Handle tool execution requests from assistant
     const handleToolsRequested = async (tools, conversationId) => {
@@ -31,7 +43,9 @@ export default function DocumentPage() {
             <DocumentView 
                 ref={documentViewRef}
                 documentId={documentId} 
-                sheetId={sheetId} 
+                sheetId={sheetId}
+                onSelectionChange={handleSelectionChange}
+                onSheetNameChange={handleSheetNameChange}
             />
         </main>
         <Resizer />
@@ -40,6 +54,8 @@ export default function DocumentPage() {
                 ref={assistantRef}
                 documentId={documentId}
                 onToolsRequested={handleToolsRequested}
+                selectedCells={selectedCells}
+                sheetName={sheetName}
             />
         </aside>
     </div>
