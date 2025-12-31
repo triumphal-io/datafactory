@@ -50,29 +50,7 @@ def get_ai_tools():
             },
         }
     }
-    human_input_tool = {
-        "type": "function",
-        "function": {
-            "name": "tool_human_input",
-            "description": "Request input, confirmation, or decision from the user when you need clarification or approval before proceeding. Use this when you need the user to make a choice, provide additional information, or confirm an action.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The question or prompt to ask the user. Be specific and clear about what you need."
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Optional context or explanation for why you're asking. Helps the user understand the situation."
-                    },
-                },
-                "required": ["question"],
-            },
-        }
-    }
 
-    # return [search_tool, web_scraper_tool, human_input_tool]
     return [search_tool, web_scraper_tool]
 
 
@@ -224,7 +202,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     
     sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column'}
     file_tool_names = {'tool_read_file'}
-    frontend_tool_names = {'tool_human_input', 'tool_add_rows', 'tool_delete_rows', 'tool_add_column'}
+    frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column'}
     
     while True:
         try:
@@ -275,12 +253,9 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                         "arguments": function_args
                     }
                     
-                    # Human input tool is always frontend-handled
                     # Sheet tools are frontend-handled only when include_sheet_tools is True
                     # File tools are always backend-handled
-                    if function_name == 'tool_human_input':
-                        frontend_tools.append(tool_info)
-                    elif include_sheet_tools and function_name in sheet_tool_names:
+                    if include_sheet_tools and function_name in sheet_tool_names:
                         frontend_tools.append(tool_info)
                     else:
                         backend_tools.append(tool_info)
