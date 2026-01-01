@@ -275,6 +275,17 @@ def api_assistant(request, did, action):
         message_type = body.get('message_type', 'user_message')
         conversation_id = body.get('conversation_id')
         tool_results = body.get('tool_results', [])
+        sheet_data = body.get('sheet_data')
+        selected_range = body.get('selected_range')
+        
+        # Build sheet context if data provided
+        sheet_context = None
+        if sheet_data or selected_range:
+            sheet_context = {}
+            if sheet_data:
+                sheet_context['data'] = sheet_data
+            if selected_range:
+                sheet_context['selection'] = selected_range
         
         print(f"Assistant {action}: type={message_type}, conv_id={conversation_id}")
         
@@ -301,7 +312,9 @@ def api_assistant(request, did, action):
             result = ai.assistant(
                 message=message,
                 conversation_obj=conversation,
-                include_sheet_tools=True
+                include_sheet_tools=True,
+                document_id=did,
+                sheet_context=sheet_context
             )
         elif message_type == 'tool_result':
             # Frontend executed tools and is sending results back
@@ -321,7 +334,9 @@ def api_assistant(request, did, action):
             result = ai.assistant(
                 message=None,
                 conversation_obj=conversation,
-                include_sheet_tools=True
+                include_sheet_tools=True,
+                document_id=did,
+                sheet_context=sheet_context
             )
         else:
             return JsonResponse({'status': 'error', 'message': 'Invalid message_type'}, status=400)

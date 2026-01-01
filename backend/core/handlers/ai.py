@@ -168,10 +168,52 @@ def get_sheet_tools():
         }
     }
     
-    return [add_rows_tool, add_column_tool]
+    populate_cells_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_populate_cells",
+            "description": """Populate spreadsheet cells with specific values. You MUST provide the 'cells' parameter with at least one cell position and value.
+
+CRITICAL: NEVER call this function with empty arguments {} or empty cells object {"cells": {}}. This will cause an error.
+
+Format: {"cells": {"A1": "value1", "B2": "value2"}}
+- Keys MUST be cell positions using Excel notation: column letter + row number (A1, B15, C3, etc.)
+- Values are the cell contents as strings
+- Row numbers start at 1 (first data row, after header row if present)
+
+Examples of CORRECT usage:
+1. Fill 3 cells: {"cells": {"A1": "India", "A2": "USA", "A3": "Brazil"}}
+2. Fill multiple columns: {"cells": {"A1": "John", "B1": "100", "A2": "Jane", "B2": "150"}}
+3. Update B24-B26: {"cells": {"B24": "22.00", "B25": "40.00", "B26": "28.00"}}
+4. Single cell: {"cells": {"C5": "Complete"}}
+
+Examples of INCORRECT usage (DO NOT DO THIS):
+- {} - Missing cells parameter entirely
+- {"cells": {}} - Empty cells object
+- No arguments at all
+
+If you need to populate cells, you must specify which cells and what values. If you're not ready to populate cells yet, do not call this function.""",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cells": {
+                        "type": "object",
+                        "description": "Dictionary mapping cell positions (like 'A1', 'B15') to their values. REQUIRED and MUST contain at least one cell-value pair.",
+                        "minProperties": 1,
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": ["cells"]
+            }
+        }
+    }
+    
+    return [add_rows_tool, add_column_tool, populate_cells_tool]
 
 
-def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None):
+def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None, sheet_context=None):
     """
     AI assistant with optional conversation persistence, sheet tool support, and file access.
     
@@ -180,6 +222,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
         conversation_obj: Optional Conversation model instance for persistence
         include_sheet_tools: If True, includes sheet tools and returns tool calls for frontend execution
         document_id: Optional document UUID to enable file access tools
+        sheet_context: Optional dict with 'data' (sheet structure) and 'selection' (selected cells info)
     
     Returns:
         - If include_sheet_tools=False: String response (legacy mode)
@@ -193,6 +236,63 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     else:
         conversation = [{"role": "user", "content": message}]
     
+    # Add sheet context to system message if provided
+    if sheet_context and include_sheet_tools:
+        context_message = "Current spreadsheet context:\n"
+        
+        if sheet_context.get('data'):
+            sheet_data = sheet_context['data']
+            columns = sheet_data.get('columns', [])
+            rows = sheet_data.get('rows', [])
+            
+            # Add column information
+            column_titles = [c.get('title', '') for c in columns]
+            context_message += f"- Columns ({len(columns)}): {', '.join(column_titles)}\n"
+            
+            # Add actual row data (limit to prevent token overflow)
+            # Filter rows to exclude completely empty rows or rows with only empty values
+            non_empty_rows = []
+            for i, row in enumerate(rows):
+                # Check if row has at least one non-empty, non-null value
+                has_data = any(cell not in [None, '', ' '] and str(cell).strip() != '' for cell in row)
+                if has_data:
+                    non_empty_rows.append((i, row))
+            
+            context_message += f"- Total Rows: {len(rows)}\n"
+            context_message += f"- Rows with data: {len(non_empty_rows)}\n"
+            
+            if non_empty_rows:
+                context_message += "\nExisting data:\n"
+                # Show first 50 rows maximum
+                max_rows_to_show = min(50, len(non_empty_rows))
+                for idx, (i, row) in enumerate(non_empty_rows[:max_rows_to_show]):
+                    row_values = []
+                    for j, cell_value in enumerate(row):
+                        if j < len(column_titles):
+                            # Only include cells with actual values
+                            if cell_value not in [None, '', ' '] and str(cell_value).strip() != '':
+                                row_values.append(f"{column_titles[j]}: {cell_value}")
+                    if row_values:  # Only add row if it has displayable values
+                        context_message += f"  Row {i+1}: {', '.join(row_values)}\n"
+                
+                if len(non_empty_rows) > max_rows_to_show:
+                    context_message += f"  ... and {len(non_empty_rows) - max_rows_to_show} more rows with data\n"
+        
+        if sheet_context.get('selection'):
+            selection = sheet_context['selection']
+            # If selection is a string with actual positions (e.g., "A1:C3" or "A1, B2, C3"), include it
+            # Otherwise, inform AI that selection info is available but not detailed
+            if isinstance(selection, str) and any(char.isalpha() and char.isupper() for char in selection):
+                context_message += f"\n- Selected cells: {selection}\n"
+            else:
+                context_message += f"\n- User has selected cells but positions not provided: {selection}\n"
+                context_message += "  (Ask user to specify which cells if needed for the task)\n"
+        
+        # Insert context as system message before user message if not already in conversation
+        if len(conversation) > 0 and conversation[0].get('role') != 'system':
+            conversation.insert(0, {"role": "system", "content": context_message})
+    
+
     # Select tools based on mode
     tools = get_ai_tools()
     if include_sheet_tools:
@@ -200,15 +300,19 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     if document_id:
         tools = get_file_tools(document_id) + tools
     
-    sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column'}
+    sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_populate_cells'}
     file_tool_names = {'tool_read_file'}
-    frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column'}
+    frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_populate_cells'}
+    
+    print(conversation)
+    print(f"Using tools: {[tool['function']['name'] for tool in tools]}")
     
     while True:
         try:
+            print("Generating AI response...")
             # Generate response based on full conversation history
             response = litellm.completion(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=conversation,
                 tools=tools,
                 tool_choice="auto"
@@ -246,6 +350,39 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
+                    
+                    print(f"DEBUG: Tool call - {function_name}")
+                    print(f"DEBUG: Raw arguments: {tool_call.function.arguments}")
+                    print(f"DEBUG: Parsed arguments: {function_args}")
+                    
+                    # Validate tool arguments before processing
+                    validation_error = None
+                    if function_name == 'tool_populate_cells':
+                        if 'cells' not in function_args:
+                            validation_error = "Missing required parameter 'cells'. You must provide a cells object with at least one cell position and value. Example: {\"cells\": {\"A1\": \"value\", \"B2\": \"value2\"}}"
+                        elif not function_args['cells'] or not isinstance(function_args['cells'], dict):
+                            validation_error = "Parameter 'cells' must be a non-empty object/dictionary with cell positions as keys. Example: {\"cells\": {\"A1\": \"value\", \"B2\": \"value2\"}}"
+                        elif len(function_args['cells']) == 0:
+                            validation_error = "Parameter 'cells' is empty. You must provide at least one cell entry. Example: {\"cells\": {\"A1\": \"value\", \"B2\": \"value2\"}}"
+                    elif function_name == 'tool_add_rows':
+                        if 'count' not in function_args:
+                            validation_error = "Missing required parameter 'count'"
+                    elif function_name == 'tool_add_column':
+                        if 'columns' not in function_args:
+                            validation_error = "Missing required parameter 'columns'"
+                        elif not function_args['columns'] or len(function_args['columns']) == 0:
+                            validation_error = "Parameter 'columns' must contain at least one column"
+                    
+                    # If validation failed, add error to conversation immediately
+                    if validation_error:
+                        print(f"VALIDATION ERROR: {validation_error}")
+                        conversation.append({
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": function_name,
+                            "content": f"ERROR: {validation_error}"
+                        })
+                        continue
                     
                     tool_info = {
                         "id": tool_call.id,

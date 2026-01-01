@@ -4,14 +4,23 @@ import { convertMarkdownToHtml } from '../utils/utils.js';
 import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
 import LogoIcon from '../assets/logo-icon.svg';
+import IconTick from '../assets/checkmark.svg';
+import IconDismiss from '../assets/dismiss.svg';
+import Loader from '../assets/loader-mini.gif';
 
-const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '' }, ref) => {
+const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData }, ref) => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [conversationId, setConversationId] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const bodyRef = useRef(null);
     const textareaRef = useRef(null);
+    const selectedCellsRef = useRef(selectedCells);
+
+    // Keep ref updated with latest selectedCells
+    useEffect(() => {
+        selectedCellsRef.current = selectedCells;
+    }, [selectedCells]);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -45,6 +54,18 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
 
             setIsProcessing(true);
 
+            // Mark all pending tools as completed immediately
+            // toolResults uses 'id' field (from executeTools), but we may also get 'tool_call_id' from backend
+            const toolIds = toolResults.map(tr => tr.tool_call_id || tr.id);
+            console.log('Tool IDs to mark completed:', toolIds);
+            setMessages(prev => prev.map(msg => {
+                if (msg.type === 'tool_call' && toolIds.includes(msg.id) && msg.status === 'pending') {
+                    console.log(`Marking tool ${msg.id} as completed`);
+                    return { ...msg, status: 'completed' };
+                }
+                return msg;
+            }));
+
             try {
                 const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
                     method: 'POST',
@@ -60,9 +81,24 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
 
                 if (data.status === 'success') {
                     handleAssistantResponse(data);
+                } else {
+                    // Mark tools as failed if the response wasn't successful
+                    setMessages(prev => prev.map(msg => {
+                        if (msg.type === 'tool_call' && toolIds.includes(msg.id)) {
+                            return { ...msg, status: 'error' };
+                        }
+                        return msg;
+                    }));
                 }
             } catch (error) {
                 console.error('Error sending tool results:', error);
+                // Mark all tools as failed on error
+                setMessages(prev => prev.map(msg => {
+                    if (msg.type === 'tool_call' && toolIds.includes(msg.id)) {
+                        return { ...msg, status: 'error' };
+                    }
+                    return msg;
+                }));
             } finally {
                 setIsProcessing(false);
             }
@@ -98,6 +134,14 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             if (onToolsRequested) {
                 onToolsRequested(data.tools, data.conversation_id);
             }
+        } else if (data.type === 'tool_result') {
+            // Update the status of the tool message to 'completed'
+            setMessages(prev => prev.map(msg => {
+                if (msg.type === 'tool_call' && msg.id === data.tool_id) {
+                    return { ...msg, status: 'completed' };
+                }
+                return msg;
+            }));
         }
     };
 
@@ -111,12 +155,33 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         setIsProcessing(true);
 
         try {
+            // Get current sheet data if available
+            const sheetData = getSheetData ? getSheetData() : null;
+            
+            // Format selected cells for context - use ref to get latest value
+            let selectedRange = '';
+            const currentSelectedCells = selectedCellsRef.current;
+            if (currentSelectedCells && currentSelectedCells.size > 0) {
+                const cellArray = Array.from(currentSelectedCells);
+                // Convert "row-col" format to Excel notation (e.g., "14-1" -> "A15")
+                const excelCells = cellArray.map(cell => {
+                    const [row, col] = cell.split('-').map(Number);
+                    // Convert column number to letter (0=A, 1=B, etc.)
+                    const colLetter = String.fromCharCode(65 + col);
+                    // Row numbers in Excel start at 1, but data rows start after header
+                    return `${colLetter}${row + 1}`;
+                });
+                selectedRange = excelCells.join(', ');
+            }
+            
             const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
                 method: 'POST',
                 body: JSON.stringify({
                     message: message,
                     message_type: 'user_message',
-                    conversation_id: conversationId
+                    conversation_id: conversationId,
+                    sheet_data: sheetData,
+                    selected_range: selectedRange
                 })
             });
 
@@ -162,12 +227,14 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
 
     // Format selected cells into readable ranges
     const formatCellSelection = () => {
-        if (!selectedCells || selectedCells.size === 0) {
+        // Use ref to get the most current selection
+        const currentSelectedCells = selectedCellsRef.current;
+        if (!currentSelectedCells || currentSelectedCells.size === 0) {
             return 'None';
         }
 
         // Parse cells from "rowIndex-colIndex" format
-        const cellsArray = Array.from(selectedCells).map(key => {
+        const cellsArray = Array.from(currentSelectedCells).map(key => {
             const [row, col] = key.split('-').map(Number);
             return { row, col, key };
         });
@@ -180,12 +247,12 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
 
         // Check if all cells form a complete rectangle
         const expectedCells = (maxRow - minRow + 1) * (maxCol - minCol + 1);
-        if (selectedCells.size === expectedCells) {
+        if (currentSelectedCells.size === expectedCells) {
             // Verify it's actually a complete rectangle
             let isRectangle = true;
             for (let r = minRow; r <= maxRow; r++) {
                 for (let c = minCol; c <= maxCol; c++) {
-                    if (!selectedCells.has(`${r}-${c}`)) {
+                    if (!currentSelectedCells.has(`${r}-${c}`)) {
                         isRectangle = false;
                         break;
                     }
@@ -215,7 +282,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             let rangeMinCol = cell.col, rangeMaxCol = cell.col;
 
             // Expand horizontally first
-            while (selectedCells.has(`${rangeMinRow}-${rangeMaxCol + 1}`) && !processed.has(`${rangeMinRow}-${rangeMaxCol + 1}`)) {
+            while (currentSelectedCells.has(`${rangeMinRow}-${rangeMaxCol + 1}`) && !processed.has(`${rangeMinRow}-${rangeMaxCol + 1}`)) {
                 rangeMaxCol++;
             }
 
@@ -223,7 +290,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             let canExpandDown = true;
             while (canExpandDown) {
                 for (let c = rangeMinCol; c <= rangeMaxCol; c++) {
-                    if (!selectedCells.has(`${rangeMaxRow + 1}-${c}`) || processed.has(`${rangeMaxRow + 1}-${c}`)) {
+                    if (!currentSelectedCells.has(`${rangeMaxRow + 1}-${c}`) || processed.has(`${rangeMaxRow + 1}-${c}`)) {
                         canExpandDown = false;
                         break;
                     }
@@ -248,26 +315,46 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         return prefix + ranges.join(', ');
     };
 
+    // Move formatArgs outside renderMessage for reuse
+    const formatArgs = (args) => {
+        if (typeof args === 'object' && args !== null) {
+            return JSON.stringify(args, null, 2); // Pretty-print JSON
+        }
+        return args;
+    };
+
+    // Update renderMessage to use formatArgs consistently
     const renderMessage = (msg, index) => {
         if (msg.type === 'tool_call') {
             // Render tool call as a special message
             const toolDisplayName = msg.toolName.replace('tool_', '').replace(/_/g, ' ');
-            const args = Object.entries(msg.arguments || {})
-                .map(([key, value]) => `${key}: ${value}`)
-                .join(', ');
+            const args = formatArgs(msg.arguments);
+
+            // Determine which icon to show based on status
+            let statusIcon = Loader;
+            let iconOpacity = 0.5;
+            
+            if (msg.status === 'completed') {
+                statusIcon = IconTick;
+                iconOpacity = 1;
+            } else if (msg.status === 'failed' || msg.status === 'error') {
+                statusIcon = IconDismiss;
+                iconOpacity = 1;
+            }
             
             return (
                 <div key={index} className="message message-tool text--micro">
-                    <p>
-                        <span style={{marginRight: '6px'}}>🔧</span>
+                    <p style={{padding: '6px 0', }}>
+                        {/* <span style={{marginRight: '6px'}}>🔧</span> */}
+                        <img src={statusIcon} alt="Status Icon" height="12" style={{marginRight: '6px', opacity: iconOpacity}} />
                         <strong>{toolDisplayName}</strong>
-                        {args && <span style={{opacity: 0.7}}> ({args})</span>}
+                        {/* {args && <span style={{opacity: 0.7}}> ({args})</span>} */}
                         {msg.status === 'pending' && <span style={{marginLeft: '6px', opacity: 0.5}}>...</span>}
                     </p>
                 </div>
             );
         }
-        
+
         return (
             <div 
                 key={index} 
@@ -306,7 +393,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             padding: '1px 6px',
                             borderRadius: '4px',
                             width: 'fit-content',
-                        }} className='mrgnb-10 text--nano opacity-5'>{formatCellSelection()}</p>
+                        }} className='mrgnb-10 text--nano opacity-5' key={selectedCells.size}>{formatCellSelection()}</p>
                     )}
                     <textarea 
                         ref={textareaRef}

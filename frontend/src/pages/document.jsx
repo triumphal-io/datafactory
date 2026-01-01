@@ -36,6 +36,14 @@ export default function DocumentPage() {
             await assistantRef.current.sendToolResults(toolResults, conversationId);
         }
     };
+    
+    // Get current sheet data
+    const getSheetData = () => {
+        if (documentViewRef.current) {
+            return documentViewRef.current.getSheetData();
+        }
+        return null;
+    };
 
     return (
         <div className="sheet-container">
@@ -56,6 +64,7 @@ export default function DocumentPage() {
                 onToolsRequested={handleToolsRequested}
                 selectedCells={selectedCells}
                 sheetName={sheetName}
+                getSheetData={getSheetData}
             />
         </aside>
     </div>

@@ -62,6 +62,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     const resizeStartXRef = useRef(null);
     const resizeStartWidthRef = useRef(null);
     const loadedDataRef = useRef(null);
+    const autoScrollIntervalRef = useRef(null);
+    const lastMousePositionRef = useRef({ x: 0, y: 0 });
 
     // Load data from JSON on mount
     useEffect(() => {
@@ -723,6 +725,55 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         }
     }, [isDragging, dragStartCell, selectCellRange]);
 
+    // Auto-scroll when dragging near edges
+    const handleAutoScroll = useCallback((mouseY) => {
+        if (!sheetContentRef.current || !isDragging) return;
+
+        const container = sheetContentRef.current;
+        const rect = container.getBoundingClientRect();
+        const scrollThreshold = 50; // pixels from edge to trigger scroll
+        const scrollSpeed = 10; // pixels per frame
+
+        const distanceFromBottom = rect.bottom - mouseY;
+        const distanceFromTop = mouseY - rect.top;
+
+        if (distanceFromBottom < scrollThreshold && distanceFromBottom > 0) {
+            // Scroll down
+            container.scrollTop += scrollSpeed;
+        } else if (distanceFromTop < scrollThreshold && distanceFromTop > 0) {
+            // Scroll up
+            container.scrollTop -= scrollSpeed;
+        }
+    }, [isDragging]);
+
+    // Handle mouse move during drag to track position and trigger auto-scroll
+    const handleMouseMove = useCallback((e) => {
+        if (!isDragging) return;
+
+        lastMousePositionRef.current = { x: e.clientX, y: e.clientY };
+        
+        // Check if we need to auto-scroll
+        handleAutoScroll(e.clientY);
+
+        // Find the cell under the mouse cursor
+        const element = document.elementFromPoint(e.clientX, e.clientY);
+        const cell = element?.closest('.sheet-row-item[data-row][data-col]');
+        
+        if (cell && dragStartCell) {
+            const rowIndex = parseInt(cell.getAttribute('data-row'));
+            const colIndex = parseInt(cell.getAttribute('data-col'));
+            
+            if (!isNaN(rowIndex) && !isNaN(colIndex)) {
+                selectCellRange(
+                    dragStartCell.row,
+                    dragStartCell.col,
+                    rowIndex,
+                    colIndex
+                );
+            }
+        }
+    }, [isDragging, dragStartCell, handleAutoScroll, selectCellRange]);
+
     // Global mouse up listener
     useEffect(() => {
         const handleGlobalMouseUp = () => {
@@ -732,12 +783,40 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 setTimeout(() => {
                     isSelectionModeRef.current = false;
                 }, 10);
+                
+                // Clear auto-scroll interval
+                if (autoScrollIntervalRef.current) {
+                    clearInterval(autoScrollIntervalRef.current);
+                    autoScrollIntervalRef.current = null;
+                }
             }
         };
 
         document.addEventListener('mouseup', handleGlobalMouseUp);
         return () => document.removeEventListener('mouseup', handleGlobalMouseUp);
     }, [isDragging]);
+
+    // Mouse move listener for drag selection with auto-scroll
+    useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            
+            // Start auto-scroll interval
+            autoScrollIntervalRef.current = setInterval(() => {
+                if (isDragging && lastMousePositionRef.current.y) {
+                    handleAutoScroll(lastMousePositionRef.current.y);
+                }
+            }, 16); // ~60fps
+            
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                if (autoScrollIntervalRef.current) {
+                    clearInterval(autoScrollIntervalRef.current);
+                    autoScrollIntervalRef.current = null;
+                }
+            };
+        }
+    }, [isDragging, handleMouseMove, handleAutoScroll]);
 
     // Column resize listeners
     useEffect(() => {
@@ -1071,8 +1150,113 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             } catch (error) {
                 return { success: false, error: error.message };
             }
+        },
+        
+        populateCells: async (cells) => {
+            try {
+                if (!cells || typeof cells !== 'object' || Object.keys(cells).length === 0) {
+                    return { success: false, error: 'Invalid cells data' };
+                }
+                
+                // Parse cell positions like "A1", "B15", etc.
+                const parseCellPosition = (cellPos) => {
+                    const match = cellPos.match(/^([A-Z]+)(\d+)$/i);
+                    if (!match) return null;
+                    
+                    const colLetter = match[1].toUpperCase();
+                    const rowNum = parseInt(match[2]);
+                    
+                    // Convert column letter to index (A=0, B=1, etc.)
+                    let colIndex = 0;
+                    for (let i = 0; i < colLetter.length; i++) {
+                        colIndex = colIndex * 26 + (colLetter.charCodeAt(i) - 64);
+                    }
+                    colIndex -= 1;
+                    
+                    // Row index (1-based to 0-based)
+                    const rowIndex = rowNum - 1;
+                    
+                    return { rowIndex, colIndex };
+                };
+                
+                // Group cells by row for efficient processing
+                const cellsByRow = {};
+                for (const [cellPos, value] of Object.entries(cells)) {
+                    const parsed = parseCellPosition(cellPos);
+                    if (!parsed) continue;
+                    
+                    if (!cellsByRow[parsed.rowIndex]) {
+                        cellsByRow[parsed.rowIndex] = [];
+                    }
+                    cellsByRow[parsed.rowIndex].push({ colIndex: parsed.colIndex, value });
+                }
+                
+                // Calculate counts BEFORE setState (we have all the data we need)
+                const rowIndices = Object.keys(cellsByRow).map(Number);
+                const maxRowNeeded = Math.max(...rowIndices);
+                const currentRowCount = sheetData.rows.length;
+                const addedRows = Math.max(0, maxRowNeeded - currentRowCount + 1);
+                
+                let updatedCount = 0;
+                const columnCount = sheetData.columns.length;
+                
+                for (const [rowIndex, cells] of Object.entries(cellsByRow)) {
+                    for (const { colIndex } of cells) {
+                        if (colIndex >= 0 && colIndex < columnCount) {
+                            updatedCount++;
+                        }
+                    }
+                }
+                
+                // Update or add rows
+                setSheetData(prev => {
+                    const newRows = [...prev.rows];
+                    const maxRowNeeded = Math.max(...Object.keys(cellsByRow).map(Number));
+                    
+                    // Calculate how many rows need to be added
+                    const currentRowCount = newRows.length;
+                    const rowsToAdd = Math.max(0, maxRowNeeded - currentRowCount + 1);
+                    
+                    // Add empty rows if needed
+                    for (let i = 0; i < rowsToAdd; i++) {
+                        newRows.push(new Array(prev.columns.length).fill(''));
+                    }
+                    
+                    // Populate cells
+                    for (const [rowIndex, cells] of Object.entries(cellsByRow)) {
+                        const idx = parseInt(rowIndex);
+                        if (!newRows[idx]) {
+                            newRows[idx] = new Array(prev.columns.length).fill('');
+                        }
+                        
+                        for (const { colIndex, value } of cells) {
+                            if (colIndex >= 0 && colIndex < prev.columns.length) {
+                                newRows[idx][colIndex] = value || '';
+                            }
+                        }
+                    }
+                    
+                    return { ...prev, rows: newRows };
+                });
+                
+                // Build message using pre-calculated counts
+                let message = `Updated ${updatedCount} cell${updatedCount !== 1 ? 's' : ''}`;
+                if (addedRows > 0) {
+                    message += ` (added ${addedRows} new row${addedRows !== 1 ? 's' : ''})`;
+                }
+                
+                console.log('Returning message:', message);
+                return { success: true, message };
+            } catch (error) {
+                console.error('populateCells error:', error);
+                return { success: false, error: error.message };
+            }
+        },
+        
+        getSheetData: () => {
+            return sheetData;
         }
-    }), []);
+    }), [sheetData]);
 
     return (
         <>

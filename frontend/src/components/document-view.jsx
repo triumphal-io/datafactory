@@ -30,6 +30,13 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
 
     // Expose tool execution methods to parent via ref
     useImperativeHandle(ref, () => ({
+        getSheetData: () => {
+            if (sheetViewRef.current && activeView === 'sheet') {
+                return sheetViewRef.current.getSheetData();
+            }
+            return null;
+        },
+        
         executeTools: async (tools) => {
             console.log('Executing tools:', tools);
             
@@ -37,6 +44,10 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
             
             // Execute tools sequentially
             for (const tool of tools) {
+                console.log(`\n=== Tool Call: ${tool.name} ===`);
+                console.log('Tool ID:', tool.id);
+                console.log('Arguments:', JSON.stringify(tool.arguments, null, 2));
+                
                 try {
                     let result;
                     
@@ -47,6 +58,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                                     tool.arguments.count, 
                                     tool.arguments.position || 'end'
                                 );
+                                console.log('Result:', result);
                                 toolResults.push({
                                     id: tool.id,
                                     name: tool.name,
@@ -61,6 +73,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                                     result: 'Error: No sheet is currently open'
                                 });
                             }
+                            console.log('=== Tool Completed ===\n');
                             break;
                         
                         case 'tool_add_column':
@@ -69,6 +82,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                                     tool.arguments.columns, 
                                     tool.arguments.position || 'end'
                                 );
+                                console.log('Result:', result);
                                 toolResults.push({
                                     id: tool.id,
                                     name: tool.name,
@@ -83,6 +97,30 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                                     result: 'Error: No sheet is currently open'
                                 });
                             }
+                            console.log('=== Tool Completed ===\n');
+                            break;
+                        
+                        case 'tool_populate_cells':
+                            if (sheetViewRef.current && activeView === 'sheet') {
+                                result = await sheetViewRef.current.populateCells(
+                                    tool.arguments.cells
+                                );
+                                console.log('Result:', result);
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: result.success 
+                                        ? result.message
+                                        : `Failed: ${result.error}`
+                                });
+                            } else {
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: 'Error: No sheet is currently open'
+                                });
+                            }
+                            console.log('=== Tool Completed ===\n');
                             break;
                         
                         // Add more tool cases here as needed
