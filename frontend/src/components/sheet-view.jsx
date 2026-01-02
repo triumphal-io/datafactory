@@ -4,8 +4,10 @@ import IconDelete from '../assets/delete.svg';
 import IconAdd from '../assets/add-circle.svg';
 import IconExport from '../assets/export.svg';
 import { apiFetch } from '../utils/api';
+import IconCheck from '../assets/checkmark.svg';
+import IconDismiss from '../assets/dismiss.svg';
 
-// Inject CSS for enrichment status indicators
+// Inject CSS for enrichment status indicators and AI changes
 if (typeof document !== 'undefined' && !document.getElementById('enrichment-styles')) {
     const style = document.createElement('style');
     style.id = 'enrichment-styles';
@@ -13,6 +15,10 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
         .enrichment-status {
             pointer-events: none;
             user-select: none;
+        }
+        .ai-pending-change {
+            background-color: rgba(34, 197, 94, 0.3) !important;
+            // border: 1px solid rgba(34, 197, 94, 0.6) !important;
         }
     `;
     document.head.appendChild(style);
@@ -53,6 +59,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     const [isResizing, setIsResizing] = useState(false);
     const [resizingColumn, setResizingColumn] = useState(null);
     const [overlayEditor, setOverlayEditor] = useState(null);
+    const [pendingAiChanges, setPendingAiChanges] = useState(new Set());
+    const [originalValues, setOriginalValues] = useState({});
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -582,15 +590,17 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             return;
         }
         
-        // Clear previous selections when starting new selection without Ctrl
-        clearSelection();
+        // Clear previous selections and select new cell in a single setState
+        // to avoid double updates to onSelectionChange
+        setSelectedCells(new Set([`${rowIndex}-${colIndex}`]));
+        setSelectedRows(new Set());
+        setSelectedColumns(new Set());
         
         // Start drag selection
         setIsDragging(true);
         setDragStartCell({ row: rowIndex, col: colIndex });
-        selectCell(rowIndex, colIndex);
         isSelectionModeRef.current = true;
-    }, [currentEditingCell, overlayEditor, toggleCellSelection, clearSelection, selectCell]);
+    }, [currentEditingCell, overlayEditor, toggleCellSelection]);
 
     const handleCellMouseUp = useCallback(() => {
         // Handled by global mouseup
@@ -955,6 +965,59 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         console.log('Sheet data exported as JSON');
     }, [sheetData, documentId, sheetId]);
 
+    // Accept AI changes
+    const handleAcceptAiChanges = useCallback(() => {
+        setPendingAiChanges(new Set());
+        setOriginalValues({});
+        clearSelection();
+        console.log('AI changes accepted');
+    }, [clearSelection]);
+
+    // Reject AI changes and revert to original values
+    const handleRejectAiChanges = useCallback(() => {
+        setSheetData(prev => {
+            const newRows = prev.rows.map((row, rowIndex) => 
+                row.map((cell, colIndex) => {
+                    const cellKey = `${rowIndex}-${colIndex}`;
+                    if (pendingAiChanges.has(cellKey) && originalValues[cellKey] !== undefined) {
+                        return originalValues[cellKey];
+                    }
+                    return cell;
+                })
+            );
+
+            // Remove rows that were added by AI (identified by having all cells as pending changes)
+            const rowsToKeep = [];
+            newRows.forEach((row, rowIndex) => {
+                const allCellsPending = row.every((_, colIndex) => 
+                    pendingAiChanges.has(`${rowIndex}-${colIndex}`)
+                );
+                
+                // Check if this row existed before by checking if all original values were empty
+                // If all original values were empty AND all cells are pending, this is a newly added row
+                const allOriginalValuesEmpty = row.every((_, colIndex) => {
+                    const cellKey = `${rowIndex}-${colIndex}`;
+                    return originalValues[cellKey] === '';
+                });
+
+                // Keep row if: not all cells are pending OR it had non-empty original values
+                if (!allCellsPending || !allOriginalValuesEmpty) {
+                    rowsToKeep.push(row);
+                }
+            });
+
+            return {
+                ...prev,
+                rows: rowsToKeep
+            };
+        });
+
+        setPendingAiChanges(new Set());
+        setOriginalValues({});
+        clearSelection();
+        console.log('AI changes rejected and reverted');
+    }, [pendingAiChanges, originalValues, clearSelection]);
+
     // Keyboard shortcuts and paste handler
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -1015,13 +1078,34 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         if (onNavigationChange) {
             onNavigationChange(
                 <div className="flex flex-row-center">
-                <div 
-                    onClick={handleEnrichCells}
-                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                >
-                    <img src={IconStar} alt="Star Icon" height="16" />
-                    <p className="text--micro">{enrichText}</p>
-                </div>
+                {pendingAiChanges.size > 0 ? (
+                    <>
+                        <div 
+                            onClick={handleAcceptAiChanges}
+                            className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                            style={{ backgroundColor: 'rgba(34, 197, 94, 0.2)' }}
+                        >
+                            <img src={IconCheck} alt="Check Icon" height="16" />
+                            <p className="text--micro">Accept Changes</p>
+                        </div>
+                        <div 
+                            onClick={handleRejectAiChanges}
+                            className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                            style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)' }}
+                        >
+                            <img src={IconDismiss} alt="Dismiss Icon" height="16" />
+                            <p className="text--micro">Reject Changes</p>
+                        </div>
+                    </>
+                ) : (
+                    <div 
+                        onClick={handleEnrichCells}
+                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                    >
+                        <img src={IconStar} alt="Star Icon" height="16" />
+                        <p className="text--micro">{enrichText}</p>
+                    </div>
+                )}
                 
                 {showDeleteRow && (
                     <div 
@@ -1069,7 +1153,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             </div>
             );
         }
-    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportJSON]);
+    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportJSON, pendingAiChanges, handleAcceptAiChanges, handleRejectAiChanges]);
 
     // Expose navigation menu to parent component (for imperative access if needed)
     useImperativeHandle(ref, () => ({
@@ -1080,6 +1164,9 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 if (isNaN(numRows) || numRows <= 0) {
                     return { success: false, error: 'Invalid row count' };
                 }
+
+                const currentRowCount = sheetData.rows.length;
+                const columnCount = sheetData.columns.length;
 
                 // Add the specified number of rows
                 setSheetData(prev => {
@@ -1092,6 +1179,34 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                             ? [...newRows, ...prev.rows]  // Add at beginning
                             : [...prev.rows, ...newRows]   // Add at end
                     };
+                });
+
+                // Track new rows as pending AI changes
+                setPendingAiChanges(prev => {
+                    const newPending = new Set(prev);
+                    const startRow = position === 'beginning' ? 0 : currentRowCount;
+                    
+                    for (let i = 0; i < numRows; i++) {
+                        const rowIndex = startRow + i;
+                        for (let colIndex = 0; colIndex < columnCount; colIndex++) {
+                            newPending.add(`${rowIndex}-${colIndex}`);
+                        }
+                    }
+                    return newPending;
+                });
+
+                // Store original values (empty for new rows)
+                setOriginalValues(prev => {
+                    const newOriginals = { ...prev };
+                    const startRow = position === 'beginning' ? 0 : currentRowCount;
+                    
+                    for (let i = 0; i < numRows; i++) {
+                        const rowIndex = startRow + i;
+                        for (let colIndex = 0; colIndex < columnCount; colIndex++) {
+                            newOriginals[`${rowIndex}-${colIndex}`] = '';
+                        }
+                    }
+                    return newOriginals;
                 });
 
                 const positionText = position === 'beginning' ? ' at the beginning' : '';
@@ -1208,6 +1323,62 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                     }
                 }
                 
+                // Store original values before updating
+                setOriginalValues(prev => {
+                    const newOriginals = { ...prev };
+                    
+                    for (const [rowIndex, cells] of Object.entries(cellsByRow)) {
+                        const idx = parseInt(rowIndex);
+                        for (const { colIndex } of cells) {
+                            const cellKey = `${idx}-${colIndex}`;
+                            // Only store if not already tracked
+                            if (newOriginals[cellKey] === undefined) {
+                                const currentValue = sheetData.rows[idx]?.[colIndex] || '';
+                                newOriginals[cellKey] = currentValue;
+                            }
+                        }
+                    }
+                    
+                    // Also track new rows that will be added
+                    if (addedRows > 0) {
+                        for (let i = currentRowCount; i <= maxRowNeeded; i++) {
+                            for (let colIndex = 0; colIndex < columnCount; colIndex++) {
+                                const cellKey = `${i}-${colIndex}`;
+                                if (newOriginals[cellKey] === undefined) {
+                                    newOriginals[cellKey] = '';
+                                }
+                            }
+                        }
+                    }
+                    
+                    return newOriginals;
+                });
+
+                // Track cells as pending changes
+                setPendingAiChanges(prev => {
+                    const newPending = new Set(prev);
+                    
+                    for (const [rowIndex, cells] of Object.entries(cellsByRow)) {
+                        const idx = parseInt(rowIndex);
+                        for (const { colIndex } of cells) {
+                            if (colIndex >= 0 && colIndex < sheetData.columns.length) {
+                                newPending.add(`${idx}-${colIndex}`);
+                            }
+                        }
+                    }
+                    
+                    // Also mark all cells in newly added rows as pending
+                    if (addedRows > 0) {
+                        for (let i = currentRowCount; i <= maxRowNeeded; i++) {
+                            for (let colIndex = 0; colIndex < columnCount; colIndex++) {
+                                newPending.add(`${i}-${colIndex}`);
+                            }
+                        }
+                    }
+                    
+                    return newPending;
+                });
+
                 // Update or add rows
                 setSheetData(prev => {
                     const newRows = [...prev.rows];
@@ -1238,6 +1409,9 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                     
                     return { ...prev, rows: newRows };
                 });
+                
+                // Clear selection after populating cells
+                clearSelection();
                 
                 // Build message using pre-calculated counts
                 let message = `Updated ${updatedCount} cell${updatedCount !== 1 ? 's' : ''}`;
@@ -1342,6 +1516,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                         key={`${rowIndex}-${colIndex}`}
                                         className={`sheet-row-item ${
                                             selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
+                                        } ${
+                                            pendingAiChanges.has(`${rowIndex}-${colIndex}`) ? 'ai-pending-change' : ''
                                         }`}
                                         style={{ width: `${columnWidths[colIndex] || 160}px` }}
                                         data-row={rowIndex}

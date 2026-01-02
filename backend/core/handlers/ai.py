@@ -278,16 +278,6 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 if len(non_empty_rows) > max_rows_to_show:
                     context_message += f"  ... and {len(non_empty_rows) - max_rows_to_show} more rows with data\n"
         
-        if sheet_context.get('selection'):
-            selection = sheet_context['selection']
-            # If selection is a string with actual positions (e.g., "A1:C3" or "A1, B2, C3"), include it
-            # Otherwise, inform AI that selection info is available but not detailed
-            if isinstance(selection, str) and any(char.isalpha() and char.isupper() for char in selection):
-                context_message += f"\n- Selected cells: {selection}\n"
-            else:
-                context_message += f"\n- User has selected cells but positions not provided: {selection}\n"
-                context_message += "  (Ask user to specify which cells if needed for the task)\n"
-        
         # Insert context as system message before user message if not already in conversation
         if len(conversation) > 0 and conversation[0].get('role') != 'system':
             conversation.insert(0, {"role": "system", "content": context_message})
@@ -312,7 +302,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             print("Generating AI response...")
             # Generate response based on full conversation history
             response = litellm.completion(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=conversation,
                 tools=tools,
                 tool_choice="auto"

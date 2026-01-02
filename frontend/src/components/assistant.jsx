@@ -17,10 +17,8 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     const textareaRef = useRef(null);
     const selectedCellsRef = useRef(selectedCells);
 
-    // Keep ref updated with latest selectedCells
-    useEffect(() => {
-        selectedCellsRef.current = selectedCells;
-    }, [selectedCells]);
+    // Update ref synchronously during render to avoid being one step behind
+    selectedCellsRef.current = selectedCells;
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -163,12 +161,12 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             const currentSelectedCells = selectedCellsRef.current;
             if (currentSelectedCells && currentSelectedCells.size > 0) {
                 const cellArray = Array.from(currentSelectedCells);
-                // Convert "row-col" format to Excel notation (e.g., "14-1" -> "A15")
+                // Convert "row-col" format to Excel notation (e.g., "0-1" -> "B1")
                 const excelCells = cellArray.map(cell => {
                     const [row, col] = cell.split('-').map(Number);
                     // Convert column number to letter (0=A, 1=B, etc.)
                     const colLetter = String.fromCharCode(65 + col);
-                    // Row numbers in Excel start at 1, but data rows start after header
+                    // Row numbers match UI display: row 0 shows as 1, row 3 shows as 4
                     return `${colLetter}${row + 1}`;
                 });
                 selectedRange = excelCells.join(', ');
@@ -208,9 +206,15 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     };
 
     const handleKeyDown = (e) => {
-        if (e.ctrlKey && e.key === 'Enter') {
-            e.preventDefault();
-            sendMessage();
+        if (e.key === 'Enter') {
+            if (e.shiftKey) {
+                // Shift+Enter: allow default behavior (new line)
+                return;
+            } else {
+                // Enter alone: send message
+                e.preventDefault();
+                sendMessage();
+            }
         }
     };
 

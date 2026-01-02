@@ -165,7 +165,7 @@ def api_update_document(request, did):
         )
 
 
-
+@api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_files(request, did, action):
@@ -280,12 +280,13 @@ def api_assistant(request, did, action):
         
         # Build sheet context if data provided
         sheet_context = None
-        if sheet_data or selected_range:
+        if sheet_data:
             sheet_context = {}
-            if sheet_data:
-                sheet_context['data'] = sheet_data
-            if selected_range:
-                sheet_context['selection'] = selected_range
+            sheet_context['data'] = sheet_data
+        
+        # Append selected cells to user message if provided
+        if selected_range and message:
+            message = f"{message}\n\n[Selected cells: {selected_range}]"
         
         print(f"Assistant {action}: type={message_type}, conv_id={conversation_id}")
         

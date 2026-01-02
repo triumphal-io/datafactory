@@ -192,7 +192,7 @@ span {
 
 .grid-flexible {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 50%));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 33%));
 }
 
 .flex-row, .mflex-row {
