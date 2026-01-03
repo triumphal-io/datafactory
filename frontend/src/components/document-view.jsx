@@ -12,7 +12,7 @@ import FilesView from './files-view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo, showToast } from '../utils/utils';
 
-const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId, onSelectionChange, onSheetNameChange }, ref) => {
+const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId, onSelectionChange, onSheetNameChange, onFilesDropped }, ref) => {
     const navigate = useNavigate();
     const sheetViewRef = useRef(null);
     const filesViewRef = useRef(null);
@@ -302,46 +302,6 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         };
     }, [documentName, initialDocumentName, documentId]);
 
-    // Upload files function - works in all views
-    const uploadFiles = async (files) => {
-        try {
-            showToast('Uploading...', 'info');
-            
-            const formData = new FormData();
-            files.forEach(file => {
-                formData.append('files', file);
-            });
-
-            const response = await apiFetch(`/api/documents/${documentId}/files/upload`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.status === 'success') {
-                    showToast('Uploaded successfully', 'success');
-                    // Switch to files view
-                    setActiveView('project-files');
-                    navigate(`/document/${documentId}/files`);
-                    // Refresh the files list after navigation
-                    setTimeout(async () => {
-                        if (filesViewRef.current) {
-                            await filesViewRef.current.loadProjectFiles();
-                        }
-                    }, 100);
-                } else {
-                    showToast('Upload failed', 'error');
-                }
-            } else {
-                showToast('Upload failed', 'error');
-            }
-        } catch (error) {
-            console.error('Error uploading files:', error);
-            showToast('Upload failed', 'error');
-        }
-    };
-
     // Drag and drop handlers
     const handleDragEnter = (e) => {
         e.preventDefault();
@@ -374,8 +334,11 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
 
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
-            // Upload files directly - works in all views
-            await uploadFiles(files);
+            // Send files to assistant chat instead of uploading
+            // This will be handled by passing files to the assistant via a callback
+            if (onFilesDropped) {
+                onFilesDropped(files);
+            }
         }
     };
 

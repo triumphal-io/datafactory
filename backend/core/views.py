@@ -327,15 +327,81 @@ def api_assistant(request, did, action):
         - message_type: 'user_message' or 'tool_result'
         - conversation_id: UUID of existing conversation (optional for first message)
         - tool_results: Array of {id, name, result} for tool_result type
+        - attachment_*: File attachments (multiple files supported via FormData)
+        - sheet_data: Current sheet data (JSON string when sent via FormData)
+        - selected_range: Selected cell range
     """
     try:
-        body = json.loads(request.body) if request.body else {}
-        message = body.get('message', '')
-        message_type = body.get('message_type', 'user_message')
-        conversation_id = body.get('conversation_id')
-        tool_results = body.get('tool_results', [])
-        sheet_data = body.get('sheet_data')
-        selected_range = body.get('selected_range')
+        # Check if this is FormData (with attachments) or JSON request
+        content_type = request.content_type
+        is_form_data = 'multipart/form-data' in content_type if content_type else False
+        
+        # Parse request data based on content type
+        if is_form_data:
+            message = request.POST.get('message', '')
+            message_type = request.POST.get('message_type', 'user_message')
+            conversation_id = request.POST.get('conversation_id')
+            tool_results = json.loads(request.POST.get('tool_results', '[]'))
+            sheet_data = json.loads(request.POST.get('sheet_data', 'null'))
+            selected_range = request.POST.get('selected_range')
+        else:
+            body = json.loads(request.body) if request.body else {}
+            message = body.get('message', '')
+            message_type = body.get('message_type', 'user_message')
+            conversation_id = body.get('conversation_id')
+            tool_results = body.get('tool_results', [])
+            sheet_data = body.get('sheet_data')
+            selected_range = body.get('selected_range')
+        
+        # Handle file attachments if present
+        uploaded_file_ids = []
+        attachment_info = []
+        if is_form_data and request.FILES:
+            document = Document.objects.filter(uuid=did).first()
+            if not document:
+                return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
+            
+            # Process all attached files
+            for field_name, uploaded_file in request.FILES.items():
+                if field_name.startswith('attachment_'):
+                    # Get original filename and extension
+                    original_name = uploaded_file.name
+                    name_parts = os.path.splitext(original_name)
+                    base_name = name_parts[0]
+                    extension = name_parts[1]
+                    
+                    # Sanitize filename to only contain a-z, A-Z, 0-9, -, _
+                    sanitized_name = re.sub(r'[^a-zA-Z0-9\-_]', '', base_name)
+                    if not sanitized_name:
+                        sanitized_name = 'file'
+                    
+                    # Generate UUID and create new filename
+                    file_uuid = uuid_lib.uuid4()
+                    new_filename = f"{sanitized_name}-{file_uuid}{extension}"
+                    
+                    # Create file instance
+                    file_instance = File.objects.create(
+                        document=document,
+                        filename=original_name,
+                        calculated_size=uploaded_file.size,
+                        extracted_content="",  # Will be populated by background processing
+                        is_processing=True
+                    )
+                    
+                    # Save file with new name
+                    file_instance.file.save(new_filename, uploaded_file, save=True)
+                    
+                    uploaded_file_ids.append(str(file_instance.uuid))
+                    attachment_info.append({
+                        'id': str(file_instance.uuid),
+                        'name': original_name,
+                        'size': uploaded_file.size
+                    })
+            
+            # Start background processing of uploaded files
+            if uploaded_file_ids:
+                print(f"Triggering background processing for {len(uploaded_file_ids)} attached file(s)...")
+                start_background_processing()
         
         # Build sheet context if data provided
         sheet_context = None
@@ -347,7 +413,12 @@ def api_assistant(request, did, action):
         if selected_range and message:
             message = f"{message}\n\n[Selected cells: {selected_range}]"
         
-        print(f"Assistant {action}: type={message_type}, conv_id={conversation_id}")
+        # Append attachment info to user message if files were uploaded
+        if attachment_info:
+            attachment_text = "\n\n[User attached files: " + ", ".join([f"{att['name']} (ID: {att['id']})" for att in attachment_info]) + "]"
+            message = message + attachment_text
+        
+        print(f"Assistant {action}: type={message_type}, conv_id={conversation_id}, attachments={len(uploaded_file_ids)}")
         
         # Get or create conversation
         if conversation_id:

@@ -812,6 +812,7 @@ def tool_read_file(file_id, document_id=None):
     Read the extracted markdown content of a specific file from the database.
     
     This tool is called by the AI to access uploaded document content.
+    If the file is in processing state or has no extracted content, it will force extract immediately.
     
     Args:
         file_id (str): UUID of the file to read
@@ -830,18 +831,41 @@ def tool_read_file(file_id, document_id=None):
         if document_id and str(file_obj.document.uuid) != str(document_id):
             return "Error: File does not belong to the current document."
         
-        # Check if file is ready for reading
-        if file_obj.is_processing:
-            return "Error: File is still being processed. Please try again later."
-        
         if not file_obj.use:
             return "Error: This file is not available for use."
         
+        # Force extract if file is processing or has no content
+        if file_obj.is_processing or not file_obj.extracted_content:
+            try:
+                from core.handlers.extraction import extract_file_content
+                
+                print(f"Force extracting content for file: {file_obj.filename}")
+                
+                # Extract content immediately
+                content = extract_file_content(file_obj)
+                
+                # Update database
+                file_obj.extracted_content = content
+                file_obj.is_processing = False
+                file_obj.save()
+                
+                print(f"✓ Successfully extracted content for: {file_obj.filename}")
+                
+                return content
+                
+            except Exception as extraction_error:
+                error_msg = f"Error during extraction: {str(extraction_error)}"
+                print(f"✗ {error_msg}")
+                
+                # Mark as not processing and save error
+                file_obj.is_processing = False
+                file_obj.extracted_content = error_msg
+                file_obj.save()
+                
+                return error_msg
+        
         # Return the extracted content if available
-        if file_obj.extracted_content:
-            return file_obj.extracted_content
-        else:
-            return "No extracted content available for this file."
+        return file_obj.extracted_content
     
     except File.DoesNotExist:
         return f"Error: File with ID {file_id} not found."

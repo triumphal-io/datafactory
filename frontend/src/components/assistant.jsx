@@ -8,17 +8,26 @@ import IconTick from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
 import Loader from '../assets/loader-mini.gif';
 
-const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData }, ref) => {
+const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles }, ref) => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [conversationId, setConversationId] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [attachments, setAttachments] = useState([]);
     const bodyRef = useRef(null);
     const textareaRef = useRef(null);
+    const fileInputRef = useRef(null);
     const selectedCellsRef = useRef(selectedCells);
 
     // Update ref synchronously during render to avoid being one step behind
     selectedCellsRef.current = selectedCells;
+
+    // Handle dropped files from parent component
+    useEffect(() => {
+        if (droppedFiles && droppedFiles.length > 0) {
+            setAttachments(prev => [...prev, ...droppedFiles]);
+        }
+    }, [droppedFiles]);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -147,8 +156,13 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         const message = inputValue.trim();
         if (!message || isProcessing) return;
 
-        // Add user message to the list
-        setMessages(prev => [...prev, { type: 'user', content: message }]);
+        // Add user message to the list (with attachment info if present)
+        let userMessageContent = message;
+        if (attachments.length > 0) {
+            const fileList = attachments.map(f => f.name).join(', ');
+            userMessageContent = `${message}\n\n📎 Attached: ${fileList}`;
+        }
+        setMessages(prev => [...prev, { type: 'user', content: userMessageContent }]);
         setInputValue('');
         setIsProcessing(true);
 
@@ -172,15 +186,30 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 selectedRange = excelCells.join(', ');
             }
             
+            // Always use FormData to unify the request handling
+            const formData = new FormData();
+            formData.append('message', message);
+            formData.append('message_type', 'user_message');
+            if (conversationId) {
+                formData.append('conversation_id', conversationId);
+            }
+            if (sheetData) {
+                formData.append('sheet_data', JSON.stringify(sheetData));
+            }
+            if (selectedRange) {
+                formData.append('selected_range', selectedRange);
+            }
+            
+            // Append all attachments if present
+            if (attachments.length > 0) {
+                attachments.forEach((file, index) => {
+                    formData.append(`attachment_${index}`, file);
+                });
+            }
+
             const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
                 method: 'POST',
-                body: JSON.stringify({
-                    message: message,
-                    message_type: 'user_message',
-                    conversation_id: conversationId,
-                    sheet_data: sheetData,
-                    selected_range: selectedRange
-                })
+                body: formData,
             });
 
             const data = await response.json();
@@ -193,6 +222,11 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 }
                 
                 handleAssistantResponse(data);
+                
+                // Clear attachments after successful send
+                setAttachments([]);
+            } else {
+                throw new Error(data.message || 'Failed to send message');
             }
         } catch (error) {
             console.error('Error sending message:', error);
@@ -216,6 +250,40 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 sendMessage();
             }
         }
+    };
+
+    const handleFileSelect = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            setAttachments(prev => [...prev, ...files]);
+        }
+        // Reset the input so the same file can be selected again
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const removeAttachment = (index) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const getFileTypeLabel = (file) => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const typeMap = {
+            'pdf': 'PDF',
+            'doc': 'Word',
+            'docx': 'Word',
+            'xls': 'Excel',
+            'xlsx': 'Excel',
+            'csv': 'CSV',
+            'txt': 'Text',
+            'png': 'Image',
+            'jpg': 'Image',
+            'jpeg': 'Image',
+            'gif': 'Image',
+            'svg': 'Image'
+        };
+        return typeMap[ext] || ext.toUpperCase();
     };
 
     // Helper function to convert column index to Excel-style letter
@@ -399,6 +467,43 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             width: 'fit-content',
                         }} className='mrgnb-10 text--nano opacity-5' key={selectedCells.size}>{formatCellSelection()}</p>
                     )}
+                    
+                    {/* Attachments Display */}
+                    {attachments.length > 0 && (
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            // flexWrap: 'wrap',
+                            gap: '8px',
+                            marginBottom: '10px'
+                        }}>
+                            {attachments.map((file, index) => (
+                                <div key={index} style={{
+                                    // border: '1px solid #aaa',
+                                    borderRadius: '6px',
+                                    // padding: '8px',
+                                    display: 'flex',
+                                    flexDirection: 'row',
+                                    width: 'auto',
+                                    gap: '8px',
+                                    // backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                }}>
+                                    <p className='flex-expanded text--nano' style={{
+                                        lineBreak: 'anywhere',
+                                        textOverflow: 'ellipsis'}}>{file.name}</p>
+                                    <p className='text--nano opacity-3'>{getFileTypeLabel(file)}</p>
+                                    <img 
+                                        src={IconDismiss} 
+                                        alt="Remove" 
+                                        height="12" 
+                                        style={{ cursor: 'pointer', opacity: 0.7 }}
+                                        onClick={() => removeAttachment(index)}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
                     <textarea 
                         ref={textareaRef}
                         className={`flex-expanded input-empty`}
@@ -411,7 +516,20 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                         disabled={isProcessing}
                     />
                     <div className="flex flex-row-center flex-space-between">
-                        <img src={IconAdd} alt="Add Icon" height="20" />
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={handleFileSelect}
+                        />
+                        <img 
+                            src={IconAdd} 
+                            alt="Add Icon" 
+                            height="20" 
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => fileInputRef.current?.click()}
+                        />
                         <img 
                             src={IconSend} 
                             alt="Send Icon" 

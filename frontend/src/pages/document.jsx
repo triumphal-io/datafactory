@@ -10,6 +10,7 @@ export default function DocumentPage() {
     const assistantRef = useRef(null);
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [sheetName, setSheetName] = useState('');
+    const [droppedFiles, setDroppedFiles] = useState(null);
 
     // Handle selection changes from SheetView
     const handleSelectionChange = (cells) => {
@@ -45,6 +46,13 @@ export default function DocumentPage() {
         return null;
     };
 
+    // Handle files dropped anywhere on the document view
+    const handleFilesDropped = (files) => {
+        setDroppedFiles(files);
+        // Clear after a brief moment to allow it to be picked up by the assistant
+        setTimeout(() => setDroppedFiles(null), 100);
+    };
+
     return (
         <div className="sheet-container">
         <main>
@@ -54,6 +62,7 @@ export default function DocumentPage() {
                 sheetId={sheetId}
                 onSelectionChange={handleSelectionChange}
                 onSheetNameChange={handleSheetNameChange}
+                onFilesDropped={handleFilesDropped}
             />
         </main>
         <Resizer />
@@ -65,6 +74,7 @@ export default function DocumentPage() {
                 selectedCells={selectedCells}
                 sheetName={sheetName}
                 getSheetData={getSheetData}
+                droppedFiles={droppedFiles}
             />
         </aside>
     </div>
