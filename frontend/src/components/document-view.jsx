@@ -76,6 +76,52 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                             console.log('=== Tool Completed ===\n');
                             break;
                         
+                        case 'tool_delete_rows':
+                            if (sheetViewRef.current && activeView === 'sheet') {
+                                result = await sheetViewRef.current.deleteRows(
+                                    tool.arguments.row_numbers
+                                );
+                                console.log('Result:', result);
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: result.success 
+                                        ? result.message
+                                        : `Failed: ${result.error}`
+                                });
+                            } else {
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: 'Error: No sheet is currently open'
+                                });
+                            }
+                            console.log('=== Tool Completed ===\n');
+                            break;
+                        
+                        case 'tool_delete_column':
+                            if (sheetViewRef.current && activeView === 'sheet') {
+                                result = await sheetViewRef.current.deleteColumns(
+                                    tool.arguments.columns
+                                );
+                                console.log('Result:', result);
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: result.success 
+                                        ? result.message
+                                        : `Failed: ${result.error}`
+                                });
+                            } else {
+                                toolResults.push({
+                                    id: tool.id,
+                                    name: tool.name,
+                                    result: 'Error: No sheet is currently open'
+                                });
+                            }
+                            console.log('=== Tool Completed ===\n');
+                            break;
+                        
                         case 'tool_add_column':
                             if (sheetViewRef.current && activeView === 'sheet') {
                                 result = await sheetViewRef.current.addColumns(

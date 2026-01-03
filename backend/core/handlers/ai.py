@@ -2,20 +2,26 @@ import asyncio
 import time
 import json
 from io import BytesIO
+from pathlib import Path
+
 from PIL import Image
 from crawl4ai import AsyncWebCrawler
 import litellm
-import os
-from pathlib import Path
 from dotenv import load_dotenv
 from django.apps import apps
 
-# Load .env from root folder
+# Load environment variables from root folder
 env_path = Path(__file__).resolve().parents[3] / '.env'
 load_dotenv(dotenv_path=env_path)
 
 
 def get_ai_tools():
+    """
+    Get standard AI tools for web search and scraping.
+    
+    Returns:
+        list: List of tool definitions for searching and web scraping
+    """
     search_tool = {
         "type": "function",
         "function": {
@@ -55,10 +61,19 @@ def get_ai_tools():
 
 
 def get_file_tools(document_id=None):
-    """Dynamically generate tools for accessing files from the database"""
+    """
+    Dynamically generate tools for accessing files from the database.
+    
+    Args:
+        document_id (str, optional): UUID of the document to filter files by.
+                                     If provided, enhances tool descriptions with available files.
+    
+    Returns:
+        list: List of tool definitions for file operations
+    """
     tools = []
     
-    # Tool to read file content
+    # Define tool for reading file content
     read_file_tool = {
         "type": "function",
         "function": {
@@ -78,13 +93,16 @@ def get_file_tools(document_id=None):
     }
     tools.append(read_file_tool)
     
-    # If document_id is provided, enhance the description with available files
+    # Enhance tool description with available files if document_id is provided
+    # This helps the AI understand which files are available to read
     if document_id:
         try:
             File = apps.get_model('core', 'File')
+            # Query only processed and enabled files for the document
             files = File.objects.filter(document__uuid=document_id, use=True, is_processing=False)
             
             if files.exists():
+                # Build a human-readable list of available files
                 file_list = []
                 for f in files:
                     file_list.append(f"- {f.filename} (ID: {f.uuid}, Size: {f.calculated_size} bytes)")
@@ -102,7 +120,19 @@ def get_file_tools(document_id=None):
 
 
 def get_sheet_tools():
-    """Tools for manipulating spreadsheet data in the UI"""
+    """
+    Get tools for manipulating spreadsheet data in the UI.
+    
+    These tools allow the AI to:
+    - Add rows to spreadsheets
+    - Delete rows from spreadsheets
+    - Add columns with optional AI enrichment prompts
+    - Delete columns from spreadsheets
+    - Populate specific cells with values
+    
+    Returns:
+        list: List of tool definitions for spreadsheet operations
+    """
     add_rows_tool = {
         "type": "function",
         "function": {
@@ -168,6 +198,53 @@ def get_sheet_tools():
         }
     }
     
+    delete_rows_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_delete_rows",
+            "description": "Delete one or more rows from the currently open spreadsheet. Use this when user asks to delete rows, remove rows, or clear rows. You can specify row numbers (1-based) to delete.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "row_numbers": {
+                        "type": "array",
+                        "description": "Array of row numbers to delete. Row numbers are 1-based (first data row is 1). Example: [1, 3, 5] would delete rows 1, 3, and 5.",
+                        "items": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": ["row_numbers"],
+            },
+        }
+    }
+    
+    delete_column_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_delete_column",
+            "description": "Delete one or more columns from the currently open spreadsheet. Use this when user asks to delete columns, remove columns, or clear columns. You can specify column names or positions to delete.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "description": "Array of column names or positions to delete. Can be column titles (e.g., 'Product Name') or column letters (e.g., 'A', 'B', 'C'). Example: ['A', 'Product Name', 'C'] would delete columns A, Product Name, and C.",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": ["columns"],
+            },
+        }
+    }
+    
+    # Tool for populating cells with validation requirements
+    # NOTE: This tool has strict validation to prevent empty calls
     populate_cells_tool = {
         "type": "function",
         "function": {
@@ -210,33 +287,41 @@ If you need to populate cells, you must specify which cells and what values. If 
         }
     }
     
-    return [add_rows_tool, add_column_tool, populate_cells_tool]
+    return [add_rows_tool, delete_rows_tool, add_column_tool, delete_column_tool, populate_cells_tool]
 
 
 def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None, sheet_context=None):
     """
     AI assistant with optional conversation persistence, sheet tool support, and file access.
     
+    This is the main entry point for AI interactions. It supports:
+    - Multi-turn conversations with persistence
+    - Tool calling (web search, file reading, spreadsheet manipulation)
+    - Context awareness for spreadsheets and documents
+    
     Args:
-        message: User message string OR None if continuing from tool results
-        conversation_obj: Optional Conversation model instance for persistence
-        include_sheet_tools: If True, includes sheet tools and returns tool calls for frontend execution
-        document_id: Optional document UUID to enable file access tools
-        sheet_context: Optional dict with 'data' (sheet structure) and 'selection' (selected cells info)
+        message (str or None): User message string. Can be None if continuing from tool results
+        conversation_obj (Conversation, optional): Django model instance for conversation persistence
+        include_sheet_tools (bool): If True, includes sheet tools and returns tool calls for frontend execution
+        document_id (str, optional): Document UUID to enable file access tools
+        sheet_context (dict, optional): Dict with 'data' (sheet structure) and 'selection' (selected cells info)
     
     Returns:
-        - If include_sheet_tools=False: String response (legacy mode)
-        - If include_sheet_tools=True: Dict with 'type' ('message' or 'tool_call'), 'content', optional 'tools'
+        str or dict:
+            - If include_sheet_tools=False: String response (legacy mode)
+            - If include_sheet_tools=True: Dict with 'type' ('message' or 'tool_call'), 'content', optional 'tools'
     """
-    # Initialize or load conversation history
+    # Initialize conversation history from database or create new
     if conversation_obj:
         conversation = conversation_obj.conversations if conversation_obj.conversations else []
         if message:
             conversation.append({"role": "user", "content": message})
     else:
+        # No persistence - start fresh conversation
         conversation = [{"role": "user", "content": message}]
     
     # Add sheet context to system message if provided
+    # This gives the AI awareness of the current spreadsheet structure and data
     if sheet_context and include_sheet_tools:
         context_message = "Current spreadsheet context:\n"
         
@@ -245,11 +330,12 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             columns = sheet_data.get('columns', [])
             rows = sheet_data.get('rows', [])
             
-            # Add column information
+            # Build column information summary
             column_titles = [c.get('title', '') for c in columns]
             context_message += f"- Columns ({len(columns)}): {', '.join(column_titles)}\n"
             
-            # Add actual row data (limit to prevent token overflow)
+            # Filter and prepare row data for context
+            # Limit rows to prevent token overflow in the AI prompt
             # Filter rows to exclude completely empty rows or rows with only empty values
             non_empty_rows = []
             for i, row in enumerate(rows):
@@ -263,62 +349,79 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             
             if non_empty_rows:
                 context_message += "\nExisting data:\n"
-                # Show first 50 rows maximum
+                # Show first 50 rows maximum to prevent token overflow
                 max_rows_to_show = min(50, len(non_empty_rows))
                 for idx, (i, row) in enumerate(non_empty_rows[:max_rows_to_show]):
                     row_values = []
                     for j, cell_value in enumerate(row):
                         if j < len(column_titles):
-                            # Only include cells with actual values
+                            # Only include cells with actual values (skip empty/null cells)
                             if cell_value not in [None, '', ' '] and str(cell_value).strip() != '':
                                 row_values.append(f"{column_titles[j]}: {cell_value}")
                     if row_values:  # Only add row if it has displayable values
                         context_message += f"  Row {i+1}: {', '.join(row_values)}\n"
                 
+                # Indicate if there are more rows than shown
                 if len(non_empty_rows) > max_rows_to_show:
                     context_message += f"  ... and {len(non_empty_rows) - max_rows_to_show} more rows with data\n"
         
-        # Insert context as system message before user message if not already in conversation
+        # Insert context as system message at the beginning if not already present
+        # System messages provide context that persists throughout the conversation
         if len(conversation) > 0 and conversation[0].get('role') != 'system':
             conversation.insert(0, {"role": "system", "content": context_message})
     
 
-    # Select tools based on mode
+    # Dynamically select tools based on context and mode
+    # Base tools (search, web scraping) are always available
     tools = get_ai_tools()
+    
+    # Add sheet manipulation tools if working with spreadsheets
     if include_sheet_tools:
         tools = get_sheet_tools() + tools
+    
+    # Add file reading tools if working with documents
     if document_id:
         tools = get_file_tools(document_id) + tools
     
-    sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_populate_cells'}
+    # Define tool categories for routing execution
+    # Sheet tools modify spreadsheet UI (handled by frontend)
+    sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
+    # File tools read document content (handled by backend)
     file_tool_names = {'tool_read_file'}
-    frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_populate_cells'}
+    # Frontend tools require UI updates (sent back to client)
+    frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     
+    # Debug logging
     print(conversation)
     print(f"Using tools: {[tool['function']['name'] for tool in tools]}")
     
+    # Main conversation loop - continues until AI decides no more tool calls needed
     while True:
         try:
             print("Generating AI response...")
-            # Generate response based on full conversation history
+            # Call LiteLLM with full conversation history and available tools
+            # Model decides whether to respond directly or call tools
             response = litellm.completion(
                 model="gpt-4o-mini",
                 messages=conversation,
                 tools=tools,
-                tool_choice="auto"
+                tool_choice="auto"  # Let model decide when to use tools
             )
             
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
             
-            # Check for function call
+            # Process tool calls if AI decided to use tools
             if tool_calls:
-                # Add assistant's response to conversation
+                # Add assistant's response to conversation history
+                # This preserves the tool calling decision for context
                 assistant_msg = {
                     "role": "assistant",
                     "content": response_message.content
                 }
                 
+                # Serialize tool calls to conversation format
+                # This is required for OpenAI-compatible message format
                 if tool_calls:
                     assistant_msg["tool_calls"] = [
                         {
@@ -333,20 +436,27 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 
                 conversation.append(assistant_msg)
                 
-                # Separate frontend tools from backend tools
+                # Separate tools by execution location
+                # Frontend tools: UI manipulation (executed by React)
+                # Backend tools: Data fetching, web scraping (executed here)
                 frontend_tools = []
                 backend_tools = []
                 
+                # Process each tool call requested by the AI
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
                     
+                    # Debug output for tool call tracking
                     print(f"DEBUG: Tool call - {function_name}")
                     print(f"DEBUG: Raw arguments: {tool_call.function.arguments}")
                     print(f"DEBUG: Parsed arguments: {function_args}")
                     
                     # Validate tool arguments before processing
+                    # This prevents errors from malformed AI responses
                     validation_error = None
+                    
+                    # Validate populate_cells tool (strict validation due to common AI errors)
                     if function_name == 'tool_populate_cells':
                         if 'cells' not in function_args:
                             validation_error = "Missing required parameter 'cells'. You must provide a cells object with at least one cell position and value. Example: {\"cells\": {\"A1\": \"value\", \"B2\": \"value2\"}}"
@@ -354,9 +464,31 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                             validation_error = "Parameter 'cells' must be a non-empty object/dictionary with cell positions as keys. Example: {\"cells\": {\"A1\": \"value\", \"B2\": \"value2\"}}"
                         elif len(function_args['cells']) == 0:
                             validation_error = "Parameter 'cells' is empty. You must provide at least one cell entry. Example: {\"cells\": {\"A1\": \"value\", \"B2\": \"value2\"}}"
+                    
+                    # Validate add_rows tool
                     elif function_name == 'tool_add_rows':
                         if 'count' not in function_args:
                             validation_error = "Missing required parameter 'count'"
+                    
+                    # Validate delete_rows tool
+                    elif function_name == 'tool_delete_rows':
+                        if 'row_numbers' not in function_args:
+                            validation_error = "Missing required parameter 'row_numbers'"
+                        elif not function_args['row_numbers'] or not isinstance(function_args['row_numbers'], list):
+                            validation_error = "Parameter 'row_numbers' must be a non-empty array of row numbers. Example: {\"row_numbers\": [1, 2, 3]}"
+                        elif len(function_args['row_numbers']) == 0:
+                            validation_error = "Parameter 'row_numbers' is empty. You must provide at least one row number to delete. Example: {\"row_numbers\": [1, 2, 3]}"
+                    
+                    # Validate delete_column tool
+                    elif function_name == 'tool_delete_column':
+                        if 'columns' not in function_args:
+                            validation_error = "Missing required parameter 'columns'"
+                        elif not function_args['columns'] or not isinstance(function_args['columns'], list):
+                            validation_error = "Parameter 'columns' must be a non-empty array of column identifiers. Example: {\"columns\": ['A', 'Product Name']}"
+                        elif len(function_args['columns']) == 0:
+                            validation_error = "Parameter 'columns' is empty. You must provide at least one column to delete. Example: {\"columns\": ['A', 'Product Name']}"
+                    
+                    # Validate add_column tool
                     elif function_name == 'tool_add_column':
                         if 'columns' not in function_args:
                             validation_error = "Missing required parameter 'columns'"
@@ -364,6 +496,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                             validation_error = "Parameter 'columns' must contain at least one column"
                     
                     # If validation failed, add error to conversation immediately
+                    # This allows the AI to see the error and potentially retry with correct args
                     if validation_error:
                         print(f"VALIDATION ERROR: {validation_error}")
                         conversation.append({
@@ -372,32 +505,39 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                             "name": function_name,
                             "content": f"ERROR: {validation_error}"
                         })
-                        continue
+                        continue  # Skip this tool call, move to next
                     
+                    # Package tool information for execution
                     tool_info = {
                         "id": tool_call.id,
                         "name": function_name,
                         "arguments": function_args
                     }
                     
-                    # Sheet tools are frontend-handled only when include_sheet_tools is True
-                    # File tools are always backend-handled
+                    # Route tool to appropriate execution location
+                    # Sheet tools: Only frontend-handled when in sheet mode
+                    # File tools: Always backend-handled
+                    # Other tools: Backend-handled (search, scraping)
                     if include_sheet_tools and function_name in sheet_tool_names:
                         frontend_tools.append(tool_info)
                     else:
                         backend_tools.append(tool_info)
                 
-                # Execute backend tools
+                # Execute backend tools (file reading, web scraping, etc.)
                 for tool_info in backend_tools:
                     print(f"Executing backend tool: {tool_info['name']}")
                     print(f"Arguments: {tool_info['arguments']}")
                     
                     try:
-                        # Add document_id for file tools that need context
+                        # Inject document_id for file tools that need context
+                        # This ensures file access is scoped to the current document
                         if tool_info['name'] in file_tool_names and document_id:
                             tool_info['arguments']['document_id'] = document_id
                         
+                        # Execute tool function by name lookup
                         tool_result = globals()[tool_info['name']](**tool_info['arguments'])
+                        
+                        # Add tool result to conversation for AI to process
                         conversation.append({
                             "tool_call_id": tool_info['id'],
                             "role": "tool",
@@ -405,6 +545,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                             "content": str(tool_result)
                         })
                     except Exception as e:
+                        # Add error to conversation so AI can handle gracefully
                         conversation.append({
                             "tool_call_id": tool_info['id'],
                             "role": "tool",
@@ -412,12 +553,14 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                             "content": f"Error: {str(e)}"
                         })
                 
-                # Save conversation if persistence enabled
+                # Persist conversation state to database if enabled
+                # This allows resuming conversations across requests
                 if conversation_obj:
                     conversation_obj.conversations = conversation
                     conversation_obj.save()
                 
-                # If there are frontend tools, return them for frontend execution
+                # If there are frontend tools, return them for client-side execution
+                # The frontend will execute these and send results back
                 if frontend_tools:
                     return {
                         'type': 'tool_call',
@@ -426,39 +569,45 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                     }
                 
                 # Continue the loop to let AI process backend tool results
+                # Loop will iterate and generate next response based on tool results
             else:
-                # No more tool calls needed, return the final response
+                # No tool calls - AI has generated final response
                 print("No more function calls needed.")
                 final_content = response_message.content
                 print(final_content)
                 
-                # Add final message to conversation
+                # Add final assistant message to conversation history
                 conversation.append({
                     "role": "assistant",
                     "content": final_content
                 })
                 
-                # Save conversation if persistence enabled
+                # Persist final conversation state
                 if conversation_obj:
                     conversation_obj.conversations = conversation
                     conversation_obj.save()
                 
-                # Return based on mode
+                # Return response in appropriate format based on mode
                 if include_sheet_tools:
+                    # Sheet mode: Return structured dict with metadata
                     return {
                         'type': 'message',
                         'content': final_content.strip() if final_content else "",
                         'conversation_id': str(conversation_obj.uuid) if conversation_obj else None
                     }
                 else:
+                    # Legacy mode: Return plain string
                     return final_content.strip() if final_content else ""
 
         except Exception as e:
+            # Handle API errors with retry logic for rate limits
             exception_code = e.code if hasattr(e, 'code') else None
             if exception_code == 429:
+                # Rate limit hit - wait and retry
                 print(f"Rate limit exceeded: {e}")
                 time.sleep(1)
             else:
+                # Unknown error - propagate to caller
                 print(f"An unexpected error occurred: {e}")
                 raise
  
@@ -469,33 +618,65 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
 
 
 def enrichment(data, document_id=None):
-    # exampledata = {
-    #     'context': {'Product Name': 'Zendesk'}, 
-    #     'position': {'Row': '0', 'Column': '1'}, 
-    #     'title': 'Product Category', 
-    #     'description': 'Category of the Product', 
-    #     'value': ''
-    # }
+    """
+    Enrich a spreadsheet cell using AI based on context from other cells.
+    
+    Uses AI to infer missing data based on surrounding cell values and column descriptions.
+    Can access uploaded documents for additional context.
+    
+    Args:
+        data (dict): Enrichment request with keys:
+            - 'context' (dict): Surrounding cell values (e.g., {'Product Name': 'Zendesk'})
+            - 'position' (dict): Cell location (e.g., {'Row': '0', 'Column': '1'})
+            - 'title' (str): Column title/name
+            - 'description' (str): Column description or prompt
+            - 'value' (str): Current cell value (usually empty)
+        document_id (str, optional): Document UUID for file access
+    
+    Returns:
+        str: AI-generated enrichment value (max 5 words)
+    
+    Example data format:
+        {
+            'context': {'Product Name': 'Zendesk'}, 
+            'position': {'Row': '0', 'Column': '1'}, 
+            'title': 'Product Category', 
+            'description': 'Category of the Product', 
+            'value': ''
+        }
+    """
+    # Build enrichment prompt with context
     prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}. Provide a concise and very short answer. Max 5 words."
+    
+    # Enable file access if document is available
     if document_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_read_file if needed."
     
-    # use ai to find the value
+    # Use AI assistant to generate enrichment value
     result = assistant(prompt, document_id=document_id)
     print(f"Enrichment result: {result}")
     return result
 
 
 def test_assistant():
+    """
+    Test function for image analysis capabilities.
+    
+    NOTE: This is a development/testing function.
+    
+    Returns:
+        str: AI response describing the image
+    """
     prompt = "What is in the image?"
     image_path = "R:\\Projects\\DataFactory\\core\\handlers\\image.jpg"
     img = Image.open(image_path)
 
-    # Convert image to bytes
+    # Convert image to bytes for AI processing
     img_byte_arr = BytesIO()
-    img.save(img_byte_arr, format='JPEG') # Or 'JPEG' based on your image type
+    img.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
 
+    # Format data for multimodal AI input
     data = [
         {"inlineData": {"mimeType": "image/jpeg", "data": img_bytes}}, 
         "What is in this image?"
@@ -507,45 +688,97 @@ def test_assistant():
 
 
 def tool_search(keyword):
+    """
+    Search Google for a keyword and return scraped results.
+    
+    Args:
+        keyword (str): Search term
+    
+    Returns:
+        str: Markdown content from search results
+    """
     search_url = f"https://www.google.com/search?q={keyword}"
     return crawler(search_url)
 
+
 def tool_web_scraper(url):
+    """
+    Scrape a webpage and return its content as markdown.
+    
+    Args:
+        url (str): Website URL to scrape
+    
+    Returns:
+        str: Markdown content from the webpage
+    """
     return crawler(url)
 
 async def _async_crawler(url):
+    """
+    Internal async function to crawl a webpage using crawl4ai.
+    
+    Args:
+        url (str): URL to crawl
+    
+    Returns:
+        CrawlResult: Result object with markdown content
+    """
     async with AsyncWebCrawler() as crawler:
         return await crawler.arun(
-            # url="https://www.bing.com/search?q=Rohan%20Ashik",
-            # url="https://www.google.com/search?q=Rohan%20Ashik",
             url=url
+            # Example URLs for reference:
+            # url="https://www.bing.com/search?q=Rohan%20Ashik"
+            # url="https://www.google.com/search?q=Rohan%20Ashik"
         )
-    
+
+
 def crawler(url):
+    """
+    Synchronous wrapper for async web crawler.
+    
+    Scrapes a webpage and converts content to markdown format.
+    
+    Args:
+        url (str): URL to crawl
+    
+    Returns:
+        str: Raw markdown content from the webpage
+    """
     result = asyncio.run(_async_crawler(url))
     return result.markdown.raw_markdown
 
 
 def tool_read_file(file_id, document_id=None):
-    """Read the extracted markdown content of a specific file"""
+    """
+    Read the extracted markdown content of a specific file from the database.
+    
+    This tool is called by the AI to access uploaded document content.
+    
+    Args:
+        file_id (str): UUID of the file to read
+        document_id (str, optional): Document UUID for access validation
+    
+    Returns:
+        str: Extracted markdown content or error message
+    """
     try:
         File = apps.get_model('core', 'File')
         
-        # Fetch the file by UUID
+        # Fetch the file by UUID from database
         file_obj = File.objects.get(uuid=file_id)
         
-        # Verify the file belongs to the document if document_id is provided
+        # Security check: Verify file belongs to the document (if document_id provided)
         if document_id and str(file_obj.document.uuid) != str(document_id):
             return "Error: File does not belong to the current document."
         
-        # Check if file is ready
+        # Check if file is ready for reading
         if file_obj.is_processing:
             return "Error: File is still being processed. Please try again later."
         
         if not file_obj.use:
             return "Error: This file is not available for use."
         
-        # Return the extracted content
+        # Return the extracted content if available
         if file_obj.extracted_content:
             return file_obj.extracted_content
         else:

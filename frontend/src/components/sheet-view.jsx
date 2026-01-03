@@ -1219,6 +1219,153 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             }
         },
         
+        deleteRows: async (rowNumbers) => {
+            try {
+                if (!Array.isArray(rowNumbers) || rowNumbers.length === 0) {
+                    return { success: false, error: 'Invalid row numbers array' };
+                }
+
+                // Convert 1-based row numbers to 0-based indices
+                const rowIndices = rowNumbers.map(num => parseInt(num) - 1);
+                
+                // Validate row numbers
+                const totalRows = sheetData.rows.length;
+                for (const idx of rowIndices) {
+                    if (isNaN(idx) || idx < 0 || idx >= totalRows) {
+                        return { success: false, error: `Invalid row number: ${idx + 1}. Sheet has ${totalRows} rows.` };
+                    }
+                }
+
+                // Delete the rows
+                setSheetData(prev => ({
+                    ...prev,
+                    rows: prev.rows.filter((_, idx) => !rowIndices.includes(idx))
+                }));
+
+                // Clear any pending AI changes for deleted rows
+                setPendingAiChanges(prev => {
+                    const newPending = new Set();
+                    for (const cellKey of prev) {
+                        const [rowIdx] = cellKey.split('-').map(Number);
+                        if (!rowIndices.includes(rowIdx)) {
+                            newPending.add(cellKey);
+                        }
+                    }
+                    return newPending;
+                });
+
+                // Clear original values for deleted rows
+                setOriginalValues(prev => {
+                    const newOriginals = { ...prev };
+                    for (const cellKey in newOriginals) {
+                        const [rowIdx] = cellKey.split('-').map(Number);
+                        if (rowIndices.includes(rowIdx)) {
+                            delete newOriginals[cellKey];
+                        }
+                    }
+                    return newOriginals;
+                });
+
+                // Clear selection
+                clearSelection();
+
+                const rowNumbersText = rowNumbers.sort((a, b) => a - b).join(', ');
+                return { 
+                    success: true, 
+                    message: `Deleted ${rowNumbers.length} row${rowNumbers.length > 1 ? 's' : ''} (${rowNumbersText})` 
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        },
+        
+        deleteColumns: async (columnIdentifiers) => {
+            try {
+                if (!Array.isArray(columnIdentifiers) || columnIdentifiers.length === 0) {
+                    return { success: false, error: 'Invalid column identifiers array' };
+                }
+
+                const columnIndices = [];
+                const columnNames = sheetData.columns.map(col => col.title);
+
+                // Parse column identifiers (can be column letters like 'A', 'B' or column names)
+                for (const identifier of columnIdentifiers) {
+                    const trimmed = identifier.trim();
+                    
+                    // Check if it's a column letter (A, B, C, etc.)
+                    const letterMatch = trimmed.match(/^[A-Z]+$/i);
+                    if (letterMatch) {
+                        // Convert letter to index
+                        let colIndex = 0;
+                        const upper = trimmed.toUpperCase();
+                        for (let i = 0; i < upper.length; i++) {
+                            colIndex = colIndex * 26 + (upper.charCodeAt(i) - 64);
+                        }
+                        colIndex -= 1; // Convert to 0-based
+                        
+                        if (colIndex >= 0 && colIndex < sheetData.columns.length) {
+                            columnIndices.push(colIndex);
+                        } else {
+                            return { success: false, error: `Column '${trimmed}' is out of range. Sheet has ${sheetData.columns.length} columns.` };
+                        }
+                    } else {
+                        // Try to find by column name
+                        const colIndex = columnNames.findIndex(name => name === trimmed);
+                        if (colIndex !== -1) {
+                            columnIndices.push(colIndex);
+                        } else {
+                            return { success: false, error: `Column '${trimmed}' not found.` };
+                        }
+                    }
+                }
+
+                // Remove duplicates and sort in descending order
+                const uniqueIndices = [...new Set(columnIndices)].sort((a, b) => b - a);
+
+                // Delete the columns
+                setSheetData(prev => ({
+                    ...prev,
+                    columns: prev.columns.filter((_, idx) => !uniqueIndices.includes(idx)),
+                    rows: prev.rows.map(row => row.filter((_, idx) => !uniqueIndices.includes(idx)))
+                }));
+
+                // Clear any pending AI changes for deleted columns
+                setPendingAiChanges(prev => {
+                    const newPending = new Set();
+                    for (const cellKey of prev) {
+                        const [rowIdx, colIdx] = cellKey.split('-').map(Number);
+                        if (!uniqueIndices.includes(colIdx)) {
+                            newPending.add(cellKey);
+                        }
+                    }
+                    return newPending;
+                });
+
+                // Clear original values for deleted columns
+                setOriginalValues(prev => {
+                    const newOriginals = { ...prev };
+                    for (const cellKey in newOriginals) {
+                        const [rowIdx, colIdx] = cellKey.split('-').map(Number);
+                        if (uniqueIndices.includes(colIdx)) {
+                            delete newOriginals[cellKey];
+                        }
+                    }
+                    return newOriginals;
+                });
+
+                // Clear selection
+                clearSelection();
+
+                const deletedColumnNames = uniqueIndices.map(idx => sheetData.columns[idx].title).join(', ');
+                return { 
+                    success: true, 
+                    message: `Deleted ${uniqueIndices.length} column${uniqueIndices.length > 1 ? 's' : ''} (${deletedColumnNames})` 
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        },
+        
         addColumns: async (columns, position = 'end') => {
             try {
                 if (!Array.isArray(columns) || columns.length === 0) {
