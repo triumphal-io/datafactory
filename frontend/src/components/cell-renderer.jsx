@@ -35,9 +35,9 @@ const CellRenderer = ({
         if (dropdownOpen && triggerRef.current) {
             const rect = triggerRef.current.getBoundingClientRect();
             setDropdownPosition({
-                top: rect.bottom,
-                left: rect.left,
-                width: Math.max(rect.width, 150)
+                top: rect.bottom + 12,
+                left: rect.left - 13,
+                width: Math.max(rect.width + 25, 150)
             });
         }
     }, [dropdownOpen]);
@@ -58,22 +58,35 @@ const CellRenderer = ({
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '6px'
+                            gap: '6px',
+                            width: 'auto'
                         }}
                     >
                         {currentValue ? (
                             <span className="chip" style={{
                                 backgroundColor: '#0066cc',
                                 color: 'white',
-                                padding: '2px 8px',
+                                padding: '3px 8px',
                                 borderRadius: '12px',
                                 fontSize: '11px',
-                                display: 'inline-block'
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                width: '100%',
+                                lineHeight: '1.2'
                             }}>
-                                {currentValue}
+                                <span>{currentValue}</span>
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft: '4px', flexShrink: 0 }}>
+                                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
                             </span>
                         ) : (
-                            <span style={{ color: '#888', fontSize: '12px' }}>Select...</span>
+                            <span style={{ color: '#888', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                <span>Select...</span>
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+                                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </span>
                         )}
                     </div>
                     {dropdownOpen && (
@@ -130,21 +143,28 @@ const CellRenderer = ({
         if (currentValue) {
             return (
                 <div 
-                    onClick={() => {
+                    onDoubleClick={() => {
                         setIsEditing(true);
                         setDropdownOpen(true);
                     }}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', width: '100%' }}
                 >
                     <span className="chip" style={{
                         backgroundColor: '#0066cc',
                         color: 'white',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
+                        padding: '3px 8px',
+                        // borderRadius: '12px',
                         fontSize: '11px',
-                        display: 'inline-block'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: 'auto',
+                        lineHeight: '1.2'
                     }}>
-                        {currentValue}
+                        <span>{currentValue}</span>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft: '4px', flexShrink: 0 }}>
+                            <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
                     </span>
                 </div>
             );
@@ -152,13 +172,16 @@ const CellRenderer = ({
 
         return (
             <div 
-                onClick={() => {
+                onDoubleClick={() => {
                     setIsEditing(true);
                     setDropdownOpen(true);
                 }}
-                style={{ cursor: 'pointer', color: '#888', fontSize: '12px' }}
+                style={{ cursor: 'pointer', color: '#888', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
             >
-                Select...
+                <span>Select...</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
             </div>
         );
     };
@@ -188,7 +211,7 @@ const CellRenderer = ({
                                 backgroundColor: '#0066cc',
                                 color: 'white',
                                 padding: '2px 8px',
-                                borderRadius: '12px',
+                                // borderRadius: '12px',
                                 fontSize: '11px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -280,7 +303,7 @@ const CellRenderer = ({
         if (selectedValues.length > 0) {
             return (
                 <div 
-                    onClick={() => {
+                    onDoubleClick={() => {
                         setIsEditing(true);
                         setDropdownOpen(true);
                     }}
@@ -296,7 +319,7 @@ const CellRenderer = ({
                             backgroundColor: '#0066cc',
                             color: 'white',
                             padding: '2px 8px',
-                            borderRadius: '12px',
+                            // borderRadius: '12px',
                             fontSize: '11px',
                             display: 'inline-block'
                         }}>
@@ -309,7 +332,7 @@ const CellRenderer = ({
 
         return (
             <div 
-                onClick={() => {
+                onDoubleClick={() => {
                     setIsEditing(true);
                     setDropdownOpen(true);
                 }}

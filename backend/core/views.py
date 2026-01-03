@@ -165,11 +165,70 @@ def api_update_document(request, did):
         )
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'DELETE', 'PATCH'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_files(request, did, action):
     response = {'status': 'error'}
+    
+    # Handle file-specific operations (DELETE/PATCH) when action is a UUID
+    if request.method in ['DELETE', 'PATCH']:
+        try:
+            file_id = action  # action is the file UUID in this case
+            print(f"File operation: method={request.method}, file_id={file_id}, document={did}")
+            file = File.objects.filter(uuid=file_id, document__uuid=did).first()
+            if not file:
+                print(f"File not found: file_id={file_id}, document={did}")
+                return JsonResponse(
+                    {'status': 'error', 'message': 'File not found'},
+                    status=404
+                )
+            
+            if request.method == 'DELETE':
+                # Delete the physical file from storage
+                if file.file:
+                    file.file.delete(save=False)
+                
+                # Delete the database record
+                file.delete()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'File deleted successfully'
+                })
+            
+            elif request.method == 'PATCH':
+                try:
+                    if request.body:
+                        body = json.loads(request.body.decode('utf-8') if isinstance(request.body, bytes) else request.body)
+                    else:
+                        body = {}
+                except json.JSONDecodeError:
+                    return JsonResponse(
+                        {'status': 'error', 'message': 'Invalid JSON in request body'},
+                        status=400
+                    )
+                
+                visible = body.get('visible', True)
+                
+                # Update the 'use' field (True = visible, False = hidden)
+                file.use = visible
+                file.save()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': f'File {"shown" if visible else "hidden"} successfully',
+                    'visible': file.use
+                })
+        except Exception as e:
+            print(f"Error in file operation: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse(
+                {'status': 'error', 'message': str(e)},
+                status=500
+            )
+    
     if action == "list":
         files = File.objects.filter(document__uuid=did)
         response['files'] = []
@@ -371,11 +430,11 @@ def api_enrich(request, action):
 
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'DELETE'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_sheets(request, did, sheet_id):
-    """Handle sheet data GET (load) and POST (save) operations"""
+    """Handle sheet data GET (load), POST (save/create), and DELETE operations"""
     
     if request.method == 'GET':
         if sheet_id == 'list':
@@ -415,7 +474,46 @@ def api_sheets(request, did, sheet_id):
     elif request.method == 'POST':
         
         if sheet_id == 'new':
-            pass
+            # Create a new sheet
+            document = Document.objects.filter(uuid=did).first()
+            if not document:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Document not found'},
+                    status=404
+                )
+            
+            # Get existing sheets to determine the next sheet name
+            existing_sheets = Sheet.objects.filter(document=document)
+            sheet_numbers = []
+            for s in existing_sheets:
+                # Extract number from "Sheet X" format
+                match = re.match(r'Sheet (\d+)', s.name)
+                if match:
+                    sheet_numbers.append(int(match.group(1)))
+            
+            # Find the next available number
+            next_number = 1
+            if sheet_numbers:
+                next_number = max(sheet_numbers) + 1
+            
+            new_sheet_name = f'Sheet {next_number}'
+            
+            # Create the new sheet
+            new_sheet = Sheet.objects.create(
+                document=document,
+                name=new_sheet_name,
+                data={'columns': [], 'rows': []}
+            )
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Sheet created successfully',
+                'sheet': {
+                    'id': str(new_sheet.uuid),
+                    'name': new_sheet.name,
+                    'last_modified': new_sheet.last_modified.isoformat()
+                }
+            })
         else:
             body = json.loads(request.body)
             sheet_data = body.get('sheet_data', {'columns': [], 'rows': []})
@@ -440,5 +538,34 @@ def api_sheets(request, did, sheet_id):
                     {'status': 'error', 'message': 'Sheet not found'},
                     status=404
                 )
+    elif request.method == 'DELETE':
+        # Delete a sheet
+        if sheet_id == 'default-sheet':
+            return JsonResponse(
+                {'status': 'error', 'message': 'Cannot delete default sheet'},
+                status=400
+            )
+        
+        sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+        if not sheet:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Sheet not found'},
+                status=404
+            )
+        
+        # Check if this is the last sheet in the document
+        sheet_count = Sheet.objects.filter(document__uuid=did).count()
+        if sheet_count <= 1:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Cannot delete the last sheet in the document'},
+                status=400
+            )
+        
+        sheet.delete()
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Sheet deleted successfully'
+        })
+    
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)
     

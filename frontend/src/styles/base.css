@@ -192,7 +192,7 @@ span {
 
 .grid-flexible {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 33%));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 32.5%));
 }
 
 .flex-row, .mflex-row {
@@ -1102,15 +1102,17 @@ table tr td {
 
 .shimmer {
     border-radius: 10px;
-    background: linear-gradient(-45deg, #eee 40%, #fafafa 50%, #eee 60%);
-    background-size: 300%;
-    background-position-x: 100%;
-    animation: shimmer_effect 1s infinite linear;
+    background: linear-gradient(90deg, #222 0%, #333333 50%, #222 100%);
+    background-size: 200% 100%;
+    animation: shimmer_effect 1.5s infinite ease-in-out;
 }
 
 @keyframes shimmer_effect {
-    to {
-        background-position-x: 0;
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
     }
 }
 
@@ -1508,7 +1510,7 @@ input:checked + .slider:before {
 
 .chip {
     padding: 4px 8px;
-    border-radius: 5px;
+    border-radius: 12px;
     font-size: 12px;
     font-weight: 500;
     width: fit-content;
@@ -2424,5 +2426,38 @@ body.resizing {
     }
 }
 
+/* DRAG AND DROP OVERLAY */
+.drop-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.85);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+}
 
+.drop-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    border: 3px dashed rgba(255, 255, 255, 0.4);
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.05);
+}
 
+.drop-overlay-text {
+    font-size: 24px;
+    font-weight: 500;
+    color: #ffffff;
+    text-align: center;
+    margin: 0;
+    letter-spacing: 0.5px;
+}

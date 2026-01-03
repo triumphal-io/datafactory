@@ -1197,13 +1197,15 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                     </div>
                 )}
                 
-                <div 
-                    onClick={handleAddRow}
-                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                >
-                    <img src={IconAdd} alt="Add Icon" height="16" />
-                    <p className="text--micro">Add Row</p>
-                </div>
+                {sheetData.columns.length > 0 && (
+                    <div 
+                        onClick={handleAddRow}
+                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
+                    >
+                        <img src={IconAdd} alt="Add Icon" height="16" />
+                        <p className="text--micro">Add Row</p>
+                    </div>
+                )}
                 
                 <div 
                     onClick={openPopupForNewColumn}
@@ -1658,29 +1660,69 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 className="sheet-content flex-expanded scroll-x scroll-y thin-scroll"
             >
                 {isLoading ? (
-                    <div className="flex flex-column flex-center" style={{ padding: '40px' }}>
-                        <p style={{ color: '#6b7280' }}>Loading sheet data...</p>
+                    <div className="sheet-grid-container" style={{ padding: '5px', borderBottom: 'none' }}>
+                        {/* Header Row Shimmer */}
+                        <div className="sheet-row header-row" style={{ marginBottom: '0px' }}>
+                            {[...Array(5)].map((_, colIndex) => (
+                                <div
+                                    key={colIndex}
+                                    className="sheet-row-item header-cell"
+                                    style={{
+                                        width: '160px',
+                                        marginRight: '4px',
+                                        border: 'none',
+                                        borderBottom: 'none',
+                                        borderRight: 'none'
+                                    }}
+                                >
+                                    <div className="shimmer" style={{ height: '40px', borderRadius: '6px' }}></div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Data Rows Shimmer */}
+                        {[...Array(6)].map((_, rowIndex) => (
+                            <div key={rowIndex} className="sheet-row" style={{ marginBottom: '0px', ...(rowIndex === 5 ? { borderBottom: 'none' } : {}) }}>
+                                {[...Array(5)].map((_, colIndex) => (
+                                    <div
+                                        key={colIndex}
+                                        className="sheet-row-item"
+                                        style={{
+                                            width: '160px',
+                                            marginRight: '4px',
+                                            border: 'none',
+                                            borderBottom: 'none',
+                                            borderRight: 'none'
+                                        }}
+                                    >
+                                        <div className="shimmer" style={{ height: '40px', borderRadius: '6px' }}></div>
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
                     </div>
                 ) : (
                     <div className="sheet-grid-container">
                         {/* Header Row */}
                         <div className="sheet-row header-row">
-                            <div className="sheet-row-head">
-                                <input 
-                                    type="checkbox" 
-                                    className="cbx" 
-                                    id="cbxbnall"
-                                    style={{ display: 'none' }}
-                                    checked={sheetData.rows.length > 0 && selectedRows.size === sheetData.rows.length}
-                                    onChange={(e) => handleSelectAllRows(e.target.checked)}
-                                />
-                                <label className="check" htmlFor="cbxbnall">
-                                    <svg width="16px" height="16px" viewBox="0 0 18 18">
-                                        <path d="M1,9 L1,3.5 C1,2 2,1 3.5,1 L14.5,1 C16,1 17,2 17,3.5 L17,14.5 C17,16 16,17 14.5,17 L3.5,17 C2,17 1,16 1,14.5 L1,9 Z"></path>
-                                        <polyline points="1 9 7 14 15 4"></polyline>
-                                    </svg>
-                                </label>
-                            </div>
+                            {sheetData.columns.length > 0 && (
+                                <div className="sheet-row-head">
+                                    <input 
+                                        type="checkbox" 
+                                        className="cbx" 
+                                        id="cbxbnall"
+                                        style={{ display: 'none' }}
+                                        checked={sheetData.rows.length > 0 && selectedRows.size === sheetData.rows.length}
+                                        onChange={(e) => handleSelectAllRows(e.target.checked)}
+                                    />
+                                    <label className="check" htmlFor="cbxbnall">
+                                        <svg width="16px" height="16px" viewBox="0 0 18 18">
+                                            <path d="M1,9 L1,3.5 C1,2 2,1 3.5,1 L14.5,1 C16,1 17,2 17,3.5 L17,14.5 C17,16 16,17 14.5,17 L3.5,17 C2,17 1,16 1,14.5 L1,9 Z"></path>
+                                            <polyline points="1 9 7 14 15 4"></polyline>
+                                        </svg>
+                                    </label>
+                                </div>
+                            )}
                             {sheetData.columns.map((column, colIndex) => (
                                 <div
                                     key={colIndex}

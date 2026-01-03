@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } fro
 import IconAdd from '../assets/add-circle.svg';
 import IconFile from '../assets/file.svg';
 import IconLoader from '../assets/loader.gif';
+import IconMore from '../assets/more.svg';
 import { apiFetch } from '../utils/api';
 import { showToast, getTimeAgo, convertMarkdownToHtml } from '../utils/utils';
 
@@ -9,10 +10,12 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
     // State management
     const [projectFiles, setProjectFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [openDropdownIndex, setOpenDropdownIndex] = useState(null);
 
     // Expose methods to parent via ref
     useImperativeHandle(ref, () => ({
-        // Add methods here if needed
+        uploadFiles: uploadFiles,
+        loadProjectFiles: loadProjectFiles
     }));
 
     // Load project files from backend
@@ -46,9 +49,8 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
 
     // Upload files to backend
     const uploadFiles = useCallback(async (files) => {
+        const toastId = showToast('Uploading...', 'info', 999999);
         try {
-            showToast('Uploading...', 'info');
-            
             const formData = new FormData();
             files.forEach(file => {
                 formData.append('files', file);
@@ -62,18 +64,18 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             if (response.ok) {
                 const data = await response.json();
                 if (data.status === 'success') {
-                    showToast('Uploaded', 'success');
+                    showToast('Uploaded', 'success', 3000, toastId);
                     // Refresh the files list
                     await loadProjectFiles();
                 } else {
-                    showToast('Upload failed', 'error');
+                    showToast('Upload failed', 'error', 3000, toastId);
                 }
             } else {
-                showToast('Upload failed', 'error');
+                showToast('Upload failed', 'error', 3000, toastId);
             }
         } catch (error) {
             console.error('Error uploading files:', error);
-            showToast('Upload failed', 'error');
+            showToast('Upload failed', 'error', 3000, toastId);
         }
     }, [documentId, loadProjectFiles]);
 
@@ -92,6 +94,85 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         };
         input.click();
     }, [uploadFiles]);
+
+    // Handle delete file
+    const handleDeleteFile = useCallback(async (fileId, fileName) => {
+        if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
+            return;
+        }
+        
+        const toastId = showToast('Deleting...', 'info', 999999);
+        try {
+            const response = await apiFetch(`/api/documents/${documentId}/files/${fileId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    showToast('File deleted', 'success', 3000, toastId);
+                    await loadProjectFiles();
+                } else {
+                    showToast('Delete failed', 'error', 3000, toastId);
+                }
+            } else {
+                showToast('Delete failed', 'error', 3000, toastId);
+            }
+        } catch (error) {
+            console.error('Error deleting file:', error);
+            showToast('Delete failed', 'error', 3000, toastId);
+        }
+        setOpenDropdownIndex(null);
+    }, [documentId, loadProjectFiles]);
+
+    // Handle toggle visibility
+    const handleToggleVisibility = useCallback(async (fileId, fileName, currentVisibility) => {
+        const newVisibility = !currentVisibility;
+        const toastId = showToast('Updating...', 'info', 999999);
+        try {
+            const response = await apiFetch(`/api/documents/${documentId}/files/${fileId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ visible: newVisibility })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    showToast(newVisibility ? 'File shown' : 'File hidden', 'success', 3000, toastId);
+                    await loadProjectFiles();
+                } else {
+                    showToast('Update failed', 'error', 3000, toastId);
+                }
+            } else {
+                showToast('Update failed', 'error', 3000, toastId);
+            }
+        } catch (error) {
+            console.error('Error updating visibility:', error);
+            showToast('Update failed', 'error', 3000, toastId);
+        }
+        setOpenDropdownIndex(null);
+    }, [documentId, loadProjectFiles]);
+
+    // Toggle dropdown menu
+    const toggleDropdown = useCallback((index, e) => {
+        e.stopPropagation();
+        setOpenDropdownIndex(openDropdownIndex === index ? null : index);
+    }, [openDropdownIndex]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => {
+            setOpenDropdownIndex(null);
+        };
+        
+        if (openDropdownIndex !== null) {
+            document.addEventListener('click', handleClickOutside);
+            return () => document.removeEventListener('click', handleClickOutside);
+        }
+    }, [openDropdownIndex]);
 
     // Set navigation state for project view
     useEffect(() => {
@@ -119,8 +200,12 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
     if (isLoading) {
         return (
             <div className="sheet-content flex-expanded scroll-x scroll-y thin-scroll">
-                <div className="flex flex-column flex-center" style={{ padding: '40px' }}>
-                    <p style={{ color: '#6b7280' }}>Loading project files...</p>
+                <div className="flex flex-column" style={{ padding: '20px' }}>
+                    <div className="grid-flexible gap-10">
+                        {[...Array(3)].map((_, index) => (
+                            <div key={index} className="shimmer" style={{ height: '180px', borderRadius: '8px' }}></div>
+                        ))}
+                    </div>
                 </div>
             </div>
         );
@@ -177,13 +262,16 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                                 >
                                     <div className="flex flex-column wdth-100">
                                         {file.is_processing ? (
-                                            <div className='flex flex-column flex-row-center' style={{ height: '133px', justifyContent: 'center' }}>
-                                                <img src={IconLoader} alt="Processing" width="50"/>
+                                            <div style={{ padding: '12px' }}>
+                                                <div className="shimmer" style={{ height: '180px', borderRadius: '8px' }}></div>
                                             </div>
                                         ) : (
                                             // <img src={IconFile} alt="File" width="50" className='mrgnt-5 mrgnb-20' />
                                             // <div className='flex flex-row flex-row-center flex-horizontal-center wdth-100'>
-                                            <div className='markdown-html-container'>
+                                            <div className='markdown-html-container' style={{
+                                                opacity: file.use ? 1 : 0.2,
+                                                transition: 'opacity 0.3s'
+                                            }}>
                                                 <div style={{
                                                     border: '1px solid #dedcd126',
                                                     fontSize: '10px',
@@ -202,10 +290,68 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                                         )}
                                         <div className='flex flex-column gap-5 padl-15 padr-15 padb-10'>
                                             <div className='flex flex-row-center flex-space-between'>
-                                                <p className='text--micro'>{file.name}</p>
+                                                <p className='text--micro'>{file.name} {file.use ? '' : '(AI cannot use)'}</p>
                                                 <p className='text--nano opacity-5'>{formatFileSize(file.size)} • {getFileType(file.name)}</p>
                                             </div>
-                                            <p className='text--micro opacity-5'>{getTimeAgo(new Date(file.uploaded_at))}</p>
+                                            <div className='flex flex-row-center flex-space-between'>
+                                                <p className='text--micro opacity-5'>{getTimeAgo(new Date(file.uploaded_at))}</p>
+                                                <div style={{ position: 'relative' }}>
+                                                    <img 
+                                                        src={IconMore} 
+                                                        alt="More Options" 
+                                                        height="22" 
+                                                        style={{ cursor: 'pointer' }}
+                                                        onClick={(e) => toggleDropdown(index, e)}
+                                                    />
+                                                    {openDropdownIndex === index && (
+                                                        <div 
+                                                            className="dropdown-menu"
+                                                            style={{
+                                                                position: 'absolute',
+                                                                right: '0',
+                                                                top: '100%',
+                                                                marginTop: '4px',
+                                                                backgroundColor: '#222',
+                                                                border: '1px solid #3b3b3b',
+                                                                borderRadius: '4px',
+                                                                boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                                                                zIndex: 1000,
+                                                                minWidth: '150px'
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <div 
+                                                                className="dropdown-item"
+                                                                style={{
+                                                                    padding: '8px 12px',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '12px',
+                                                                    borderBottom: '1px solid #3b3b3b'
+                                                                }}
+                                                                onClick={() => handleToggleVisibility(file.id, file.name, file.use)}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                {file.use ? 'Make Invisible' : 'Make Visible'}
+                                                            </div>
+                                                            <div 
+                                                                className="dropdown-item"
+                                                                style={{
+                                                                    padding: '8px 12px',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '12px',
+                                                                    color: '#ff6b6b'
+                                                                }}
+                                                                onClick={() => handleDeleteFile(file.id, file.name)}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                Delete
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

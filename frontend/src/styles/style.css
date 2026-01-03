@@ -294,7 +294,7 @@ aside {
 }
 
 .sheet-footer-tab.active {
-    padding: 0px 16px;
+    padding: 0px 10px 0px 16px;
     position: relative;
     top: -1px;
     margin: -1px 0px 0 0px;
@@ -304,10 +304,6 @@ aside {
     border-right: 2px solid #3a3a3a;
     border-bottom: 0px solid #3a3a3a;
     border-radius:  0 0 0px 0px;
-}
-
-.sheet-footer-tab:hover {
-    /* background-color: #3a3a3a; */
 }
 
 /* SHEET END */

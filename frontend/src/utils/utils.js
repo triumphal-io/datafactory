@@ -52,26 +52,36 @@ export const convertMarkdownToHtml = (text) => {
  * @param {string} message - The message to display
  * @param {string} type - The type of toast ('success', 'error', 'info', 'warning')
  * @param {number} duration - Duration in milliseconds (default: 3000)
+ * @param {string|number} toastId - Optional toast ID to update an existing toast
+ * @returns {string|number} The toast ID
  */
-export const showToast = (message, type = 'info', duration = 3000) => {
+export const showToast = (message, type = 'info', duration = 3000, toastId = null) => {
     const options = {
         autoClose: duration,
     };
 
+    // If toastId is provided, update the existing toast
+    if (toastId) {
+        toast.update(toastId, {
+            render: message,
+            type: type,
+            autoClose: duration,
+            isLoading: false,
+        });
+        return toastId;
+    }
+
+    // Otherwise create a new toast and return its ID
     switch (type) {
         case 'success':
-            toast.success(message, options);
-            break;
+            return toast.success(message, options);
         case 'error':
-            toast.error(message, options);
-            break;
+            return toast.error(message, options);
         case 'warning':
-            toast.warning(message, options);
-            break;
+            return toast.warning(message, options);
         case 'info':
         default:
-            toast.info(message, options);
-            break;
+            return toast.info(message, options);
     }
 };
 
