@@ -1101,7 +1101,7 @@ table tr td {
 }
 
 .shimmer {
-    border-radius: 10px;
+    /* border-radius: 10px; */
     background: linear-gradient(90deg, #222 0%, #333333 50%, #222 100%);
     background-size: 200% 100%;
     animation: shimmer_effect 1.5s infinite ease-in-out;

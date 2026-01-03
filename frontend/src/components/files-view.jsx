@@ -203,7 +203,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 <div className="flex flex-column" style={{ padding: '20px' }}>
                     <div className="grid-flexible gap-10">
                         {[...Array(3)].map((_, index) => (
-                            <div key={index} className="shimmer" style={{ height: '180px', borderRadius: '8px' }}></div>
+                            <div key={index} className="shimmer" style={{ height: '180px' }}></div>
                         ))}
                     </div>
                 </div>
@@ -263,7 +263,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                                     <div className="flex flex-column wdth-100">
                                         {file.is_processing ? (
                                             <div style={{ padding: '12px' }}>
-                                                <div className="shimmer" style={{ height: '180px', borderRadius: '8px' }}></div>
+                                                <div className="shimmer" style={{ height: '180px' }}></div>
                                             </div>
                                         ) : (
                                             // <img src={IconFile} alt="File" width="50" className='mrgnt-5 mrgnb-20' />

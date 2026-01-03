@@ -71,7 +71,7 @@ export default function Drawer({ isOpen, onClose }) {
 
     return (
         <div className='flex flex-column' style={{
-            width: isOpen ? '290px' : '0',
+            width: isOpen ? '260px' : '0',
             height: '100vh',
             background: '#222',
             transition: 'width 0.3s ease',

@@ -1675,7 +1675,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                         borderRight: 'none'
                                     }}
                                 >
-                                    <div className="shimmer" style={{ height: '40px', borderRadius: '6px' }}></div>
+                                    <div className="shimmer" style={{ height: '40px' }}></div>
                                 </div>
                             ))}
                         </div>
@@ -1695,7 +1695,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                             borderRight: 'none'
                                         }}
                                     >
-                                        <div className="shimmer" style={{ height: '40px', borderRadius: '6px' }}></div>
+                                        <div className="shimmer" style={{ height: '40px' }}></div>
                                     </div>
                                 ))}
                             </div>
