@@ -1969,13 +1969,13 @@ input:checked + .slider:before {
 
 .form--input {
     width: 100%;
-    padding: 9px 16px;
+    padding: 8px 10px;
     /* border-radius: 5px; */
     font-family: 'Inter', sans-serif;
     font-weight: normal;
     font-size: 12px;
     border: 4px SOLID #eae7e1;
-    background: transparent;
+    background: #EAE7E1;
 }
 
 .form--input-error {

@@ -330,9 +330,33 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             columns = sheet_data.get('columns', [])
             rows = sheet_data.get('rows', [])
             
-            # Build column information summary
-            column_titles = [c.get('title', '') for c in columns]
-            context_message += f"- Columns ({len(columns)}): {', '.join(column_titles)}\n"
+            # Build column information summary with type and format constraints
+            column_info = []
+            for c in columns:
+                col_title = c.get('title', '')
+                col_type = c.get('type', 'text')
+                col_format = c.get('format', '')
+                col_options = c.get('options', [])
+                
+                col_desc = f"{col_title} (Type: {col_type}"
+                if col_format:
+                    col_desc += f", Format: {col_format}"
+                if col_type in ['select', 'multiselect'] and col_options:
+                    col_desc += f", Options: {', '.join(col_options)}"
+                col_desc += ")"
+                column_info.append(col_desc)
+            
+            context_message += f"- Columns ({len(columns)}): {' | '.join(column_info)}\n"
+            
+            # Add important constraint for AI when populating cells
+            context_message += "\nIMPORTANT CONSTRAINTS when populating cells:\n"
+            context_message += "- For 'number' type columns: Provide ONLY numeric values (no text, no units)\n"
+            context_message += "- For 'select' type columns: Choose EXACTLY ONE value from the specified options\n"
+            context_message += "- For 'multiselect' type columns: Choose one or more values from the specified options, separated by commas\n"
+            context_message += "- For 'checkbox' type columns: Use ONLY 'true' or 'false'\n"
+            context_message += "- For 'email' type columns: Provide valid email addresses only\n"
+            context_message += "- For 'url' type columns: Provide valid URLs only (starting with http:// or https://)\n"
+            context_message += "- Respect the format specification if provided\n\n"
             
             # Filter and prepare row data for context
             # Limit rows to prevent token overflow in the AI prompt
@@ -354,10 +378,10 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 for idx, (i, row) in enumerate(non_empty_rows[:max_rows_to_show]):
                     row_values = []
                     for j, cell_value in enumerate(row):
-                        if j < len(column_titles):
+                        if j < len(columns):
                             # Only include cells with actual values (skip empty/null cells)
                             if cell_value not in [None, '', ' '] and str(cell_value).strip() != '':
-                                row_values.append(f"{column_titles[j]}: {cell_value}")
+                                row_values.append(f"{columns[j].get('title', '')}: {cell_value}")
                     if row_values:  # Only add row if it has displayable values
                         context_message += f"  Row {i+1}: {', '.join(row_values)}\n"
                 
@@ -631,6 +655,9 @@ def enrichment(data, document_id=None):
             - 'title' (str): Column title/name
             - 'description' (str): Column description or prompt
             - 'value' (str): Current cell value (usually empty)
+            - 'type' (str, optional): Data type (text, number, select, multiselect, etc.)
+            - 'format' (str, optional): Format specification
+            - 'options' (list, optional): Available options for select/multiselect types
         document_id (str, optional): Document UUID for file access
     
     Returns:
@@ -642,11 +669,43 @@ def enrichment(data, document_id=None):
             'position': {'Row': '0', 'Column': '1'}, 
             'title': 'Product Category', 
             'description': 'Category of the Product', 
-            'value': ''
+            'value': '',
+            'type': 'select',
+            'options': ['Software', 'Hardware', 'Services']
         }
     """
     # Build enrichment prompt with context
-    prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}. Provide a concise and very short answer. Max 5 words."
+    prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}."
+    
+    # Add data type and format constraints to the prompt
+    data_type = data.get('type', 'text')
+    data_format = data.get('format', '')
+    options = data.get('options', [])
+    
+    # Add type-specific instructions
+    if data_type == 'number':
+        prompt += " Provide ONLY a numeric value (no text, no units)."
+        if data_format:
+            prompt += f" Format: {data_format}."
+    elif data_type in ['select', 'multiselect']:
+        if options and len(options) > 0:
+            options_str = ', '.join(options)
+            if data_type == 'select':
+                prompt += f" You MUST choose EXACTLY ONE option from this list: [{options_str}]. Do not provide any other value."
+            else:  # multiselect
+                prompt += f" You MUST choose one or more options from this list: [{options_str}]. Separate multiple values with commas. Do not provide any values not in this list."
+        else:
+            prompt += f" Provide a concise {data_type} value."
+    elif data_type == 'checkbox':
+        prompt += " Respond with ONLY 'true' or 'false' (no other text)."
+    elif data_type == 'email':
+        prompt += " Provide ONLY a valid email address."
+    elif data_type == 'url':
+        prompt += " Provide ONLY a valid URL (starting with http:// or https://)."
+    else:  # text or other types
+        prompt += " Provide a concise and very short answer. Max 5 words."
+        if data_format:
+            prompt += f" Format: {data_format}."
     
     # Enable file access if document is available
     if document_id:

@@ -1,11 +1,48 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import IconStar from '../assets/logo-icon.svg';
 import IconDelete from '../assets/delete.svg';
+import IconDeleteBlack from '../assets/delete-black.svg';
 import IconAdd from '../assets/add-circle.svg';
+import IconAddBlack from '../assets/add-black.svg';
 import IconExport from '../assets/export.svg';
 import { apiFetch } from '../utils/api';
 import IconCheck from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
+import IconChevron from '../assets/chevron-left.svg';
+import IconChevronRight from '../assets/chevron-right-black.svg';
+import IconText from '../assets/text.svg';
+import IconNumber from '../assets/number.svg';
+import IconSelect from '../assets/select.svg';
+import IconMultiselect from '../assets/multiselect.svg';
+import IconMail from '../assets/mail.svg';
+import IconCheckbox from '../assets/checkbox.svg';
+import IconUrl from '../assets/url.svg';
+import IconFile from '../assets/file.svg';
+import CellRenderer from './cell-renderer.jsx';
+
+// Helper function to get icon based on column type
+const getColumnTypeIcon = (type) => {
+    switch (type) {
+        case 'text':
+            return IconText;
+        case 'number':
+            return IconNumber;
+        case 'checkbox':
+            return IconCheckbox;
+        case 'select':
+            return IconSelect;
+        case 'multiselect':
+            return IconMultiselect;
+        case 'url':
+            return IconUrl;
+        case 'email':
+            return IconMail;
+        case 'file':
+            return IconFile;
+        default:
+            return IconText;
+    }
+};
 
 // Inject CSS for enrichment status indicators and AI changes
 if (typeof document !== 'undefined' && !document.getElementById('enrichment-styles')) {
@@ -50,6 +87,11 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     const [editingColumn, setEditingColumn] = useState(null);
     const [columnTitle, setColumnTitle] = useState('');
     const [columnPrompt, setColumnPrompt] = useState('');
+    const [columnFormat, setColumnFormat] = useState('');
+    const [columnType, setColumnType] = useState('text');
+    const [showFormatSection, setShowFormatSection] = useState(false);
+    const [selectOptions, setSelectOptions] = useState([]);
+    const [newOptionValue, setNewOptionValue] = useState('');
     const [sheetData, setSheetData] = useState({
         columns: [],
         rows: []
@@ -334,7 +376,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 ...prev,
                 columns: prev.columns.map((col, idx) =>
                     idx === editingColumn
-                        ? { title: columnTitle, prompt: columnPrompt }
+                        ? { title: columnTitle, prompt: columnPrompt, format: columnFormat, type: columnType, options: selectOptions }
                         : col
                 )
             }));
@@ -342,7 +384,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             // Add new column
             setSheetData(prev => ({
                 ...prev,
-                columns: [...prev.columns, { title: columnTitle, prompt: columnPrompt }],
+                columns: [...prev.columns, { title: columnTitle, prompt: columnPrompt, format: columnFormat, type: columnType, options: selectOptions }],
                 rows: prev.rows.map(row => [...row, ''])
             }));
         }
@@ -350,8 +392,12 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         setShowPopup(false);
         setColumnTitle('');
         setColumnPrompt('');
+        setColumnFormat('');
+        setShowFormatSection(false);
+        setSelectOptions([]);
+        setNewOptionValue('');
         setEditingColumn(null);
-    }, [columnTitle, columnPrompt, editingColumn]);
+    }, [columnTitle, columnPrompt, columnFormat, columnType, selectOptions, editingColumn]);
 
     const handleDeleteColumns = useCallback(() => {
         const columnsToDelete = [
@@ -534,13 +580,27 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 }
             });
 
-            return {
+            // Build enrichment data object with type, format, and options
+            const enrichData = {
                 context: rowData,
                 position: { Row: rowIndex, Column: colIndex },
                 title: column.title,
                 description: column.prompt || `Generate data for ${column.title} column`,
-                value: value
+                value: value,
+                type: column.type || 'text'
             };
+
+            // Add format if available
+            if (column.format) {
+                enrichData.format = column.format;
+            }
+
+            // Add options only for select and multiselect types
+            if ((column.type === 'select' || column.type === 'multiselect') && column.options) {
+                enrichData.options = column.options;
+            }
+
+            return enrichData;
         });
 
         console.log('Formatted data for enrichment:', cellsToEnrich);
@@ -565,6 +625,11 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         setEditingColumn(null);
         setColumnTitle('');
         setColumnPrompt('');
+        setColumnFormat('');
+        setColumnType('text');
+        setShowFormatSection(false);
+        setSelectOptions([]);
+        setNewOptionValue('');
         setShowPopup(true);
     }, []);
 
@@ -572,6 +637,11 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         setEditingColumn(colIndex);
         setColumnTitle(sheetData.columns[colIndex].title);
         setColumnPrompt(sheetData.columns[colIndex].prompt || '');
+        setColumnFormat(sheetData.columns[colIndex].format || '');
+        setColumnType(sheetData.columns[colIndex].type || 'text');
+        setShowFormatSection(!!(sheetData.columns[colIndex].format || '').trim());
+        setSelectOptions(sheetData.columns[colIndex].options || []);
+        setNewOptionValue('');
         setShowPopup(true);
     }, [sheetData]);
 
@@ -1383,7 +1453,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 setSheetData(prev => {
                     const newColumns = columns.map(col => ({
                         title: col.title,
-                        prompt: col.prompt || ''
+                        prompt: col.prompt || '',
+                        type: col.type || 'text'
                     }));
                     
                     // Extend existing rows to accommodate new columns
@@ -1623,12 +1694,26 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                     onDoubleClick={(e) => handleHeaderDoubleClick(colIndex, e)}
                                 >
                                     <div className="flex flex-row-center gap-10 flex-space-between">
-                                        <p style={{
+                                        <div className="flex flex-row-center" style={{
                                             whiteSpace: 'nowrap',
                                             overflow: 'hidden',
-                                            textOverflow: 'ellipsis'
-                                        }}>{column.title}</p> 
-                                        <p className='opacity-5'>{getColumnLetter(colIndex)}</p>
+                                            flex: 1,
+                                            gap: 8,
+                                            minWidth: 0
+                                        }}>
+                                            <img 
+                                                src={getColumnTypeIcon(column.type)} 
+                                                alt={column.type || 'text'} 
+                                                height="14"
+                                                style={{ flexShrink: 0, opacity: 1 }}
+                                            />
+                                            <p style={{
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}>{column.title}</p>
+                                        </div>
+                                        <p className='opacity-5 text--micro' style={{ flexShrink: 0 }}>{getColumnLetter(colIndex)}</p>
                                     </div>
                                     <div
                                         className="column-resize-handle"
@@ -1658,45 +1743,65 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                         </svg>
                                     </label>
                                 </div>
-                                {row.map((cell, colIndex) => (
-                                    <div
-                                        key={`${rowIndex}-${colIndex}`}
-                                        className={`sheet-row-item ${
-                                            selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
-                                        } ${
-                                            pendingAiChanges.has(`${rowIndex}-${colIndex}`) ? 'ai-pending-change' : ''
-                                        }`}
-                                        style={{ width: `${columnWidths[colIndex] || 160}px` }}
-                                        data-row={rowIndex}
-                                        data-col={colIndex}
-                                        onMouseDown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
-                                        onMouseEnter={() => handleCellMouseEnter(rowIndex, colIndex)}
-                                        onMouseUp={handleCellMouseUp}
-                                        onClick={(e) => handleCellClick(rowIndex, colIndex, e)}
-                                        onDoubleClick={(e) => {
-                                            e.preventDefault();
-                                            
-                                            // Don't open editor if already editing
-                                            if (overlayEditor) return;
-                                            
-                                            const rect = e.currentTarget.getBoundingClientRect();
-                                            const cellValue = cell.startsWith('__STATUS__') ? '' : cell;
-                                            setOverlayEditor({
-                                                row: rowIndex,
-                                                col: colIndex,
-                                                value: cellValue,
-                                                rect: rect
-                                            });
-                                        }}
-                                    >
-                                        {cell.startsWith('__STATUS__') ? (
-                                            <div 
-                                                className="enrichment-status"
-                                                dangerouslySetInnerHTML={{ __html: cell.replace('__STATUS__', '') }}
-                                            />
-                                        ) : cell}
-                                    </div>
-                                ))}
+                                {row.map((cell, colIndex) => {
+                                    const column = sheetData.columns[colIndex];
+                                    const columnType = column?.type || 'text';
+                                    const shouldUseCustomRenderer = ['select', 'multiselect', 'url', 'email', 'checkbox'].includes(columnType);
+                                    const shouldBlockOverlayEditor = ['select', 'multiselect', 'checkbox'].includes(columnType);
+                                    
+                                    return (
+                                        <div
+                                            key={`${rowIndex}-${colIndex}`}
+                                            className={`sheet-row-item ${
+                                                selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
+                                            } ${
+                                                pendingAiChanges.has(`${rowIndex}-${colIndex}`) ? 'ai-pending-change' : ''
+                                            }`}
+                                            style={{ width: `${columnWidths[colIndex] || 160}px` }}
+                                            data-row={rowIndex}
+                                            data-col={colIndex}
+                                            onMouseDown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
+                                            onMouseEnter={() => handleCellMouseEnter(rowIndex, colIndex)}
+                                            onMouseUp={handleCellMouseUp}
+                                            onClick={(e) => handleCellClick(rowIndex, colIndex, e)}
+                                            onDoubleClick={(e) => {
+                                                e.preventDefault();
+                                                
+                                                // Don't open editor if already editing
+                                                if (overlayEditor) return;
+                                                
+                                                // For special types (select, multiselect), don't open overlay editor
+                                                if (shouldBlockOverlayEditor) return;
+                                                
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                const cellValue = cell.startsWith('__STATUS__') ? '' : cell;
+                                                setOverlayEditor({
+                                                    row: rowIndex,
+                                                    col: colIndex,
+                                                    value: cellValue,
+                                                    rect: rect
+                                                });
+                                            }}
+                                        >
+                                            {typeof cell === 'string' && cell.startsWith('__STATUS__') ? (
+                                                <div 
+                                                    className="enrichment-status"
+                                                    dangerouslySetInnerHTML={{ __html: cell.replace('__STATUS__', '') }}
+                                                />
+                                            ) : shouldUseCustomRenderer ? (
+                                                <CellRenderer
+                                                    value={cell}
+                                                    columnType={columnType}
+                                                    columnOptions={column?.options || []}
+                                                    isSelected={selectedCells.has(`${rowIndex}-${colIndex}`)}
+                                                    onEdit={(newValue) => handleCellEdit(rowIndex, colIndex, newValue)}
+                                                    rowIndex={rowIndex}
+                                                    colIndex={colIndex}
+                                                />
+                                            ) : cell}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         ))}
                     </div>
@@ -1773,7 +1878,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                    onClick={() => setShowPopup(false)}></i>
                             </div>
                             
-                            <p className="text--micro mrgnt-15">Column Title</p>
+                            <p className="text--micro text__semibold mrgnt-15">Column Title</p>
                             <input
                                 type="text"
                                 id="column-title"
@@ -1783,15 +1888,115 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                 onChange={(e) => setColumnTitle(e.target.value)}
                             />
                             
-                            <p className="text--micro mrgnt-15">Column Prompt (generated)</p>
+                            <p className="text--micro text__semibold mrgnt-15">Column Prompt (generated)</p>
                             <textarea
                                 id="column-prompt"
-                                className="form--input wdth-full mrgnt-7 text--black"
-                                placeholder="Datafactory will generate a prompt based on the column title"
+                                className="form--input wdth-full mrgnt-7 text--black text--micro"
+                                placeholder="Describe how the agent should fill this column, e.g. 'Extract the contact email from the company’s homepage'"
                                 value={columnPrompt}
                                 onChange={(e) => setColumnPrompt(e.target.value)}
                             />
-                            
+
+                            <div className='flex mrgnt-20 flex-row-center flex-space-between'>
+                                <p className="text--micro text__semibold">Data type</p>
+                                <select
+                                    id="column-type"
+                                    className="input-empty"
+                                    value={columnType}
+                                    onChange={(e) => setColumnType(e.target.value)}
+                                >
+                                    <option value="text">Text</option>
+                                    <option value="number">Number</option>
+                                    <option value="checkbox">Checkbox</option>
+                                    <option value="select">Select</option>
+                                    <option value="multiselect">Multi-Select</option>
+                                    <option value="url">URL</option>
+                                    <option value="email">Email</option>
+                                    <option value="file">Link to File</option>
+                                </select>
+                            </div>
+
+
+                            {(columnType === 'text' || columnType === 'number') && (
+                                <>
+                                    <div 
+                                        className='flex flex-row-center flex-space-between mrgnt-15 pointer'
+                                        onClick={() => setShowFormatSection(!showFormatSection)}
+                                    >
+                                        <p className='text--micro text__semibold'>Add Formatting Instruction</p>
+                                        <img 
+                                            src={IconChevronRight} 
+                                            alt="Chevron Icon" 
+                                            height="16" 
+                                            style={{ 
+                                                transform: showFormatSection ? 'rotate(90deg)' : 'rotate(0deg)',
+                                                transition: 'transform 0.2s ease'
+                                            }} 
+                                        />
+                                    </div>
+                                    
+                                    {showFormatSection && (
+                                        <textarea
+                                            id="column-format"
+                                            className="form--input wdth-full mrgnt-7 text--black text--micro"
+                                            placeholder="E.g., 'Ensure the twitter handle starts with @ and has no spaces'"
+                                            value={columnFormat}
+                                            onChange={(e) => setColumnFormat(e.target.value)}
+                                        />
+                                    )}
+                                </>
+                            )}
+
+                            {(columnType === 'select' || columnType === 'multiselect') && (
+                                <div className="mrgnt-15">
+                                    <p className="text--micro text__semibold mrgnb-7">Selection Options</p>
+                                    <div style={{
+                                        padding: '5px 8px'
+                                    }} className="flex flex-row-center gap-10 mrgnt-10 mrgnb-10 form--input wdth-full">
+                                        <input
+                                            type="text"
+                                            className="input-empty flex-expanded"
+                                            placeholder="Enter option value"
+                                            value={newOptionValue}
+                                            onChange={(e) => setNewOptionValue(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && newOptionValue.trim()) {
+                                                    e.preventDefault();
+                                                    setSelectOptions([...selectOptions, newOptionValue.trim()]);
+                                                    setNewOptionValue('');
+                                                }
+                                            }}
+                                        />
+                                        <img src={IconAddBlack} height="25" className="pointer" onClick={() => {
+                                            if (newOptionValue.trim()) {
+                                                setSelectOptions([...selectOptions, newOptionValue.trim()]);
+                                                    setNewOptionValue('');
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    {selectOptions.length > 0 && (
+                                        <div className="flex flex-column gap-10">
+                                            {selectOptions.map((option, index) => (
+                                                <div key={index} className="flex flex-row-center flex-space-between" 
+                                                    style={{ border: '4px solid #EAE7E1', padding: '6px 12px' }}>
+                                                    <p className="text--micro">{option}</p>
+                                                    <img
+                                                        src={IconDeleteBlack}
+                                                        alt="Delete"
+                                                        height="18"
+                                                        className="pointer"
+                                                        onClick={() => {
+                                                            setSelectOptions(selectOptions.filter((_, i) => i !== index));
+                                                        }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <button 
                                 onClick={handleAddColumn}
                                 className="button button-big wdth-full mrgnt-20"
