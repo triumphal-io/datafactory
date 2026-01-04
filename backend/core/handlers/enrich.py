@@ -41,6 +41,9 @@ class EnrichmentProcessor:
             print(f"Document {document_id} not found")
             return
         
+        # Clean up old completed jobs (older than 10 minutes)
+        self._cleanup_old_jobs(document)
+        
         jobs = []
         for cell_data in cells_data:
             job = BackgroundJob.objects.create(
@@ -207,7 +210,32 @@ class EnrichmentProcessor:
             )
         except Exception as e:
             print(f"Error sending WebSocket update: {str(e)}")
+    
+    def _cleanup_old_jobs(self, document):
+        """
+        Clean up completed/failed jobs older than 10 minutes
+        
+        Args:
+            document (Document): The document to clean up jobs for
+        """
+        from datetime import timedelta
+        
+        # Calculate cutoff time (10 minutes ago)
+        cutoff_time = timezone.now() - timedelta(minutes=10)
+        
+        # Delete completed or failed jobs older than 10 minutes
+        old_jobs = BackgroundJob.objects.filter(
+            document=document,
+            job_type='data_enrichment',
+            status__in=['completed', 'failed'],
+            completed_at__lt=cutoff_time
+        )
+        
+        deleted_count = old_jobs.count()
+        if deleted_count > 0:
+            old_jobs.delete()
+            print(f"Cleaned up {deleted_count} old enrichment jobs for document {document.uuid}")
 
 
 # Global instance
-enrichment_processor = EnrichmentProcessor(max_concurrent=4)
+enricher = EnrichmentProcessor(max_concurrent=4)

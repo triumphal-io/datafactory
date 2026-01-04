@@ -505,7 +505,7 @@ def api_enrich(request, action):
 @permission_classes([AllowAny])
 def api_bulk_enrich(request):
     """Bulk enrichment endpoint - accepts multiple cells and processes them with threading"""
-    from core.handlers.enrichment_processor import enrichment_processor
+    from core.handlers.enrich import enricher
     
     try:
         body = json.loads(request.body)
@@ -519,7 +519,7 @@ def api_bulk_enrich(request):
             return JsonResponse({'status': 'error', 'message': 'Document ID required'}, status=400)
         
         # Start background enrichment processing
-        enrichment_processor.start_bulk_enrichment(cells_data, document_id)
+        enricher.start_bulk_enrichment(cells_data, document_id)
         
         return JsonResponse({
             'status': 'success',
