@@ -21,7 +21,7 @@ class Sheet(models.Model):
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='sheets')
 
     name = models.CharField(max_length=255)
-    data = models.JSONField(default={"columns":[],"rows":[]})
+    data = models.JSONField(default=dict)
     created_at = models.DateTimeField('Created at', auto_now_add=True)
     last_modified = models.DateTimeField('Last modified', auto_now=True)
 

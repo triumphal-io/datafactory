@@ -89,6 +89,7 @@ aside {
 
 .message {
     margin-top: 12px;
+    overflow-wrap: anywhere;
 }
 
 .message-user {

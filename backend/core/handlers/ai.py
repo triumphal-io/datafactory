@@ -423,10 +423,12 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     while True:
         try:
             print("Generating AI response...")
+            print("Current conversation:")
+            print(conversation)
             # Call LiteLLM with full conversation history and available tools
             # Model decides whether to respond directly or call tools
             response = litellm.completion(
-                model="gpt-4o-mini",
+                model="gpt-5-nano",
                 messages=conversation,
                 tools=tools,
                 tool_choice="auto"  # Let model decide when to use tools
@@ -472,9 +474,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                     function_args = json.loads(tool_call.function.arguments)
                     
                     # Debug output for tool call tracking
-                    print(f"DEBUG: Tool call - {function_name}")
-                    print(f"DEBUG: Raw arguments: {tool_call.function.arguments}")
-                    print(f"DEBUG: Parsed arguments: {function_args}")
+                    print(f"DEBUG: Tool call - {function_name} Raw arguments: {tool_call.function.arguments} Parsed arguments: {function_args}")
                     
                     # Validate tool arguments before processing
                     # This prevents errors from malformed AI responses
@@ -549,8 +549,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 
                 # Execute backend tools (file reading, web scraping, etc.)
                 for tool_info in backend_tools:
-                    print(f"Executing backend tool: {tool_info['name']}")
-                    print(f"Arguments: {tool_info['arguments']}")
+                    print(f"Executing backend tool: {tool_info['name']} with arguments: {tool_info['arguments']}")
                     
                     try:
                         # Inject document_id for file tools that need context
@@ -684,28 +683,31 @@ def enrichment(data, document_id=None):
     
     # Add type-specific instructions
     if data_type == 'number':
-        prompt += " Provide ONLY a numeric value (no text, no units)."
+        prompt += " Provide ONLY a numeric value (no text, no units, no explanation)."
         if data_format:
             prompt += f" Format: {data_format}."
     elif data_type in ['select', 'multiselect']:
         if options and len(options) > 0:
             options_str = ', '.join(options)
             if data_type == 'select':
-                prompt += f" You MUST choose EXACTLY ONE option from this list: [{options_str}]. Do not provide any other value."
+                prompt += f" You MUST choose EXACTLY ONE option from this list: [{options_str}]. Respond with ONLY the option value, no explanation, no additional text."
             else:  # multiselect
-                prompt += f" You MUST choose one or more options from this list: [{options_str}]. Separate multiple values with commas. Do not provide any values not in this list."
+                prompt += f" You MUST choose one or more options from this list: [{options_str}]. Separate multiple values with commas. Respond with ONLY the option values, no explanation, no additional text."
         else:
-            prompt += f" Provide a concise {data_type} value."
+            prompt += f" Provide ONLY the {data_type} value, no explanation."
     elif data_type == 'checkbox':
-        prompt += " Respond with ONLY 'true' or 'false' (no other text)."
+        prompt += " Respond with ONLY 'true' or 'false' (no other text, no explanation)."
     elif data_type == 'email':
-        prompt += " Provide ONLY a valid email address."
+        prompt += " Provide ONLY a valid email address (no explanation)."
     elif data_type == 'url':
-        prompt += " Provide ONLY a valid URL (starting with http:// or https://)."
+        prompt += " Provide ONLY a valid URL (starting with http:// or https://, no explanation)."
     else:  # text or other types
-        prompt += " Provide a concise and very short answer. Max 5 words."
+        prompt += " Provide ONLY a concise and very short answer. Max 5 words. No explanation or additional text."
         if data_format:
             prompt += f" Format: {data_format}."
+    
+    # Critical instruction to ensure only the value is returned
+    prompt += "\n\nIMPORTANT: Your response must contain ONLY the value itself. Do not include any explanations, sentences, or additional context. Just the bare value."
     
     # Enable file access if document is available
     if document_id:
@@ -714,6 +716,33 @@ def enrichment(data, document_id=None):
     # Use AI assistant to generate enrichment value
     result = assistant(prompt, document_id=document_id)
     print(f"Enrichment result: {result}")
+    
+    # Post-process result to extract just the value if AI still includes explanation
+    # This is a safety net in case the AI doesn't follow instructions perfectly
+    if result and isinstance(result, str):
+        # Remove common prefixes and clean up the response
+        result = result.strip()
+        
+        # For select/multiselect types, try to extract the option from quotes or end of sentence
+        if data_type in ['select', 'multiselect'] and options:
+            # Check if any option appears in the result
+            for option in options:
+                if option.lower() in result.lower():
+                    # Return the exact option (preserving case)
+                    return option
+        
+        # Try to extract value from common patterns like "The answer is X" or "X is the answer"
+        # Look for quoted values
+        import re
+        quoted_match = re.search(r'"([^"]+)"', result)
+        if quoted_match:
+            return quoted_match.group(1)
+        
+        # Look for patterns like "is X" at the end
+        is_match = re.search(r'is\s+"?([^."]+)"?\.?$', result, re.IGNORECASE)
+        if is_match:
+            return is_match.group(1).strip()
+    
     return result
 
 

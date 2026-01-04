@@ -233,8 +233,8 @@ def api_files(request, did, action):
         files = File.objects.filter(document__uuid=did)
         response['files'] = []
         for file in files:
-            # if file.is_processing:
-                # start_background_processing()
+            if file.is_processing:
+                start_background_processing()
             response['files'].append({
                 'id': str(file.uuid),
                 'name': file.filename,

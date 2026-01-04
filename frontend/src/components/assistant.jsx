@@ -6,6 +6,7 @@ import IconSend from '../assets/arrow-up.svg';
 import LogoIcon from '../assets/logo-icon.svg';
 import IconTick from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
+import IconFile from '../assets/sheet.svg';
 import Loader from '../assets/loader-mini.gif';
 
 const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles }, ref) => {
@@ -459,44 +460,47 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             </div>
             <div className="assistant-footer">
                 <div className="assistant-input-pad">
-                    {selectedCells && selectedCells.size > 0 && (
-                        <p style={{
-                            border: '1px solid #aaa',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            width: 'fit-content',
-                        }} className='mrgnb-10 text--nano opacity-5' key={selectedCells.size}>{formatCellSelection()}</p>
-                    )}
-                    
-                    {/* Attachments Display */}
-                    {attachments.length > 0 && (
+                    {/* Combined Selection and Attachments Display */}
+                    {(selectedCells.size > 0 || attachments.length > 0) && (
                         <div style={{
                             display: 'flex',
-                            flexDirection: 'column',
-                            // flexWrap: 'wrap',
-                            gap: '8px',
+                            flexWrap: 'wrap',
+                            gap: '6px',
                             marginBottom: '10px'
                         }}>
+                            {selectedCells && selectedCells.size > 0 && (
+                                <div style={{
+                                    border: '1px solid #aaa',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    width: 'fit-content',
+                                }} className='text--nano opacity-5' key={selectedCells.size}>
+                                    {formatCellSelection()}
+                                </div>
+                            )}
+                            
                             {attachments.map((file, index) => (
                                 <div key={index} style={{
-                                    // border: '1px solid #aaa',
-                                    borderRadius: '6px',
-                                    // padding: '8px',
+                                    border: '1px solid #aaaaaa70',
+                                    borderRadius: '4px',
+                                    padding: '1px 6px',
                                     display: 'flex',
-                                    flexDirection: 'row',
-                                    width: 'auto',
-                                    gap: '8px',
-                                    // backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    width: 'fit-content',
                                 }}>
-                                    <p className='flex-expanded text--nano' style={{
-                                        lineBreak: 'anywhere',
-                                        textOverflow: 'ellipsis'}}>{file.name}</p>
-                                    <p className='text--nano opacity-3'>{getFileTypeLabel(file)}</p>
+                                    <img src={IconFile} alt="File Icon" height="10" style={{ flexShrink: 0 }} />
+                                    <p className='text--nano opacity-5' style={{
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        maxWidth: '200px'
+                                    }}>{file.name}</p>
                                     <img 
                                         src={IconDismiss} 
                                         alt="Remove" 
-                                        height="12" 
-                                        style={{ cursor: 'pointer', opacity: 0.7 }}
+                                        height="10" 
+                                        style={{ cursor: 'pointer', opacity: 0.5, flexShrink: 0 }}
                                         onClick={() => removeAttachment(index)}
                                     />
                                 </div>

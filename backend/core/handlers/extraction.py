@@ -69,6 +69,8 @@ class FileExtractor:
                 # Header row
                 if len(rows) > 0:
                     header = rows[0]
+                    # Replace newlines with HTML line breaks to prevent table breaking
+                    header = [cell.replace('\r\n', '<br>').replace('\n', '<br>').replace('\r', '<br>') for cell in header]
                     markdown_lines.append('| ' + ' | '.join(header) + ' |')
                     markdown_lines.append('| ' + ' | '.join(['---'] * len(header)) + ' |')
                 
@@ -80,6 +82,8 @@ class FileExtractor:
                     # Truncate if it has more columns
                     elif len(row) > len(header):
                         row = row[:len(header)]
+                    # Replace newlines with HTML line breaks to prevent table breaking
+                    row = [cell.replace('\r\n', '<br>').replace('\n', '<br>').replace('\r', '<br>') for cell in row]
                     markdown_lines.append('| ' + ' | '.join(row) + ' |')
                 
                 return '\n'.join(markdown_lines)
@@ -110,8 +114,8 @@ class FileExtractor:
                 # Get all rows with data
                 rows = []
                 for row in sheet.iter_rows(values_only=True):
-                    # Convert all cells to strings, handling None values
-                    row_data = [str(cell) if cell is not None else '' for cell in row]
+                    # Convert all cells to strings, handling None values and newlines
+                    row_data = [str(cell).replace('\r\n', '<br>').replace('\n', '<br>').replace('\r', '<br>') if cell is not None else '' for cell in row]
                     # Skip completely empty rows
                     if any(cell for cell in row_data):
                         rows.append(row_data)
@@ -135,14 +139,14 @@ class FileExtractor:
                     # First row as header
                     header = rows[0]
                     # Escape pipe characters in cells
-                    header = [str(cell).replace('|', '\\|') for cell in header]
+                    header = [cell.replace('|', '\\|') for cell in header]
                     markdown_lines.append('| ' + ' | '.join(header) + ' |')
                     markdown_lines.append('| ' + ' | '.join(['---'] * len(header)) + ' |')
                     
                     # Data rows
                     for row in rows[1:]:
                         # Escape pipe characters in cells
-                        row = [str(cell).replace('|', '\\|') for cell in row]
+                        row = [cell.replace('|', '\\|') for cell in row]
                         markdown_lines.append('| ' + ' | '.join(row) + ' |')
                 
                 markdown_sections.append('\n'.join(markdown_lines))
