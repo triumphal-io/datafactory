@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { apiFetch } from '../utils/api.js';
 import { convertMarkdownToHtml } from '../utils/utils.js';
+import { useWebSocket } from '../utils/websocket-context.jsx';
 import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
 import LogoIcon from '../assets/logo-icon.svg';
@@ -10,6 +11,7 @@ import IconFile from '../assets/sheet.svg';
 import Loader from '../assets/loader-mini.gif';
 
 const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles }, ref) => {
+    const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [conversationId, setConversationId] = useState(null);
@@ -448,7 +450,24 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         <div className="assistant">
             <div className="assistant-head">
                 <div className="flex flex-row-center gap-10">
-                    <img src={LogoIcon} alt="Assistant Logo" height="14" />
+                    <img 
+                        src={LogoIcon} 
+                        alt="Assistant Logo" 
+                        height="14" 
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => {
+                            const testMessage = {
+                                type: 'test_message',
+                                content: 'Hello from Assistant Logo!',
+                                timestamp: new Date().toISOString(),
+                                clientId: Date.now()
+                            };
+                            console.log('Sending test message via WebSocket:', testMessage);
+                            if (sendWebSocketMessage) {
+                                sendWebSocketMessage(testMessage);
+                            }
+                        }}
+                    />
                     <h2>Assistant</h2>
                 </div>
             </div>

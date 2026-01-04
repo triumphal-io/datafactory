@@ -1,6 +1,7 @@
 import { Route, Routes, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { TokenContext } from "./utils/token-context.jsx";
+import { WebSocketProvider } from "./utils/websocket-context.jsx";
 import { ToastContainer } from "react-toastify";
 import DocumentPage from "./pages/document.jsx";
 import SettingsPage from "./pages/settings.jsx";
@@ -70,8 +71,8 @@ export default function App() {
       />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/document/:documentId/sheet/:sheetId" element={<DocumentPage />} />
-        <Route path="/document/:documentId/files" element={<DocumentPage />} />
+        <Route path="/document/:documentId/sheet/:sheetId" element={<WebSocketProvider><DocumentPage /></WebSocketProvider>} />
+        <Route path="/document/:documentId/files" element={<WebSocketProvider><DocumentPage /></WebSocketProvider>} />
         <Route path="/settings" element={<SettingsPage />} />
         {/*<Route path="/connectors" element={<Connectors />} />
         <Route path="/connectors/:connectorId" element={<ConnectorDetail />} />

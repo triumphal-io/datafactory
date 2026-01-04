@@ -39,6 +39,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
     'core',
     'rest_framework',
     'rest_framework.authtoken',
+    'channels'
 ]
 
 if STAGE != 'local':
@@ -96,8 +98,14 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'datafactory.wsgi.application'
+ASGI_APPLICATION = 'datafactory.asgi.application'
 
+# In-memory channel layer (no Redis needed)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+    }
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

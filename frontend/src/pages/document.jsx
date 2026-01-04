@@ -3,11 +3,13 @@ import Resizer from '../components/resizer.jsx';
 import Assistant from '../components/assistant.jsx';
 import DocumentView from '../components/document-view.jsx';
 import { useParams } from 'react-router-dom';
+import { useWebSocket } from '../utils/websocket-context.jsx';
 
 export default function DocumentPage() {
     const { sheetId, documentId } = useParams();
     const documentViewRef = useRef(null);
     const assistantRef = useRef(null);
+    const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [sheetName, setSheetName] = useState('');
     const [droppedFiles, setDroppedFiles] = useState(null);
