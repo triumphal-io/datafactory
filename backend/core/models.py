@@ -64,3 +64,34 @@ class Conversation(models.Model):
 
     class Meta:
         verbose_name_plural = "Conversations"
+
+
+class BackgroundJob(models.Model):
+    JOB_TYPES = [
+        ('file_processing', 'File Processing'),
+        ('data_enrichment', 'Data Enrichment'),
+    ]
+
+    STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('generating', 'Generating'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='background_jobs')
+    job_type = models.CharField(max_length=50, choices=JOB_TYPES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='queued')
+    created_at = models.DateTimeField('Created at', auto_now_add=True)
+    started_at = models.DateTimeField('Started at', null=True, blank=True)
+    completed_at = models.DateTimeField('Completed at', null=True, blank=True)
+    cell_data = models.JSONField(default=dict)  # Cell data for enrichment jobs
+    result = models.TextField(blank=True, null=True)  # Enrichment result
+    error_message = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.get_job_type_display()} - {self.get_status_display()}"
+
+    class Meta:
+        verbose_name_plural = "Background Jobs"

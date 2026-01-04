@@ -22,11 +22,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
     const loadProjectFiles = useCallback(async () => {
         try {
             setIsLoading(true);
-            const formData = new FormData();
-            const response = await apiFetch(`/api/documents/${documentId}/files/list`, {
-                method: 'POST',
-                body: formData
-            });
+            const response = await apiFetch(`/api/documents/${documentId}/files/list`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.status === 'success') {

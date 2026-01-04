@@ -35,3 +35,15 @@ class DocumentConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'message': message
         }))
+    
+    async def enrichment_update(self, event):
+        """Handle enrichment status updates"""
+        message_type = event.get('message_type')
+        data = event.get('data')
+        print(f"WebSocket enrichment update: {message_type}, data: {data}")
+              
+              
+        await self.send(text_data=json.dumps({
+              'type': message_type,   
+              'data': data 
+        }))

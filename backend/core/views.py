@@ -12,11 +12,11 @@ from rest_framework.response import Response
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.core.files.base import ContentFile
-
-from core.models import Document, Sheet, File, Conversation
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from core.handlers import ai
 from core.handlers.extraction import start_background_processing
+from core.models import Document, Sheet, File, Conversation
 
 
 @api_view(['GET', 'POST', 'PATCH'])
@@ -489,6 +489,7 @@ def api_assistant(request, did, action):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_enrich(request, action):
+    """Legacy single cell enrichment endpoint - kept for backwards compatibility"""
     response = {'status': 'error'}
     body = json.loads(request.body)
     data = body.get('data', {})
@@ -497,6 +498,39 @@ def api_enrich(request, action):
     response['result'] = ai.enrichment(data, document_id=document_id)
     response['status'] = 'success'
     return JsonResponse(response)
+
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def api_bulk_enrich(request):
+    """Bulk enrichment endpoint - accepts multiple cells and processes them with threading"""
+    from core.handlers.enrichment_processor import enrichment_processor
+    
+    try:
+        body = json.loads(request.body)
+        cells_data = body.get('cells', [])
+        document_id = body.get('documentId', None)
+        
+        if not cells_data:
+            return JsonResponse({'status': 'error', 'message': 'No cells provided'}, status=400)
+        
+        if not document_id:
+            return JsonResponse({'status': 'error', 'message': 'Document ID required'}, status=400)
+        
+        # Start background enrichment processing
+        enrichment_processor.start_bulk_enrichment(cells_data, document_id)
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'{len(cells_data)} cells queued for enrichment'
+        })
+        
+    except Exception as e:
+        print(f"Error in bulk enrichment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
 
@@ -640,3 +674,28 @@ def api_sheets(request, did, sheet_id):
     
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)
     
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def api_test(request, action):
+    """A simple test API endpoint for admin actions"""
+    response = {'status': 'error'}
+    if action == "ping":
+        response['status'] = 'success'
+        response['message'] = 'pong'
+        
+        channel_layer = get_channel_layer()
+        group_id = f"g-6e87f113-82e4-4799-80af-114ba26ab8b7"
+        
+        async_to_sync(channel_layer.group_send)(
+            group_id,
+            {
+                'type': 'new_message',
+                'message': "pinggginggg"
+            }
+        )
+        
+               
+    else:
+        response['message'] = 'Unknown action'
+    return JsonResponse(response)

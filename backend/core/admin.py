@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Document, Sheet, File, Conversation
+from .models import Document, Sheet, File, Conversation, BackgroundJob
 
 
 @admin.register(Document)
@@ -36,3 +36,11 @@ class ConversationAdmin(admin.ModelAdmin):
     search_fields = ('title', 'uuid', 'document__name')
     readonly_fields = ('uuid', 'started_at', 'last_interaction')
     date_hierarchy = 'started_at'
+
+@admin.register(BackgroundJob)
+class BackgroundJobAdmin(admin.ModelAdmin):
+    list_display = ('job_type', 'status', 'document', 'uuid', 'created_at')
+    # list_filter = ('job_type', 'status', 'created_at', 'last_updated')
+    search_fields = ('uuid', 'document__name', 'cell_data')
+    readonly_fields = ('uuid', 'created_at')
+    date_hierarchy = 'created_at'

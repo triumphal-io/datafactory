@@ -6,6 +6,7 @@ import IconAdd from '../assets/add-circle.svg';
 import IconAddBlack from '../assets/add-black.svg';
 import IconExport from '../assets/export.svg';
 import { apiFetch } from '../utils/api';
+import { useWebSocket } from '../utils/websocket-context';
 import IconCheck from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
 import IconChevron from '../assets/chevron-left.svg';
@@ -73,6 +74,9 @@ const getColumnLetter = (index) => {
 };
 
 const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange }, ref) => {
+    // WebSocket connection
+    const { isConnected } = useWebSocket();
+    
     // State management
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [selectedRows, setSelectedRows] = useState(new Set());
@@ -507,50 +511,37 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         }
     }, []);
 
-    const processEnrichmentQueue = useCallback(async (cellsToEnrich, currentIndex) => {
-        if (currentIndex >= cellsToEnrich.length) {
-            console.log('All cells enriched successfully');
-            return;
-        }
-
-        const cellData = cellsToEnrich[currentIndex];
-        const { position } = cellData;
+    // WebSocket listener for enrichment updates
+    useEffect(() => {
+        const handleWebSocketMessage = (event) => {
+            const { type, data } = event.detail;
+            
+            if (type === 'enrichment_status') {
+                // Cell status update (queued or generating)
+                const { row, column, status } = data;
+                setCellStatus(row, column, status);
+                console.log(`Cell [${row}, ${column}] status: ${status}`);
+            } else if (type === 'enrichment_complete') {
+                // Cell enrichment completed with value
+                const { row, column, value } = data;
+                handleCellEdit(row, column, value);
+                console.log(`Cell [${row}, ${column}] enriched with: ${value}`);
+            } else if (type === 'enrichment_error') {
+                // Cell enrichment failed
+                const { row, column, error } = data;
+                setCellStatus(row, column, 'error');
+                console.error(`Cell [${row}, ${column}] enrichment error: ${error}`);
+            }
+        };
         
-        try {
-            setCellStatus(position.Row, position.Column, 'generating');
-            
-            // Simulate API call with 2 second delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            console.log('Sending cell data to API:', cellData);
-            
-            const response = await apiFetch('/api/enrich/do', {
-                method: 'POST',
-                body: {
-                    action: 'enrich',
-                    data: cellData,
-                    documentId: documentId
-                }
-            });
-            
-            const result = await response.json();
-            const enrichedValue = result.status === 'success' ? result.result : cellData.value;
-            
-            // const enrichedValue = generateMockEnrichedValue(cellData);
-            handleCellEdit(position.Row, position.Column, enrichedValue);
-            
-            console.log(`Enriched cell at row ${position.Row}, col ${position.Column}: "${enrichedValue}"`);
-        } catch (error) {
-            console.error('Error enriching cell:', error);
-            setCellStatus(position.Row, position.Column, 'error');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            handleCellEdit(position.Row, position.Column, cellData.value);
-        }
+        window.addEventListener('websocket-message', handleWebSocketMessage);
         
-        processEnrichmentQueue(cellsToEnrich, currentIndex + 1);
-    }, [setCellStatus, generateMockEnrichedValue, handleCellEdit]);
+        return () => {
+            window.removeEventListener('websocket-message', handleWebSocketMessage);
+        };
+    }, [setCellStatus, handleCellEdit]);
 
-    // Enrichment
+    // Enrichment - send all cells in bulk to backend
     const handleEnrichCells = useCallback(async () => {
         if (selectedCells.size === 0) {
             alert('No cells selected for enrichment');
@@ -608,7 +599,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
 
         if (cellsToEnrich.length === 0) return;
 
-        // Set all selected cells to "Queued" status immediately
+        // Set all selected cells to "Queued" status immediately (optimistic UI update)
         cellsToEnrich.forEach(cellData => {
             setCellStatus(cellData.position.Row, cellData.position.Column, 'queued');
         });
@@ -616,9 +607,38 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         // Clear the selection after setting queued status
         clearSelection();
 
-        // Start processing cells sequentially
-        processEnrichmentQueue(cellsToEnrich, 0);
-    }, [selectedCells, sheetData, setCellStatus, clearSelection, processEnrichmentQueue]);
+        // Send bulk enrichment request to backend
+        try {
+            const response = await apiFetch('/api/enrich-bulk', {
+                method: 'POST',
+                body: {
+                    cells: cellsToEnrich,
+                    documentId: documentId
+                }
+            });
+            
+            const result = await response.json();
+            if (result.status === 'success') {
+                console.log(result.message);
+            } else {
+                console.error('Bulk enrichment failed:', result.message);
+                alert('Enrichment failed: ' + result.message);
+                
+                // Reset status on error
+                cellsToEnrich.forEach(cellData => {
+                    setCellStatus(cellData.position.Row, cellData.position.Column, null);
+                });
+            }
+        } catch (error) {
+            console.error('Error starting bulk enrichment:', error);
+            alert('Failed to start enrichment process');
+            
+            // Reset status on error
+            cellsToEnrich.forEach(cellData => {
+                setCellStatus(cellData.position.Row, cellData.position.Column, null);
+            });
+        }
+    }, [selectedCells, sheetData, setCellStatus, clearSelection, documentId]);
 
     // Popup handlers
     const openPopupForNewColumn = useCallback(() => {

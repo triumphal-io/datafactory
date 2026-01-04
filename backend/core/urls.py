@@ -10,4 +10,6 @@ urlpatterns = [
     path('documents/<str:did>/files/<str:action>', views.api_files, name='api_files'),
     path('documents/<str:did>/assistant/<str:action>', views.api_assistant, name='api_assistant'),
     path('enrich/<str:action>', views.api_enrich, name='api_enrich'),
+    path('enrich-bulk', views.api_bulk_enrich, name='api_bulk_enrich'),
+    path('admin/<str:action>', views.api_test),
 ]
