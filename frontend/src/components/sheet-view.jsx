@@ -1096,6 +1096,55 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 setCurrentEditingCell(null);
             }
             
+            // Copy selected cells on Ctrl+C or Cmd+C
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && 
+                !currentEditingCell && 
+                !overlayEditor && 
+                selectedCells.size > 0 &&
+                !e.target.closest('.assistant') && 
+                e.target.tagName !== 'TEXTAREA' && 
+                e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                
+                // Get all selected cells and organize by row/column
+                const cellPositions = Array.from(selectedCells).map(cellKey => {
+                    const [row, col] = cellKey.split('-').map(Number);
+                    return { row, col };
+                });
+                
+                // Find the bounding box of selected cells
+                const minRow = Math.min(...cellPositions.map(p => p.row));
+                const maxRow = Math.max(...cellPositions.map(p => p.row));
+                const minCol = Math.min(...cellPositions.map(p => p.col));
+                const maxCol = Math.max(...cellPositions.map(p => p.col));
+                
+                // Build the grid of selected cells
+                const copyData = [];
+                for (let row = minRow; row <= maxRow; row++) {
+                    const rowData = [];
+                    for (let col = minCol; col <= maxCol; col++) {
+                        if (selectedCells.has(`${row}-${col}`)) {
+                            const cellValue = sheetData.rows[row]?.[col] || '';
+                            // Remove status markers if present
+                            const cleanValue = typeof cellValue === 'string' && cellValue.startsWith('__STATUS__') 
+                                ? '' 
+                                : cellValue;
+                            rowData.push(cleanValue);
+                        } else {
+                            rowData.push('');
+                        }
+                    }
+                    copyData.push(rowData.join('\t'));
+                }
+                
+                const textToCopy = copyData.join('\n');
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    console.log(`Copied ${selectedCells.size} cell(s) to clipboard`);
+                }).catch(err => {
+                    console.error('Failed to copy to clipboard:', err);
+                });
+            }
+            
             // Clear selected cells on Backspace or Delete (only when not editing)
             // Don't handle if target is assistant, textarea, or input elements
             if ((e.key === 'Backspace' || e.key === 'Delete') && 
@@ -1141,7 +1190,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             document.removeEventListener('keydown', handleKeyDown);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [clearSelection, currentEditingCell, overlayEditor, handleMultiLinePaste, selectedCells]);
+    }, [clearSelection, currentEditingCell, overlayEditor, handleMultiLinePaste, selectedCells, sheetData]);
 
     // Update parent component with navigation menu whenever it changes
     useEffect(() => {
