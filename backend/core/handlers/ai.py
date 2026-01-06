@@ -9,6 +9,7 @@ from crawl4ai import AsyncWebCrawler
 import litellm
 from dotenv import load_dotenv
 from django.apps import apps
+from django.conf import settings
 
 # Load environment variables from root folder
 env_path = Path(__file__).resolve().parents[3] / '.env'
@@ -60,63 +61,73 @@ def get_ai_tools():
     return [search_tool, web_scraper_tool]
 
 
-def get_file_tools(document_id=None):
+def get_file_tools():
     """
-    Dynamically generate tools for accessing files from the database.
+    Get static tool definitions for accessing files from the database.
     
-    Args:
-        document_id (str, optional): UUID of the document to filter files by.
-                                     If provided, enhances tool descriptions with available files.
+    This returns STATIC tool definitions only (no dynamic file lists)
+    to enable prompt caching. File lists should be added to user messages instead.
     
     Returns:
         list: List of tool definitions for file operations
     """
-    tools = []
-    
-    # Define tool for reading file content
+    # Define STATIC tool for reading file content
+    # Description is kept generic to allow caching
     read_file_tool = {
         "type": "function",
         "function": {
             "name": "tool_read_file",
-            "description": "Read the extracted markdown content of a specific file. Use this to access information from uploaded documents.",
+            "description": "Read the extracted markdown content of a specific file by its UUID. Use this to access information from uploaded documents. The available files will be listed in the conversation context.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "file_id": {
                         "type": "string",
-                        "description": "The UUID of the file to read. Use tool_list_files to see available files."
+                        "description": "The UUID of the file to read."
                     },
                 },
                 "required": ["file_id"],
             },
         }
     }
-    tools.append(read_file_tool)
     
-    # Enhance tool description with available files if document_id is provided
-    # This helps the AI understand which files are available to read
-    if document_id:
-        try:
-            File = apps.get_model('core', 'File')
-            # Query only processed and enabled files for the document
-            files = File.objects.filter(document__uuid=document_id, use=True, is_processing=False)
+    return [read_file_tool]
+
+
+def get_available_files_context(document_id):
+    """
+    Get dynamic file list context for a document.
+    
+    This returns the DYNAMIC file list that should be added to user messages,
+    not to tool definitions, to preserve tool caching.
+    
+    Args:
+        document_id (str): UUID of the document to get files for
+    
+    Returns:
+        str or None: Formatted file list or None if no files available
+    """
+    if not document_id:
+        return None
+    
+    try:
+        File = apps.get_model('core', 'File')
+        # Query only processed and enabled files for the document
+        files = File.objects.filter(document__uuid=document_id, use=True, is_processing=False)
+        
+        if files.exists():
+            # Build a human-readable list of available files
+            file_list = []
+            for f in files:
+                file_list.append(f"- {f.filename} (ID: {f.uuid}, Size: {f.calculated_size} bytes)")
             
-            if files.exists():
-                # Build a human-readable list of available files
-                file_list = []
-                for f in files:
-                    file_list.append(f"- {f.filename} (ID: {f.uuid}, Size: {f.calculated_size} bytes)")
-                
-                file_info = "\n".join(file_list)
-                read_file_tool["function"]["description"] = (
-                    f"Read the extracted markdown content of a specific file. "
-                    f"Available files:\n{file_info}\n\n"
-                    f"Use the file ID to access the content."
-                )
-        except Exception as e:
-            print(f"Error loading files for tool description: {e}")
-    
-    return tools
+            file_info = "\n".join(file_list)
+            return f"Available files in this document:\n{file_info}\n"
+        
+        return None
+    except Exception as e:
+        print(f"Error loading files for context: {e}")
+        return None
 
 
 def get_sheet_tools():
@@ -290,7 +301,7 @@ If you need to populate cells, you must specify which cells and what values. If 
     return [add_rows_tool, delete_rows_tool, add_column_tool, delete_column_tool, populate_cells_tool]
 
 
-def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None, sheet_context=None):
+def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL):
     """
     AI assistant with optional conversation persistence, sheet tool support, and file access.
     
@@ -305,12 +316,15 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
         include_sheet_tools (bool): If True, includes sheet tools and returns tool calls for frontend execution
         document_id (str, optional): Document UUID to enable file access tools
         sheet_context (dict, optional): Dict with 'data' (sheet structure) and 'selection' (selected cells info)
+        model (str, optional): AI model to use (e.g., 'gpt-5-nano', 'gpt-5', 'gemini-3-flash'). Defaults to settings.DEFAULT_AI_MODEL
     
     Returns:
         str or dict:
             - If include_sheet_tools=False: String response (legacy mode)
             - If include_sheet_tools=True: Dict with 'type' ('message' or 'tool_call'), 'content', optional 'tools'
     """
+    print(f">>>>>>>>>>>>>>>>>> AI model: {model} <<<<<<<<<<<<<<<<<<")
+    
     # Initialize conversation history from database or create new
     if conversation_obj:
         conversation = conversation_obj.conversations if conversation_obj.conversations else []
@@ -320,15 +334,37 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
         # No persistence - start fresh conversation
         conversation = [{"role": "user", "content": message}]
     
-    # Add sheet context to system message if provided
-    # This gives the AI awareness of the current spreadsheet structure and data
+    # Build STATIC system message for prompt caching
+    # Only static instructions - no dynamic data that changes between requests
+    static_system_message = None
+    
     if sheet_context and include_sheet_tools:
-        context_message = "Current spreadsheet context:\n"
-        
+        # Build STATIC system message (instructions and constraints only - cacheable)
+        static_system_message = "You are a spreadsheet assistant with access to tools for manipulating spreadsheet data.\n\n"
+        static_system_message += "IMPORTANT CONSTRAINTS when populating cells:\n"
+        static_system_message += "- For 'number' type columns: Provide ONLY numeric values (no text, no units)\n"
+        static_system_message += "- For 'select' type columns: Choose EXACTLY ONE value from the specified options\n"
+        static_system_message += "- For 'multiselect' type columns: Choose one or more values from the specified options, separated by commas\n"
+        static_system_message += "- For 'checkbox' type columns: Use ONLY 'true' or 'false'\n"
+        static_system_message += "- For 'email' type columns: Provide valid email addresses only\n"
+        static_system_message += "- For 'url' type columns: Provide valid URLs only (starting with http:// or https://)\n"
+        static_system_message += "- Respect the format specification if provided\n"
+    elif document_id:
+        # Document assistant mode
+        static_system_message = "You are a document assistant with access to uploaded files. Use the tool_read_file tool to access document content when needed to answer questions.\n"
+    
+    # Add sheet context - split into STATIC and DYNAMIC parts for better prompt caching
+    # DYNAMIC parts go in user message (not cached, changes frequently)
+    dynamic_context_parts = []
+    
+    if sheet_context and include_sheet_tools:
+        # Build DYNAMIC spreadsheet context (actual data - changes frequently, should NOT be cached)
         if sheet_context.get('data'):
             sheet_data = sheet_context['data']
             columns = sheet_data.get('columns', [])
             rows = sheet_data.get('rows', [])
+            
+            sheet_context_msg = "Current spreadsheet structure and data:\n\n"
             
             # Build column information summary with type and format constraints
             column_info = []
@@ -346,17 +382,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 col_desc += ")"
                 column_info.append(col_desc)
             
-            context_message += f"- Columns ({len(columns)}): {' | '.join(column_info)}\n"
-            
-            # Add important constraint for AI when populating cells
-            context_message += "\nIMPORTANT CONSTRAINTS when populating cells:\n"
-            context_message += "- For 'number' type columns: Provide ONLY numeric values (no text, no units)\n"
-            context_message += "- For 'select' type columns: Choose EXACTLY ONE value from the specified options\n"
-            context_message += "- For 'multiselect' type columns: Choose one or more values from the specified options, separated by commas\n"
-            context_message += "- For 'checkbox' type columns: Use ONLY 'true' or 'false'\n"
-            context_message += "- For 'email' type columns: Provide valid email addresses only\n"
-            context_message += "- For 'url' type columns: Provide valid URLs only (starting with http:// or https://)\n"
-            context_message += "- Respect the format specification if provided\n\n"
+            sheet_context_msg += f"Columns ({len(columns)}): {' | '.join(column_info)}\n\n"
             
             # Filter and prepare row data for context
             # Limit rows to prevent token overflow in the AI prompt
@@ -368,11 +394,11 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                 if has_data:
                     non_empty_rows.append((i, row))
             
-            context_message += f"- Total Rows: {len(rows)}\n"
-            context_message += f"- Rows with data: {len(non_empty_rows)}\n"
+            sheet_context_msg += f"Total Rows: {len(rows)}\n"
+            sheet_context_msg += f"Rows with data: {len(non_empty_rows)}\n"
             
             if non_empty_rows:
-                context_message += "\nExisting data:\n"
+                sheet_context_msg += "\nExisting data:\n"
                 # Show first 50 rows maximum to prevent token overflow
                 max_rows_to_show = min(50, len(non_empty_rows))
                 for idx, (i, row) in enumerate(non_empty_rows[:max_rows_to_show]):
@@ -383,19 +409,49 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                             if cell_value not in [None, '', ' '] and str(cell_value).strip() != '':
                                 row_values.append(f"{columns[j].get('title', '')}: {cell_value}")
                     if row_values:  # Only add row if it has displayable values
-                        context_message += f"  Row {i+1}: {', '.join(row_values)}\n"
+                        sheet_context_msg += f"  Row {i+1}: {', '.join(row_values)}\n"
                 
                 # Indicate if there are more rows than shown
                 if len(non_empty_rows) > max_rows_to_show:
-                    context_message += f"  ... and {len(non_empty_rows) - max_rows_to_show} more rows with data\n"
+                    sheet_context_msg += f"  ... and {len(non_empty_rows) - max_rows_to_show} more rows with data\n"
+            
+            dynamic_context_parts.append(sheet_context_msg)
+    
+    # Add file context if working with documents
+    if document_id:
+        files_context = get_available_files_context(document_id)
+        if files_context:
+            dynamic_context_parts.append(files_context)
         
-        # Insert context as system message at the beginning if not already present
-        # System messages provide context that persists throughout the conversation
-        if len(conversation) > 0 and conversation[0].get('role') != 'system':
-            conversation.insert(0, {"role": "system", "content": context_message})
+    # Insert STATIC system message at the beginning if not already present
+    # This will be cached by the AI provider since it doesn't change
+    if static_system_message and (len(conversation) == 0 or conversation[0].get('role') != 'system'):
+        conversation.insert(0, {"role": "system", "content": static_system_message})
+    
+    # Combine all dynamic context parts
+    if dynamic_context_parts:
+        combined_dynamic_context = "\n\n".join(dynamic_context_parts)
+        
+        # Prepend DYNAMIC context to the first user message (or create a new user message)
+        # This ensures the data is available but doesn't break caching of the system message
+        # Find the first user message in the conversation
+        first_user_idx = None
+        for idx, msg in enumerate(conversation):
+            if msg.get('role') == 'user':
+                first_user_idx = idx
+                break
+        
+        if first_user_idx is not None:
+            # Prepend context to the first user message
+            original_content = conversation[first_user_idx].get('content', '')
+            conversation[first_user_idx]['content'] = f"{combined_dynamic_context}\n\nUser request: {original_content}"
+        else:
+            # No user message found, insert one after system message
+            insert_position = 1 if conversation and conversation[0].get('role') == 'system' else 0
+            conversation.insert(insert_position, {"role": "user", "content": combined_dynamic_context})
     
 
-    # Dynamically select tools based on context and mode
+    # Dynamically select tools based on context and mode (STATIC - for caching)
     # Base tools (search, web scraping) are always available
     tools = get_ai_tools()
     
@@ -403,9 +459,9 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     if include_sheet_tools:
         tools = get_sheet_tools() + tools
     
-    # Add file reading tools if working with documents
+    # Add file reading tools if working with documents (STATIC - no dynamic file list in tools)
     if document_id:
-        tools = get_file_tools(document_id) + tools
+        tools = get_file_tools() + tools
     
     # Define tool categories for routing execution
     # Sheet tools modify spreadsheet UI (handled by frontend)
@@ -419,6 +475,42 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     print(conversation)
     print(f"Using tools: {[tool['function']['name'] for tool in tools]}")
     
+    # Enable prompt caching for better performance and cost reduction
+    # Different providers handle caching differently:
+    # - OpenAI: Automatic for 1024+ tokens (no parameter needed)
+    # - Anthropic: Requires cache_control blocks on messages
+    # - Gemini: Implicit caching enabled by default
+    # - Deepseek: Works like OpenAI (automatic)
+    
+    # For Anthropic models, add cache_control to system messages
+    # This is done by modifying the message content structure
+    if 'anthropic' in model.lower() or 'claude' in model.lower():
+        for msg in conversation:
+            if msg.get('role') == 'system':
+                # Anthropic requires cache_control on the last content block
+                content = msg.get('content')
+                if isinstance(content, str):
+                    # Convert string content to list format with cache_control
+                    msg['content'] = [
+                        {
+                            "type": "text",
+                            "text": content,
+                            "cache_control": {"type": "ephemeral"}
+                        }
+                    ]
+                elif isinstance(content, list) and len(content) > 0:
+                    # Add cache_control to the last content block
+                    msg['content'][-1]['cache_control'] = {"type": "ephemeral"}
+                break  # Only cache the first system message
+    
+    # Prepare completion parameters
+    completion_params = {
+        "model": model,
+        "messages": conversation,
+        "tools": tools,
+        "tool_choice": "auto",  # Let model decide when to use tools
+    }
+    
     # Main conversation loop - continues until AI decides no more tool calls needed
     while True:
         try:
@@ -427,12 +519,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             print(conversation)
             # Call LiteLLM with full conversation history and available tools
             # Model decides whether to respond directly or call tools
-            response = litellm.completion(
-                model="gpt-5-nano",
-                messages=conversation,
-                tools=tools,
-                tool_choice="auto"  # Let model decide when to use tools
-            )
+            response = litellm.completion(**completion_params)
             
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
@@ -640,7 +727,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
 
 
 
-def enrichment(data, document_id=None):
+def enrichment(data, document_id=None, model=settings.DEFAULT_AI_MODEL):
     """
     Enrich a spreadsheet cell using AI based on context from other cells.
     
@@ -658,6 +745,7 @@ def enrichment(data, document_id=None):
             - 'format' (str, optional): Format specification
             - 'options' (list, optional): Available options for select/multiselect types
         document_id (str, optional): Document UUID for file access
+        model (str, optional): AI model to use. Defaults to settings.DEFAULT_AI_MODEL
     
     Returns:
         str: AI-generated enrichment value (max 5 words)
@@ -673,6 +761,8 @@ def enrichment(data, document_id=None):
             'options': ['Software', 'Hardware', 'Services']
         }
     """
+    print(f">>>>>>>>>>>>>>>>>> AI model: {model} <<<<<<<<<<<<<<<<<<")
+    
     # Build enrichment prompt with context
     prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}."
     
@@ -714,7 +804,7 @@ def enrichment(data, document_id=None):
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_read_file if needed."
     
     # Use AI assistant to generate enrichment value
-    result = assistant(prompt, document_id=document_id)
+    result = assistant(prompt, document_id=document_id, model=model)
     print(f"Enrichment result: {result}")
     
     # Post-process result to extract just the value if AI still includes explanation

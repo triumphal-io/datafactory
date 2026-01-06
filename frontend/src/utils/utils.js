@@ -1,6 +1,9 @@
 import Showdown from 'showdown';
 import { toast } from 'react-toastify';
 
+// Constants
+export const DEFAULT_AI_MODEL = 'gpt-5-nano';
+
 /**
  * Convert a date to a relative time string (e.g., "2 hours ago", "just now")
  * @param {Date} date - The date to convert

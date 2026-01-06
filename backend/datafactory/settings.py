@@ -21,6 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 STAGE = 'local'
 
+# AI Model Configuration
+DEFAULT_AI_MODEL = 'gpt-5-nano'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-$r2m6fgm%6+z)5q(w#r1oyo)d9*q3&i94v#rc22b1i(v%(y34l'
 

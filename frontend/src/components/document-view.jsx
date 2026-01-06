@@ -12,7 +12,7 @@ import FilesView from './files-view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo, showToast } from '../utils/utils';
 
-const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId, onSelectionChange, onSheetNameChange, onFilesDropped }, ref) => {
+const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId, onSelectionChange, onSheetNameChange, onFilesDropped, selectedModel, sheetsList: propSheetsList, documentName: propDocumentName, onDocumentNameChange, onSheetsListChange }, ref) => {
     const navigate = useNavigate();
     const sheetViewRef = useRef(null);
     const filesViewRef = useRef(null);
@@ -22,8 +22,8 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
     const [documentId, setDocumentId] = useState(propDocumentId);
     const [sheetId, setSheetId] = useState(propSheetId);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-    const [sheetsList, setSheetsList] = useState([]);
-    const [documentName, setDocumentName] = useState('Loading...');
+    const [sheetsList, setSheetsList] = useState(propSheetsList || []);
+    const [documentName, setDocumentName] = useState(propDocumentName || 'Loading...');
     const [activeView, setActiveView] = useState(propSheetId ? 'sheet' : 'project-files'); // 'sheet' or 'project-files'
     const [lastSaved, setLastSaved] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -205,31 +205,28 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
     }, [propDocumentId]);
 
     useEffect(() => {
+        if (propSheetsList) {
+            setSheetsList(propSheetsList);
+        }
+    }, [propSheetsList]);
+
+    useEffect(() => {
+        if (propDocumentName) {
+            setDocumentName(propDocumentName);
+        }
+    }, [propDocumentName]);
+
+    useEffect(() => {
         setSheetId(propSheetId);
         setActiveView(propSheetId ? 'sheet' : 'project-files');
     }, [propSheetId]);
 
-    // Load sheets list from backend
+    // Initialize document name when it first loads
     useEffect(() => {
-        const loadDocumentData = async () => {
-            try {
-                const response = await apiFetch(`/api/documents/${documentId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.status === 'success' && data.sheets) {
-                        setSheetsList(data.sheets);
-                        setDocumentName(data.name);
-                        setInitialDocumentName(data.name);
-                        console.log('Sheets list loaded:', data.sheets);
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading sheets list:', error);
-            }
-        };
-
-        loadDocumentData();
-    }, [documentId]);
+        if (propDocumentName && !initialDocumentName) {
+            setInitialDocumentName(propDocumentName);
+        }
+    }, [propDocumentName, initialDocumentName]);
 
     // Update sheet name when sheetId or sheetsList changes
     useEffect(() => {
@@ -362,6 +359,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                         const listData = await listResponse.json();
                         if (listData.status === 'success' && listData.sheets) {
                             setSheetsList(listData.sheets);
+                            onSheetsListChange && onSheetsListChange(listData.sheets);
                             // Navigate to the new sheet
                             navigate(`/document/${documentId}/sheet/${data.sheet.id}`);
                         }
@@ -395,6 +393,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                         const listData = await listResponse.json();
                         if (listData.status === 'success' && listData.sheets) {
                             setSheetsList(listData.sheets);
+                            onSheetsListChange && onSheetsListChange(listData.sheets);
                             // If we deleted the current sheet, navigate to the first sheet
                             if (sheetIdToDelete === sheetId && listData.sheets.length > 0) {
                                 navigate(`/document/${documentId}/sheet/${listData.sheets[0].id}`);
@@ -436,6 +435,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                     : sheet
             );
             setSheetsList(updatedSheets);
+            onSheetsListChange && onSheetsListChange(updatedSheets);
             
             // TODO: Send update to backend when PATCH endpoint is available
             // For now, the name will be reset on reload
@@ -476,7 +476,10 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                             type="text" 
                             className='input-empty text--white' 
                             value={documentName}
-                            onChange={(e) => setDocumentName(e.target.value)}
+                            onChange={(e) => {
+                                setDocumentName(e.target.value);
+                                onDocumentNameChange && onDocumentNameChange(e.target.value);
+                            }}
                         />
                     </div>
                     
@@ -494,6 +497,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                         onLastSavedChange={setLastSaved}
                         onNavigationChange={setSheetNavState}
                         onSelectionChange={onSelectionChange}
+                        selectedModel={selectedModel}
                     />
                 )}
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { apiFetch } from '../utils/api.js';
-import { convertMarkdownToHtml } from '../utils/utils.js';
+import { convertMarkdownToHtml, DEFAULT_AI_MODEL } from '../utils/utils.js';
 import { useWebSocket } from '../utils/websocket-context.jsx';
 import IconAdd from '../assets/add.svg';
 import IconSend from '../assets/arrow-up.svg';
@@ -8,9 +8,10 @@ import LogoIcon from '../assets/logo-icon.svg';
 import IconTick from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
 import IconFile from '../assets/sheet.svg';
+import IconHand from '../assets/hand.svg';
 import Loader from '../assets/loader-mini.gif';
 
-const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles }, ref) => {
+const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
     const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -82,7 +83,8 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                     body: JSON.stringify({
                         message_type: 'tool_result',
                         conversation_id: convId,
-                        tool_results: toolResults
+                        tool_results: toolResults,
+                        model: selectedModel
                     })
                 });
 
@@ -201,6 +203,9 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             }
             if (selectedRange) {
                 formData.append('selected_range', selectedRange);
+            }
+            if (selectedModel) {
+                formData.append('model', selectedModel);
             }
             
             // Append all attachments if present
@@ -472,10 +477,19 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 </div>
             </div>
             <div className="assistant-body scroll-y thin-scroll" ref={bodyRef} onMouseDown={(e) => e.stopPropagation()}>
-                
-                <div className="spacer"></div>
-
-                {messages.map(renderMessage)}
+                {messages.length === 0 ? (
+                    <div className="flex-expanded flex-column align-center flex-row-center flex-horizontal-center opacity-5 gap-15">
+                        <img src={IconHand} alt="Assistant Hand" height="60" />
+                        <p className="text--mega">Ask, Analyze, Act</p>
+                        <p className="text--micro wdth-80">Go beyond chat. Unlock insights, analyze trends, and automate tasks directly within your spreadsheet.</p>
+                        <p className="text--micro text__italic">AI Responses may be inaccurate.</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="spacer"></div>
+                        {messages.map(renderMessage)}
+                    </>
+                )}
             </div>
             <div className="assistant-footer">
                 <div className="assistant-input-pad">
@@ -546,13 +560,26 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             style={{ display: 'none' }}
                             onChange={handleFileSelect}
                         />
-                        <img 
-                            src={IconAdd} 
-                            alt="Add Icon" 
-                            height="20" 
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => fileInputRef.current?.click()}
-                        />
+                        <div className='flex flex-row-center gap-10'>
+
+                            <img 
+                                src={IconAdd} 
+                                alt="Add Icon" 
+                                height="20" 
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => fileInputRef.current?.click()}
+                                />
+                            <select 
+                                className='input-empty text--white text--micro pointer'
+                                value={selectedModel}
+                                onChange={(e) => onModelChange && onModelChange(e.target.value)}>
+                                <option value="openai/gpt-5">GPT-5</option>
+                                <option value="openai/gpt-5-mini">GPT-5 Mini</option>
+                                <option value="openai/gpt-5-nano">GPT-5 Nano</option>
+                                <option value="gemini/gemini-3-flash">Gemini 3 Flash</option>
+                                <option value="gemini/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            </select>
+                        </div>
                         <img 
                             src={IconSend} 
                             alt="Send Icon" 

@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Resizer from '../components/resizer.jsx';
 import Assistant from '../components/assistant.jsx';
 import DocumentView from '../components/document-view.jsx';
 import { useParams } from 'react-router-dom';
 import { useWebSocket } from '../utils/websocket-context.jsx';
+import { DEFAULT_AI_MODEL } from '../utils/utils';
+import { apiFetch } from '../utils/api';
 
 export default function DocumentPage() {
     const { sheetId, documentId } = useParams();
@@ -13,6 +15,54 @@ export default function DocumentPage() {
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [sheetName, setSheetName] = useState('');
     const [droppedFiles, setDroppedFiles] = useState(null);
+    const [selectedModel, setSelectedModel] = useState(DEFAULT_AI_MODEL);
+    const [sheetsList, setSheetsList] = useState([]);
+    const [documentName, setDocumentName] = useState('Loading...');
+
+    // Load document data including selected model, sheets, and name
+    useEffect(() => {
+        const loadDocument = async () => {
+            try {
+                const response = await apiFetch(`/api/documents/${documentId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        if (data.selected_model) {
+                            setSelectedModel(data.selected_model);
+                        }
+                        if (data.sheets) {
+                            setSheetsList(data.sheets);
+                        }
+                        if (data.name) {
+                            setDocumentName(data.name);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading document:', error);
+            }
+        };
+
+        if (documentId) {
+            loadDocument();
+        }
+    }, [documentId]);
+
+    // Save selected model when it changes
+    const handleModelChange = async (newModel) => {
+        setSelectedModel(newModel);
+        
+        try {
+            await apiFetch(`/api/documents/${documentId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    selected_model: newModel
+                })
+            });
+        } catch (error) {
+            console.error('Error saving selected model:', error);
+        }
+    };
 
     // Handle selection changes from SheetView
     const handleSelectionChange = (cells) => {
@@ -22,6 +72,16 @@ export default function DocumentPage() {
     // Handle sheet name changes
     const handleSheetNameChange = (name) => {
         setSheetName(name);
+    };
+
+    // Handle document name changes
+    const handleDocumentNameChange = (name) => {
+        setDocumentName(name);
+    };
+
+    // Handle sheets list refresh
+    const handleSheetsListChange = (sheets) => {
+        setSheetsList(sheets);
     };
 
     // Handle tool execution requests from assistant
@@ -65,6 +125,11 @@ export default function DocumentPage() {
                 onSelectionChange={handleSelectionChange}
                 onSheetNameChange={handleSheetNameChange}
                 onFilesDropped={handleFilesDropped}
+                selectedModel={selectedModel}
+                sheetsList={sheetsList}
+                documentName={documentName}
+                onDocumentNameChange={handleDocumentNameChange}
+                onSheetsListChange={handleSheetsListChange}
             />
         </main>
         <Resizer />
@@ -77,6 +142,8 @@ export default function DocumentPage() {
                 sheetName={sheetName}
                 getSheetData={getSheetData}
                 droppedFiles={droppedFiles}
+                selectedModel={selectedModel}
+                onModelChange={handleModelChange}
             />
         </aside>
     </div>

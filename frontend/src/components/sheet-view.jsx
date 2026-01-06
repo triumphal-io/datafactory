@@ -7,6 +7,7 @@ import IconAddBlack from '../assets/add-black.svg';
 import IconExport from '../assets/export.svg';
 import { apiFetch } from '../utils/api';
 import { useWebSocket } from '../utils/websocket-context';
+import { DEFAULT_AI_MODEL } from '../utils/utils';
 import IconCheck from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
 import IconChevron from '../assets/chevron-left.svg';
@@ -73,7 +74,7 @@ const getColumnLetter = (index) => {
     return letter;
 };
 
-const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange }, ref) => {
+const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
     // WebSocket connection
     const { isConnected } = useWebSocket();
     
@@ -613,7 +614,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 method: 'POST',
                 body: {
                     cells: cellsToEnrich,
-                    documentId: documentId
+                    documentId: documentId,
+                    model: selectedModel
                 }
             });
             
@@ -638,7 +640,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 setCellStatus(cellData.position.Row, cellData.position.Column, null);
             });
         }
-    }, [selectedCells, sheetData, setCellStatus, clearSelection, documentId]);
+    }, [selectedCells, sheetData, setCellStatus, clearSelection, documentId, selectedModel]);
 
     // Popup handlers
     const openPopupForNewColumn = useCallback(() => {

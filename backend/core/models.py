@@ -7,6 +7,7 @@ class Document(models.Model):
 
     name = models.CharField(max_length=255)
     data = models.JSONField()
+    selected_model = models.CharField(max_length=100, default='gpt-5-nano')
     created_at = models.DateTimeField('Created at', auto_now_add=True)
     last_modified = models.DateTimeField('Last modified', auto_now=True)
 

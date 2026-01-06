@@ -7,6 +7,7 @@ from datetime import datetime
 from django.utils import timezone
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from ..models import BackgroundJob, Document
 from . import ai
 
@@ -24,13 +25,14 @@ class EnrichmentProcessor:
         self.max_concurrent = max_concurrent
         self.channel_layer = get_channel_layer()
     
-    def start_bulk_enrichment(self, cells_data, document_id):
+    def start_bulk_enrichment(self, cells_data, document_id, model=settings.DEFAULT_AI_MODEL):
         """
         Start bulk enrichment process for multiple cells
         
         Args:
             cells_data (list): List of cell data objects to enrich
             document_id (str): UUID of the document
+            model (str): AI model to use for enrichment
         """
         print(f"Starting bulk enrichment for {len(cells_data)} cells")
         
@@ -69,18 +71,19 @@ class EnrichmentProcessor:
         # Start processing thread
         thread = threading.Thread(
             target=self._process_jobs,
-            args=(jobs, document_id),
+            args=(jobs, document_id, model),
             daemon=True
         )
         thread.start()
     
-    def _process_jobs(self, jobs, document_id):
+    def _process_jobs(self, jobs, document_id, model=settings.DEFAULT_AI_MODEL):
         """
         Process jobs with concurrent threading
         
         Args:
             jobs (list): List of BackgroundJob objects
             document_id (str): UUID of the document
+            model (str): AI model to use for enrichment
         """
         print(f"Processing {len(jobs)} jobs with max {self.max_concurrent} concurrent threads")
         
@@ -93,7 +96,7 @@ class EnrichmentProcessor:
             for job in batch:
                 thread = threading.Thread(
                     target=self._process_single_job,
-                    args=(job, document_id),
+                    args=(job, document_id, model),
                     daemon=True
                 )
                 threads.append(thread)
@@ -105,13 +108,14 @@ class EnrichmentProcessor:
             
             print(f"Batch {i // self.max_concurrent + 1} completed")
     
-    def _process_single_job(self, job, document_id):
+    def _process_single_job(self, job, document_id, model=settings.DEFAULT_AI_MODEL):
         """
         Process a single enrichment job
         
         Args:
             job (BackgroundJob): The job to process
             document_id (str): UUID of the document
+            model (str): AI model to use for enrichment
         """
         cell_data = job.cell_data
         position = cell_data['position']
@@ -134,10 +138,10 @@ class EnrichmentProcessor:
                 }
             )
             
-            print(f"Processing enrichment for cell [{position['Row']}, {position['Column']}]")
+            print(f"Processing enrichment for cell [{position['Row']}, {position['Column']}] with model {model}")
             
             # Call the enrichment AI function
-            result = ai.enrichment(cell_data, document_id=document_id)
+            result = ai.enrichment(cell_data, document_id=document_id, model=model)
             
             # Update job status to completed
             job.status = 'completed'

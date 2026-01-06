@@ -14,6 +14,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from core.handlers import ai
 from core.handlers.extraction import start_background_processing
 from core.models import Document, Sheet, File, Conversation
@@ -33,6 +34,7 @@ def api_documents(request, action):
                 'id': str(doc.uuid),
                 'name': doc.name,
                 'uuid': str(doc.uuid),
+                'selected_model': doc.selected_model,
                 'created_at': doc.created_at.isoformat(),
                 'last_modified': doc.last_modified.isoformat(),
                 'user': doc.user.username if doc.user else 'Anonymous'
@@ -79,10 +81,13 @@ def api_documents(request, action):
             try:
                 body = json.loads(request.body)
                 name = body.get('name')
+                selected_model = body.get('selected_model')
                 
                 if name is not None:
                     document.name = name
-                    document.save()
+                if selected_model is not None:
+                    document.selected_model = selected_model
+                document.save()
                 
                 return JsonResponse({
                     'status': 'success',
@@ -100,6 +105,7 @@ def api_documents(request, action):
             'status': 'success',
             'id': str(document.uuid),
             'name': document.name,
+            'selected_model': document.selected_model,
             'created_at': document.created_at.isoformat(),
             'last_modified': document.last_modified.isoformat()
         }
@@ -344,6 +350,7 @@ def api_assistant(request, did, action):
             tool_results = json.loads(request.POST.get('tool_results', '[]'))
             sheet_data = json.loads(request.POST.get('sheet_data', 'null'))
             selected_range = request.POST.get('selected_range')
+            model = request.POST.get('model', settings.DEFAULT_AI_MODEL)
         else:
             body = json.loads(request.body) if request.body else {}
             message = body.get('message', '')
@@ -352,6 +359,7 @@ def api_assistant(request, did, action):
             tool_results = body.get('tool_results', [])
             sheet_data = body.get('sheet_data')
             selected_range = body.get('selected_range')
+            model = body.get('model', settings.DEFAULT_AI_MODEL)
         
         # Handle file attachments if present
         uploaded_file_ids = []
@@ -445,7 +453,8 @@ def api_assistant(request, did, action):
                 conversation_obj=conversation,
                 include_sheet_tools=True,
                 document_id=did,
-                sheet_context=sheet_context
+                sheet_context=sheet_context,
+                model=model
             )
         elif message_type == 'tool_result':
             # Frontend executed tools and is sending results back
@@ -467,7 +476,8 @@ def api_assistant(request, did, action):
                 conversation_obj=conversation,
                 include_sheet_tools=True,
                 document_id=did,
-                sheet_context=sheet_context
+                sheet_context=sheet_context,
+                model=model
             )
         else:
             return JsonResponse({'status': 'error', 'message': 'Invalid message_type'}, status=400)
@@ -494,8 +504,9 @@ def api_enrich(request, action):
     body = json.loads(request.body)
     data = body.get('data', {})
     document_id = body.get('documentId', None)
+    model = body.get('model', settings.DEFAULT_AI_MODEL)
     print(data)
-    response['result'] = ai.enrichment(data, document_id=document_id)
+    response['result'] = ai.enrichment(data, document_id=document_id, model=model)
     response['status'] = 'success'
     return JsonResponse(response)
 
@@ -511,6 +522,7 @@ def api_bulk_enrich(request):
         body = json.loads(request.body)
         cells_data = body.get('cells', [])
         document_id = body.get('documentId', None)
+        model = body.get('model', settings.DEFAULT_AI_MODEL)
         
         if not cells_data:
             return JsonResponse({'status': 'error', 'message': 'No cells provided'}, status=400)
@@ -519,7 +531,7 @@ def api_bulk_enrich(request):
             return JsonResponse({'status': 'error', 'message': 'Document ID required'}, status=400)
         
         # Start background enrichment processing
-        enricher.start_bulk_enrichment(cells_data, document_id)
+        enricher.start_bulk_enrichment(cells_data, document_id, model)
         
         return JsonResponse({
             'status': 'success',

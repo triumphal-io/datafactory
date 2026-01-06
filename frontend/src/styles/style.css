@@ -72,7 +72,7 @@ aside {
 }
 
 .assistant-body p{
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .assistant-footer {
@@ -103,6 +103,111 @@ aside {
     max-width: 80%;
     align-self: flex-end;
 }
+
+/* Assistant message formatting */
+.message-assistant ul,
+.message-assistant ol {
+    margin: 0.8em 0;
+    padding-left: 1.5em;
+    list-style-type: disc;
+}
+
+.message-assistant ol {
+    list-style-type: decimal;
+}
+
+.message-assistant li {
+    margin: 0.25em 0;
+}
+
+.message-assistant strong {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.message-assistant em {
+    font-style: italic;
+}
+
+.message-assistant code {
+    background: #2B2B2B;
+    padding: 0.125em 0.25em;
+    border-radius: 3px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+}
+
+.message-assistant pre {
+    background: #2B2B2B;
+    padding: 0.75em;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.message-assistant pre code {
+    background: none;
+    padding: 0;
+}
+
+.message-assistant blockquote {
+    border-left: 3px solid #464646;
+    padding-left: 1em;
+    margin: 0.5em 0;
+    opacity: 0.8;
+}
+
+.message-assistant h1,
+.message-assistant h2,
+.message-assistant h3,
+.message-assistant h4,
+.message-assistant h5,
+.message-assistant h6 {
+    margin: 0.75em 0 0.5em 0;
+    font-weight: 600;
+}
+
+.message-assistant h1 { font-size: 1.5em; }
+.message-assistant h2 { font-size: 1.3em; }
+.message-assistant h3 { font-size: 1.1em; }
+
+.message-assistant a {
+    color: #58a6ff;
+    text-decoration: none;
+}
+
+.message-assistant a:hover {
+    text-decoration: underline;
+}
+
+.message-assistant hr {
+    border: none;
+    border-top: 1px solid #464646;
+    margin: 1em 0;
+}
+
+.message-assistant table {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+}
+
+.message-assistant table th,
+.message-assistant table td {
+    border: 1px solid #464646;
+    padding: 0.5em;
+}
+
+.message-assistant table th {
+    background: #2B2B2B;
+    font-weight: 600;
+}
+
+/* Style select options for dark theme */
+select.input-empty option {
+    background-color: #2B2B2B;
+    color: white;
+}
+
 /* ASSISTANT END */
 
 
