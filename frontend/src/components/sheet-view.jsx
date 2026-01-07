@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import ExcelJS from 'exceljs';
 import IconStar from '../assets/logo-icon.svg';
 import IconDelete from '../assets/delete.svg';
 import IconDeleteBlack from '../assets/delete-black.svg';
@@ -1032,30 +1033,107 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         console.log(`Pasted ${lines.length} rows starting from row ${startRow + 1}, column ${startCol + 1}`);
     }, [sheetData, clearSelection]);
 
-    // Export data as JSON file
-    const handleExportJSON = useCallback(() => {
-        const dataToExport = {
-            documentId: documentId,
-            sheetId: sheetId,
-            sheetData: sheetData,
-            exportedAt: new Date().toISOString(),
-            version: '1.0'
-        };
-
-        const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
-            type: 'application/json'
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `document-${documentId}-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        console.log('Sheet data exported as JSON');
-    }, [sheetData, documentId, sheetId]);
+    // Export all sheets as XLSX file
+    const handleExportXLSX = useCallback(async () => {
+        try {
+            // Fetch all sheets for this document
+            const response = await apiFetch(`/api/documents/${documentId}`);
+            if (!response.ok) {
+                alert('Failed to fetch document sheets');
+                return;
+            }
+            
+            const docData = await response.json();
+            if (docData.status !== 'success' || !docData.sheets) {
+                alert('No sheets found in document');
+                return;
+            }
+            
+            // Create a new workbook
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = 'DataFactory';
+            workbook.created = new Date();
+            
+            // Fetch and add each sheet to the workbook
+            for (const sheet of docData.sheets) {
+                const sheetResponse = await apiFetch(`/api/documents/${documentId}/sheets/${sheet.id}`);
+                if (sheetResponse.ok) {
+                    const sheetDataResponse = await sheetResponse.json();
+                    if (sheetDataResponse.status === 'success' && sheetDataResponse.sheet_data) {
+                        const data = sheetDataResponse.sheet_data;
+                        
+                        // Sanitize sheet name (Excel has restrictions)
+                        let sheetName = sheet.name.replace(/[\[\]\*\/\\?:]/g, '_');
+                        if (sheetName.length > 31) {
+                            sheetName = sheetName.substring(0, 31);
+                        }
+                        
+                        // Add worksheet to workbook
+                        const worksheet = workbook.addWorksheet(sheetName);
+                        
+                        // Add header row
+                        if (data.columns && data.columns.length > 0) {
+                            const headers = data.columns.map(col => col.title || '');
+                            worksheet.addRow(headers);
+                            
+                            // Style header row
+                            const headerRow = worksheet.getRow(1);
+                            headerRow.font = { bold: true };
+                            headerRow.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FFE0E0E0' }
+                            };
+                        }
+                        
+                        // Add data rows
+                        if (data.rows && data.rows.length > 0) {
+                            data.rows.forEach(row => {
+                                // Remove status markers from cells
+                                const cleanRow = row.map(cell => {
+                                    if (typeof cell === 'string' && cell.startsWith('__STATUS__')) {
+                                        return '';
+                                    }
+                                    return cell;
+                                });
+                                worksheet.addRow(cleanRow);
+                            });
+                        }
+                        
+                        // Auto-fit columns
+                        worksheet.columns.forEach(column => {
+                            let maxLength = 0;
+                            column.eachCell({ includeEmpty: true }, cell => {
+                                const cellValue = cell.value ? cell.value.toString() : '';
+                                maxLength = Math.max(maxLength, cellValue.length);
+                            });
+                            column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+                        });
+                    }
+                }
+            }
+            
+            // Generate Excel file and trigger download
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { 
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+            });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const fileName = `${docData.name || 'document'}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            console.log('All sheets exported as XLSX');
+        } catch (error) {
+            console.error('Error exporting XLSX:', error);
+            alert('Failed to export Excel file');
+        }
+    }, [documentId]);
 
     // Accept AI changes
     const handleAcceptAiChanges = useCallback(() => {
@@ -1287,16 +1365,16 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 </div>
                 
                 <div 
-                    onClick={handleExportJSON}
+                    onClick={handleExportXLSX}
                     className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
                 >
                     <img src={IconExport} alt="Export Icon" height="16" />
-                    <p className="text--micro">Export JSON</p>
+                    <p className="text--micro">Export</p>
                 </div>
             </div>
             );
         }
-    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportJSON, pendingAiChanges, handleAcceptAiChanges, handleRejectAiChanges]);
+    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportXLSX, pendingAiChanges, handleAcceptAiChanges, handleRejectAiChanges]);
 
     // Expose navigation menu to parent component (for imperative access if needed)
     useImperativeHandle(ref, () => ({

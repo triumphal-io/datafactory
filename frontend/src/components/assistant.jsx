@@ -157,6 +157,13 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         }
     };
 
+    const newChat = () => {
+        setConversationId(null);
+        setMessages([]);
+        setAttachments([]);
+        setInputValue('');
+    };
+
     const sendMessage = async () => {
         const message = inputValue.trim();
         if (!message || isProcessing) return;
@@ -454,26 +461,36 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     return (
         <div className="assistant">
             <div className="assistant-head">
-                <div className="flex flex-row-center gap-10">
+                <div className="flex flex-row-center flex-space-between gap-10">
+                    <div className="flex flex-row-center gap-10">
+                        <img 
+                            src={LogoIcon} 
+                            alt="Assistant Logo" 
+                            height="14" 
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                                const testMessage = {
+                                    type: 'test_message',
+                                    content: 'Hello from Assistant Logo!',
+                                    timestamp: new Date().toISOString(),
+                                    clientId: Date.now()
+                                };
+                                console.log('Sending test message via WebSocket:', testMessage);
+                                if (sendWebSocketMessage) {
+                                    sendWebSocketMessage(testMessage);
+                                }
+                            }}
+                        />
+                        <h2>Assistant</h2>
+                    </div>
                     <img 
-                        src={LogoIcon} 
-                        alt="Assistant Logo" 
-                        height="14" 
+                        src={IconAdd} 
+                        alt="New Chat" 
+                        height="18" 
                         style={{ cursor: 'pointer' }}
-                        onClick={() => {
-                            const testMessage = {
-                                type: 'test_message',
-                                content: 'Hello from Assistant Logo!',
-                                timestamp: new Date().toISOString(),
-                                clientId: Date.now()
-                            };
-                            console.log('Sending test message via WebSocket:', testMessage);
-                            if (sendWebSocketMessage) {
-                                sendWebSocketMessage(testMessage);
-                            }
-                        }}
+                        onClick={newChat}
+                        title="New Chat"
                     />
-                    <h2>Assistant</h2>
                 </div>
             </div>
             <div className="assistant-body scroll-y thin-scroll" ref={bodyRef} onMouseDown={(e) => e.stopPropagation()}>
@@ -546,7 +563,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                         className={`flex-expanded input-empty`}
                         id="assistant-input"
                         onKeyDown={handleKeyDown}
-                        rows="3"
+                        rows="2"
                         placeholder="Type your message..."
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -560,12 +577,12 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             style={{ display: 'none' }}
                             onChange={handleFileSelect}
                         />
-                        <div className='flex flex-row-center gap-10'>
+                        <div className='flex flex-row-center gap-5'>
 
                             <img 
                                 src={IconAdd} 
                                 alt="Add Icon" 
-                                height="20" 
+                                height="18" 
                                 style={{ cursor: 'pointer' }}
                                 onClick={() => fileInputRef.current?.click()}
                                 />
