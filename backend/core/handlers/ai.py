@@ -173,13 +173,13 @@ def get_sheet_tools():
         "type": "function",
         "function": {
             "name": "tool_add_column",
-            "description": "Add one or more columns to the currently open spreadsheet. Each column must have a title and can optionally have a prompt/description for AI enrichment. Use this when user asks to add columns, insert columns, or create new columns.",
+            "description": "Add one or more columns to the currently open spreadsheet. Each column must have a title and can optionally have a prompt/description for AI enrichment, data type, format instructions, and selection options. Use this when user asks to add columns, insert columns, or create new columns.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "columns": {
                         "type": "array",
-                        "description": "Array of column objects to add. Each column must have a title and optional prompt.",
+                        "description": "Array of column objects to add. Each column must have a title and can include data type, prompt, format, and options.",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -191,6 +191,25 @@ def get_sheet_tools():
                                     "type": "string",
                                     "description": "Optional description or prompt for AI-assisted data enrichment in this column.",
                                     "default": ""
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "description": "Data type for the column. Determines validation and input format.",
+                                    "enum": ["text", "number", "checkbox", "select", "multiselect", "url", "email", "file"],
+                                    "default": "text"
+                                },
+                                "format": {
+                                    "type": "string",
+                                    "description": "Optional formatting instruction for text or number columns (e.g., 'Twitter handle starting with @', 'Currency with 2 decimals'). Only applicable for 'text' and 'number' types.",
+                                    "default": ""
+                                },
+                                "options": {
+                                    "type": "array",
+                                    "description": "Array of selection options. Required for 'select' and 'multiselect' types. Example: ['Option 1', 'Option 2', 'Option 3']",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "default": []
                                 }
                             },
                             "required": ["title"]
