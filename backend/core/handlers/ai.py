@@ -15,6 +15,7 @@ from django.conf import settings
 env_path = Path(__file__).resolve().parents[3] / '.env'
 load_dotenv(dotenv_path=env_path)
 
+# os.environ['LITELLM_LOG'] = 'DEBUG'
 
 def get_ai_tools():
     """

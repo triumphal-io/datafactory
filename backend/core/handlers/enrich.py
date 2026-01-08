@@ -3,6 +3,7 @@ Background enrichment processor for handling bulk cell enrichment with threading
 """
 import threading
 import time
+from queue import Queue
 from datetime import datetime
 from django.utils import timezone
 from channels.layers import get_channel_layer
@@ -78,7 +79,7 @@ class EnrichmentProcessor:
     
     def _process_jobs(self, jobs, document_id, model=settings.DEFAULT_AI_MODEL):
         """
-        Process jobs with concurrent threading
+        Process jobs with concurrent threading using a work queue
         
         Args:
             jobs (list): List of BackgroundJob objects
@@ -87,26 +88,43 @@ class EnrichmentProcessor:
         """
         print(f"Processing {len(jobs)} jobs with max {self.max_concurrent} concurrent threads")
         
-        # Split jobs into batches
-        for i in range(0, len(jobs), self.max_concurrent):
-            batch = jobs[i:i + self.max_concurrent]
-            threads = []
-            
-            # Start threads for this batch
-            for job in batch:
-                thread = threading.Thread(
-                    target=self._process_single_job,
-                    args=(job, document_id, model),
-                    daemon=True
-                )
-                threads.append(thread)
-                thread.start()
-            
-            # Wait for all threads in this batch to complete
-            for thread in threads:
-                thread.join()
-            
-            print(f"Batch {i // self.max_concurrent + 1} completed")
+        # Create a thread-safe queue and add all jobs to it
+        job_queue = Queue()
+        for job in jobs:
+            job_queue.put(job)
+        
+        # Worker function that continuously processes jobs from the queue
+        def worker():
+            while True:
+                try:
+                    # Get a job from the queue (non-blocking with timeout)
+                    job = job_queue.get(block=False)
+                except:
+                    # Queue is empty, worker is done
+                    break
+                
+                try:
+                    # Process the job
+                    self._process_single_job(job, document_id, model)
+                finally:
+                    # Mark the job as done in the queue
+                    job_queue.task_done()
+        
+        # Start worker threads (max_concurrent workers)
+        threads = []
+        for i in range(min(self.max_concurrent, len(jobs))):
+            thread = threading.Thread(target=worker, daemon=True)
+            threads.append(thread)
+            thread.start()
+        
+        # Wait for all jobs to be processed
+        job_queue.join()
+        
+        # Wait for all worker threads to finish
+        for thread in threads:
+            thread.join()
+        
+        print(f"All {len(jobs)} jobs completed")
     
     def _process_single_job(self, job, document_id, model=settings.DEFAULT_AI_MODEL):
         """
@@ -242,4 +260,4 @@ class EnrichmentProcessor:
 
 
 # Global instance
-enricher = EnrichmentProcessor(max_concurrent=4)
+enricher = EnrichmentProcessor(max_concurrent=10)
