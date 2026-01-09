@@ -72,27 +72,58 @@ def get_file_tools():
     Returns:
         list: List of tool definitions for file operations
     """
-    # Define STATIC tool for reading file content
-    # Description is kept generic to allow caching
-    read_file_tool = {
+    # COMMENTED OUT: Old direct file reading tool - replaced with RAG-based querying
+    # read_file_tool = {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "tool_read_file",
+    #         "description": "Read the extracted markdown content of a specific file by its UUID. Use this to access information from uploaded documents. The available files will be listed in the conversation context.",
+    #         "parameters": {
+    #             "type": "object",
+    #             "properties": {
+    #                 "file_id": {
+    #                     "type": "string",
+    #                     "description": "The UUID of the file to read."
+    #                 },
+    #             },
+    #             "required": ["file_id"],
+    #         },
+    #     }
+    # }
+    
+    # NEW: RAG-based query tool for efficient file access
+    query_file_tool = {
         "type": "function",
         "function": {
-            "name": "tool_read_file",
-            "description": "Read the extracted markdown content of a specific file by its UUID. Use this to access information from uploaded documents. The available files will be listed in the conversation context.",
+            "name": "tool_query_file_data",
+            "description": "Query data from uploaded CSV/XLSX files using semantic search. This tool searches through file contents and returns relevant records. You must specify the filename to search within. The available files will be listed in the conversation context.\n\nIMPORTANT - Use 'identifier' search type when:\n- Looking up specific IDs, codes, SKUs, product numbers, customer IDs, order numbers\n- Query is a short alphanumeric string (e.g., 'AB1234', 'CUST-001', 'SKU123')\n- Need exact match for a unique identifier\n- Examples: 'AB1234', 'ORDER-12345', 'CUST001', 'INV-2024-001'\n\nUse 'query' search type when:\n- Natural language questions (e.g., 'customers in New York')\n- Descriptive searches (e.g., 'products with high ratings')\n- Date-based queries (e.g., 'orders from January 2024')\n- Multi-criteria searches",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_id": {
+                    "query": {
                         "type": "string",
-                        "description": "The UUID of the file to read."
+                        "description": "The search query. For identifiers (IDs, codes, SKUs), use search_type='identifier'. For natural language, use search_type='query'."
                     },
+                    "filename": {
+                        "type": "string",
+                        "description": "The name of the file to query (must match exactly, e.g., 'customers.csv', 'ice-cream.xlsx')"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return. Only used for 'query' search type. Default: 5, max: 20. Ignored for 'identifier' search (always returns 1)."
+                    },
+                    "search_type": {
+                        "type": "string",
+                        "enum": ["identifier", "query"],
+                        "description": "CRITICAL: Use 'identifier' for IDs/codes/SKUs (returns 1 exact match). Use 'query' for natural language questions (returns multiple matches). When in doubt about an alphanumeric code, use 'identifier'."
+                    }
                 },
-                "required": ["file_id"],
+                "required": ["query", "filename"],
             },
         }
     }
     
-    return [read_file_tool]
+    return [query_file_tool]
 
 
 def get_available_files_context(document_id):
@@ -371,7 +402,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
         static_system_message += "- Respect the format specification if provided\n"
     elif document_id:
         # Document assistant mode
-        static_system_message = "You are a document assistant with access to uploaded files. Use the tool_read_file tool to access document content when needed to answer questions.\n"
+        static_system_message = "You are a document assistant with access to uploaded files. Use the tool_query_file_data tool to search and retrieve relevant information from files when needed to answer questions.\n"
     
     # Add sheet context - split into STATIC and DYNAMIC parts for better prompt caching
     # DYNAMIC parts go in user message (not cached, changes frequently)
@@ -487,7 +518,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     # Sheet tools modify spreadsheet UI (handled by frontend)
     sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     # File tools read document content (handled by backend)
-    file_tool_names = {'tool_read_file'}
+    file_tool_names = {'tool_query_file_data'}  # Updated to use RAG-based querying
     # Frontend tools require UI updates (sent back to client)
     frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     
@@ -821,7 +852,7 @@ def enrichment(data, document_id=None, model=settings.DEFAULT_AI_MODEL):
     
     # Enable file access if document is available
     if document_id:
-        prompt += " You have access to uploaded files that may contain relevant information. Use tool_read_file if needed."
+        prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
     
     # Use AI assistant to generate enrichment value
     result = assistant(prompt, document_id=document_id, model=model)
@@ -946,25 +977,156 @@ def crawler(url):
     return result.markdown.raw_markdown
 
 
-def tool_read_file(file_id, document_id=None):
+# COMMENTED OUT: Old direct file reading - kept for reference but not used
+# def tool_read_file(file_id, document_id=None):
+#     """
+#     Read the extracted markdown content of a specific file from the database.
+#     
+#     This tool is called by the AI to access uploaded document content.
+#     If the file is in processing state or has no extracted content, it will force extract immediately.
+#     
+#     Args:
+#         file_id (str): UUID of the file to read
+#         document_id (str, optional): Document UUID for access validation
+#     
+#     Returns:
+#         str: Extracted markdown content or error message
+#     """
+#     try:
+#         File = apps.get_model('core', 'File')
+#         
+#         # Fetch the file by UUID from database
+#         file_obj = File.objects.get(uuid=file_id)
+#         
+#         # Security check: Verify file belongs to the document (if document_id provided)
+#         if document_id and str(file_obj.document.uuid) != str(document_id):
+#             return "Error: File does not belong to the current document."
+#         
+#         if not file_obj.use:
+#             return "Error: This file is not available for use."
+#         
+#         # Force extract if file is processing or has no content
+#         if file_obj.is_processing or not file_obj.extracted_content:
+#             try:
+#                 from core.handlers.extraction import extract_file_content
+#                 
+#                 print(f"Force extracting content for file: {file_obj.filename}")
+#                 
+#                 # Extract content immediately
+#                 content = extract_file_content(file_obj)
+#                 
+#                 # Update database
+#                 file_obj.extracted_content = content
+#                 file_obj.is_processing = False
+#                 file_obj.save()
+#                 
+#                 print(f"✓ Successfully extracted content for: {file_obj.filename}")
+#                 
+#                 return content
+#                 
+#             except Exception as extraction_error:
+#                 error_msg = f"Error during extraction: {str(extraction_error)}"
+#                 print(f"✗ {error_msg}")
+#                 
+#                 # Mark as not processing and save error
+#                 file_obj.is_processing = False
+#                 file_obj.extracted_content = error_msg
+#                 file_obj.save()
+#                 
+#                 return error_msg
+#         
+#         # Return the extracted content if available
+#         return file_obj.extracted_content
+#     
+#     except File.DoesNotExist:
+#         return f"Error: File with ID {file_id} not found."
+#     except Exception as e:
+#         return f"Error reading file: {str(e)}"
+
+
+def tool_query_file_data(query, filename, max_results=5, search_type='query', document_id=None):
     """
-    Read the extracted markdown content of a specific file from the database.
+    Query data from uploaded files using RAG (Retrieval Augmented Generation).
     
-    This tool is called by the AI to access uploaded document content.
-    If the file is in processing state or has no extracted content, it will force extract immediately.
+    This tool searches through indexed file chunks and returns relevant records.
+    Only works with CSV and XLSX files that have been indexed.
+    
+    Automatically detects if query looks like an identifier and switches to identifier search.
     
     Args:
-        file_id (str): UUID of the file to read
+        query (str): Search query to find relevant data
+        filename (str): Name of the file to query
+        max_results (int, optional): Maximum number of results (default: 5, max: 20)
+        search_type (str): 'identifier' for exact matching, 'query' for semantic search (default: 'query')
         document_id (str, optional): Document UUID for access validation
     
     Returns:
-        str: Extracted markdown content or error message
+        str: Formatted search results or error message
     """
     try:
+        from core.handlers.knowledge import query_rag
         File = apps.get_model('core', 'File')
+        import re
         
-        # Fetch the file by UUID from database
-        file_obj = File.objects.get(uuid=file_id)
+        # AUTO-DETECT IDENTIFIERS: Override to identifier search if query looks like an ID/code
+        # This ensures maximum accuracy for lookups of specific records
+        if search_type == 'query':  # Only auto-detect if not explicitly set to identifier
+            query_trimmed = query.strip()
+            
+            # Patterns that suggest an identifier:
+            # 1. Short alphanumeric strings (2-30 chars, contains letters AND numbers)
+            # 2. Strings with common ID separators (-, _, .)
+            # 3. Strings that are purely numeric IDs (4+ digits)
+            # 4. Common ID prefixes (ID, SKU, CUST, ORD, INV, PROD, etc.)
+            
+            is_identifier = False
+            
+            # Check for common ID patterns
+            id_patterns = [
+                r'^[A-Z]{2,5}[_-]?\d+$',  # PREFIX123, ABC-456, SKU_789
+                r'^\d{4,}$',  # Pure numeric IDs (4+ digits)
+                r'^[A-Z0-9]{2,15}[_-][A-Z0-9]{1,15}$',  # CODE-123, AB_CD_12
+                r'^[A-Z]+\d+[A-Z]*$',  # AB123, SKU456XL
+                r'^\d+[A-Z]+\d*$',  # 123ABC, 456XL789
+            ]
+            
+            for pattern in id_patterns:
+                if re.match(pattern, query_trimmed, re.IGNORECASE):
+                    is_identifier = True
+                    break
+            
+            # Additional heuristic: short alphanumeric with mixed case/numbers
+            if not is_identifier and 2 <= len(query_trimmed) <= 30:
+                has_letter = bool(re.search(r'[a-zA-Z]', query_trimmed))
+                has_number = bool(re.search(r'\d', query_trimmed))
+                has_separator = bool(re.search(r'[-_.]', query_trimmed))
+                has_space = ' ' in query_trimmed
+                
+                # If it has letters AND numbers, no spaces, and is relatively short, likely an ID
+                if has_letter and has_number and not has_space:
+                    is_identifier = True
+                # Or if it has separators (common in IDs)
+                elif has_separator and not has_space:
+                    is_identifier = True
+            
+            # Override to identifier search if detected
+            if is_identifier:
+                search_type = 'identifier'
+                max_results = 1  # Identifiers should return only best match
+                print(f"Auto-detected identifier pattern in query '{query}' - switching to identifier search")
+        
+        # For identifier search, always limit to 1 result
+        if search_type == 'identifier':
+            max_results = 1
+        else:
+            # Validate max_results for query search
+            max_results = min(max(1, max_results), 20)  # Clamp between 1 and 20
+        
+        # Find the file to get user_id and validate access
+        file_obj = File.objects.filter(filename=filename).first()
+        
+        if not file_obj:
+            return f"Error: File '{filename}' not found. Please check the filename and try again."
         
         # Security check: Verify file belongs to the document (if document_id provided)
         if document_id and str(file_obj.document.uuid) != str(document_id):
@@ -973,40 +1135,44 @@ def tool_read_file(file_id, document_id=None):
         if not file_obj.use:
             return "Error: This file is not available for use."
         
-        # Force extract if file is processing or has no content
-        if file_obj.is_processing or not file_obj.extracted_content:
-            try:
-                from core.handlers.extraction import extract_file_content
-                
-                print(f"Force extracting content for file: {file_obj.filename}")
-                
-                # Extract content immediately
-                content = extract_file_content(file_obj)
-                
-                # Update database
-                file_obj.extracted_content = content
-                file_obj.is_processing = False
-                file_obj.save()
-                
-                print(f"✓ Successfully extracted content for: {file_obj.filename}")
-                
-                return content
-                
-            except Exception as extraction_error:
-                error_msg = f"Error during extraction: {str(extraction_error)}"
-                print(f"✗ {error_msg}")
-                
-                # Mark as not processing and save error
-                file_obj.is_processing = False
-                file_obj.extracted_content = error_msg
-                file_obj.save()
-                
-                return error_msg
+        # Get user_id for data isolation
+        user_id = file_obj.document.user.id
         
-        # Return the extracted content if available
-        return file_obj.extracted_content
-    
-    except File.DoesNotExist:
-        return f"Error: File with ID {file_id} not found."
+        # Query the RAG system
+        results = query_rag(
+            query=query,
+            filename=filename,
+            user_id=user_id,
+            n_results=max_results,
+            search_type=search_type
+        )
+        
+        # Check for errors
+        if 'error' in results:
+            return f"Error querying file: {results['error']}"
+        
+        # Format results
+        if not results['documents']:
+            return f"No results found for query '{query}' in file '{filename}' (search type: {search_type})."
+        
+        search_type_label = "exact match" if search_type == 'identifier' else "semantic search"
+        formatted_results = f"Found {len(results['documents'])} relevant record(s) from '{filename}' using {search_type_label}:\n\n"
+        
+        for idx, (doc, metadata) in enumerate(zip(results['documents'], results['metadatas']), 1):
+            formatted_results += f"Result {idx}:\n{doc}\n"
+            
+            # Add metadata info if available
+            if 'row_id' in metadata:
+                formatted_results += f"(Row: {metadata['row_id'] + 1}"
+                if 'sheet_name' in metadata:
+                    formatted_results += f", Sheet: {metadata['sheet_name']}"
+                formatted_results += ")\n"
+            
+            formatted_results += "\n"
+        
+        return formatted_results.strip()
+        
     except Exception as e:
-        return f"Error reading file: {str(e)}"
+        import traceback
+        traceback.print_exc()
+        return f"Error querying file data: {str(e)}"

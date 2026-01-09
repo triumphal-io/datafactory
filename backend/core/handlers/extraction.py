@@ -188,7 +188,7 @@ def extract_file_content(file_instance):
 def process_pending_files():
     """
     Background task to process all files with is_processing=True.
-    Extracts content and marks files as processed.
+    Extracts content, indexes in ChromaDB (for CSV/XLSX), and marks files as processed.
     """
     print("=" * 50)
     print("STARTING BACKGROUND FILE PROCESSING")
@@ -202,11 +202,37 @@ def process_pending_files():
         for file_instance in pending_files:
             print(f"\nProcessing: {file_instance.filename}")
             try:                
-                # Extract content
+                # Extract content (keep for backward compatibility)
                 content = extract_file_content(file_instance)
                 
-                # Update database
+                # Update database with extracted content
                 file_instance.extracted_content = content
+                
+                # Index file in ChromaDB for RAG (CSV and XLSX only)
+                file_extension = os.path.splitext(file_instance.filename)[1].lower()
+                if file_extension in ['.csv', '.xlsx', '.xls']:
+                    try:
+                        from core.handlers.knowledge import index_file, delete_file_chunks
+                        
+                        # Delete old chunks first (in case of re-indexing)
+                        # This prevents duplicate ID errors
+                        print(f"Removing old chunks for file: {file_instance.filename}")
+                        delete_file_chunks(str(file_instance.uuid))
+                        
+                        # Index the file
+                        user_id = file_instance.document.user.id
+                        num_chunks = index_file(
+                            file_path=file_instance.file.path,
+                            file_id=str(file_instance.uuid),
+                            filename=file_instance.filename,
+                            user_id=user_id
+                        )
+                        print(f"✓ Indexed {num_chunks} chunks in ChromaDB")
+                    except Exception as index_error:
+                        print(f"✗ Error indexing in ChromaDB: {str(index_error)}")
+                        # Don't fail the whole process if indexing fails
+                
+                # Mark as processed
                 file_instance.is_processing = False
                 file_instance.save()
                 

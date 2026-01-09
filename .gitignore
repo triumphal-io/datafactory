@@ -95,3 +95,4 @@ dist-ssr
 *.sw?
 /backend/storage/*
 NOTES.md
+/backend/experiments/*
