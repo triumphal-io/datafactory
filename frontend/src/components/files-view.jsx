@@ -284,6 +284,64 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         setOpenDropdownIndex(null);
     }, []);
 
+    // Handle view file in new window
+    const handleViewFile = useCallback((file) => {
+        if (!file.content) {
+            showToast('No content available', 'error');
+            return;
+        }
+        
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+            const htmlContent = convertMarkdownToHtml(file.content);
+            newWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${file.name}</title>
+                    <meta charset="UTF-8">
+                    <style>
+                        body {
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                            margin: 0;
+                            padding: 20px;
+                            line-height: 1.6;
+                            color: #333;
+                            background: #fff;
+                        }
+                        @media (prefers-color-scheme: dark) {
+                            body {
+                                background: #1a1a1a;
+                                color: #e0e0e0;
+                            }
+                        }
+                        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #f2f2f2; }
+                        @media (prefers-color-scheme: dark) {
+                            th, td { border-color: #444; }
+                            th { background-color: #2a2a2a; }
+                        }
+                        h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; }
+                        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+                        @media (prefers-color-scheme: dark) {
+                            code { background: #2a2a2a; }
+                        }
+                        pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; }
+                        @media (prefers-color-scheme: dark) {
+                            pre { background: #2a2a2a; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${htmlContent}
+                </body>
+                </html>
+            `);
+            newWindow.document.close();
+        }
+    }, []);
+
     // Handle confirm file rename
     const handleConfirmFileRename = useCallback(async () => {
         if (!renameValue.trim()) {
@@ -757,6 +815,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                                         // borderRadius: '6px',
                                         cursor: 'pointer'
                                     }}
+                                    onClick={() => handleViewFile(file)}
                                 >
                                     <div className="flex flex-column wdth-100">
                                         {file.is_processing ? (
