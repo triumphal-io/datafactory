@@ -410,11 +410,11 @@ def api_files(request, did, action):
         if folder_id:
             # Filter files by folder - only show files in this folder
             files = File.objects.filter(document__uuid=did, folder__uuid=folder_id)
-            print(f"📂 Loading files for folder {folder_id}: {files.count()} files")
+            # print(f"📂 Loading files for folder {folder_id}: {files.count()} files")
         else:
             # Get files not in any folder - exclude files that are in folders
             files = File.objects.filter(document__uuid=did, folder__isnull=True)
-            print(f"📁 Loading root files (no folder): {files.count()} files")
+            # print(f"📁 Loading root files (no folder): {files.count()} files")
         
         response['files'] = []
         for file in files:

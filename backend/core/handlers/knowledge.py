@@ -10,17 +10,38 @@ CHROMA_DB_PATH = os.path.join(settings.BASE_DIR, 'storage', 'chromadb')
 Path(CHROMA_DB_PATH).mkdir(parents=True, exist_ok=True)
 chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 
-# Initialize OpenAI embedding function
-openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    model_name="text-embedding-3-small"
-)
+
+def get_embedding_function():
+    """
+    Get the configured embedding function based on settings.
+    
+    Returns:
+        EmbeddingFunction: Configured embedding function for ChromaDB
+    """
+    embedding_type = getattr(settings, 'EMBEDDING_MODEL_TYPE', 'default')
+    
+    if embedding_type == 'openai':
+        model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
+        return embedding_functions.OpenAIEmbeddingFunction(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            model_name=model_name
+        )
+    elif embedding_type == 'sentence-transformers':
+        model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'all-MiniLM-L6-v2')
+        return embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=model_name
+        )
+    elif embedding_type == 'default':
+        # Use ChromaDB's default embedding function
+        return embedding_functions.DefaultEmbeddingFunction()
+    else:
+        raise ValueError(f"Unsupported embedding model type: {embedding_type}")
 
 
 def get_or_create_collection(collection_name="file_chunks"):
     """
     Get or create a ChromaDB collection for storing file chunks.
-    Uses OpenAI's text-embedding-3-small model for embeddings.
+    Uses the embedding model configured in settings.
     
     Args:
         collection_name (str): Name of the collection
@@ -28,23 +49,31 @@ def get_or_create_collection(collection_name="file_chunks"):
     Returns:
         Collection: ChromaDB collection instance
     """
+    embedding_func = get_embedding_function()
+    embedding_type = getattr(settings, 'EMBEDDING_MODEL_TYPE', 'default')
+    embedding_model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'default')
+    
     try:
         collection = chroma_client.get_collection(
             name=collection_name,
-            embedding_function=openai_ef
+            embedding_function=embedding_func
         )
     except ValueError as e:
         # If collection exists with different embedding function, delete and recreate
         if "already exists" in str(e).lower():
-            print(f"⚠ Collection exists with different embedding function. Recreating with OpenAI embeddings...")
+            print(f"⚠ Collection exists with different embedding function. Recreating with {embedding_type} embeddings...")
             try:
                 chroma_client.delete_collection(name=collection_name)
             except:
                 pass
             collection = chroma_client.create_collection(
                 name=collection_name,
-                embedding_function=openai_ef,
-                metadata={"description": "File chunks for RAG", "embedding_model": "text-embedding-3-small"}
+                embedding_function=embedding_func,
+                metadata={
+                    "description": "File chunks for RAG",
+                    "embedding_type": embedding_type,
+                    "embedding_model": embedding_model_name
+                }
             )
         else:
             raise
@@ -52,8 +81,12 @@ def get_or_create_collection(collection_name="file_chunks"):
         # Collection doesn't exist, create it
         collection = chroma_client.create_collection(
             name=collection_name,
-            embedding_function=openai_ef,
-            metadata={"description": "File chunks for RAG", "embedding_model": "text-embedding-3-small"}
+            embedding_function=embedding_func,
+            metadata={
+                "description": "File chunks for RAG",
+                "embedding_type": embedding_type,
+                "embedding_model": embedding_model_name
+            }
         )
     return collection
 
@@ -79,6 +112,11 @@ def index_csv_file(file_path, file_id, filename, user_id, folder_name=None):
         chunks = []
         metadatas = []
         ids = []
+        
+        # Batch size to avoid exceeding token limits (100 rows per batch)
+        BATCH_SIZE = 100
+        collection = get_or_create_collection()
+        total_chunks = 0
         
         for idx, row in df.iterrows():
             # Create text chunk for this row
@@ -109,18 +147,30 @@ def index_csv_file(file_path, file_id, filename, user_id, folder_name=None):
             
             metadatas.append(metadata)
             ids.append(f"{file_id}_row_{idx}")
+            
+            # Add batch to ChromaDB when batch size is reached
+            if len(chunks) >= BATCH_SIZE:
+                collection.add(
+                    documents=chunks,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+                total_chunks += len(chunks)
+                chunks = []
+                metadatas = []
+                ids = []
         
-        # Store in ChromaDB
-        collection = get_or_create_collection()
+        # Add remaining chunks
         if chunks:
             collection.add(
                 documents=chunks,
                 metadatas=metadatas,
                 ids=ids
             )
+            total_chunks += len(chunks)
         
-        print(f"✓ Indexed {len(chunks)} chunks from CSV file: {filename}")
-        return len(chunks)
+        print(f"✓ Indexed {total_chunks} chunks from CSV file: {filename}")
+        return total_chunks
         
     except Exception as e:
         print(f"✗ Error indexing CSV file {filename}: {str(e)}")
@@ -149,6 +199,10 @@ def index_xlsx_file(file_path, file_id, filename, user_id, folder_name=None):
         all_chunks = []
         all_metadatas = []
         all_ids = []
+        
+        # Batch size to avoid exceeding token limits (100 rows per batch)
+        BATCH_SIZE = 100
+        collection = get_or_create_collection()
         
         for sheet_name in xlsx_file.sheet_names:
             df = pd.read_excel(file_path, sheet_name=sheet_name)
@@ -187,16 +241,27 @@ def index_xlsx_file(file_path, file_id, filename, user_id, folder_name=None):
                 
                 all_metadatas.append(metadata)
                 all_ids.append(f"{file_id}_sheet_{sheet_name}_row_{idx}")
-                total_chunks += 1
+                
+                # Add batch to ChromaDB when batch size is reached
+                if len(all_chunks) >= BATCH_SIZE:
+                    collection.add(
+                        documents=all_chunks,
+                        metadatas=all_metadatas,
+                        ids=all_ids
+                    )
+                    total_chunks += len(all_chunks)
+                    all_chunks = []
+                    all_metadatas = []
+                    all_ids = []
         
-        # Store all chunks in ChromaDB
-        collection = get_or_create_collection()
+        # Add remaining chunks
         if all_chunks:
             collection.add(
                 documents=all_chunks,
                 metadatas=all_metadatas,
                 ids=all_ids
             )
+            total_chunks += len(all_chunks)
         
         print(f"✓ Indexed {total_chunks} chunks from XLSX file: {filename}")
         return total_chunks
