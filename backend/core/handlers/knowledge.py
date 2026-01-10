@@ -492,6 +492,178 @@ def index_docx_file(file_path, file_id, filename, user_id, folder_name=None):
         raise
 
 
+def index_txt_file(file_path, file_id, filename, user_id, folder_name=None):
+    """
+    Index a TXT file by creating chunks for paragraphs (split by double newlines).
+    
+    Args:
+        file_path (str): Path to the TXT file
+        file_id (str): UUID of the file in database
+        filename (str): Original filename
+        user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
+        
+    Returns:
+        int: Number of chunks created
+    """
+    try:
+        chunks = []
+        metadatas = []
+        ids = []
+        
+        collection = get_or_create_collection()
+        total_chunks = 0
+        
+        with open(file_path, 'r', encoding='utf-8') as txt_file:
+            content = txt_file.read()
+            
+            # Split by paragraphs (double newlines or single newlines for simpler files)
+            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+            
+            # If no double newlines found, split by single newlines and group every 5 lines
+            if len(paragraphs) <= 1:
+                lines = [line.strip() for line in content.split('\n') if line.strip()]
+                paragraphs = []
+                for i in range(0, len(lines), 5):
+                    paragraphs.append('\n'.join(lines[i:i+5]))
+            
+            for chunk_num, paragraph in enumerate(paragraphs):
+                if not paragraph:
+                    continue
+                
+                chunks.append(paragraph)
+                
+                metadata = {
+                    'chunk_num': chunk_num,
+                    'source': filename,
+                    'file_id': str(file_id),
+                    'user_id': str(user_id),
+                    'file_type': 'txt'
+                }
+                
+                if folder_name:
+                    metadata['folder_name'] = folder_name
+                
+                metadatas.append(metadata)
+                ids.append(f"{file_id}_chunk_{chunk_num}")
+        
+        # Add all chunks to ChromaDB
+        if chunks:
+            collection.add(
+                documents=chunks,
+                metadatas=metadatas,
+                ids=ids
+            )
+            total_chunks = len(chunks)
+        
+        print(f"✓ Indexed {total_chunks} chunks from TXT file: {filename}")
+        return total_chunks
+        
+    except Exception as e:
+        print(f"✗ Error indexing TXT file {filename}: {str(e)}")
+        raise
+
+
+def index_md_file(file_path, file_id, filename, user_id, folder_name=None):
+    """
+    Index a Markdown file by creating chunks for sections (split by headings).
+    
+    Args:
+        file_path (str): Path to the MD file
+        file_id (str): UUID of the file in database
+        filename (str): Original filename
+        user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
+        
+    Returns:
+        int: Number of chunks created
+    """
+    try:
+        chunks = []
+        metadatas = []
+        ids = []
+        
+        collection = get_or_create_collection()
+        total_chunks = 0
+        
+        with open(file_path, 'r', encoding='utf-8') as md_file:
+            content = md_file.read()
+            lines = content.split('\n')
+            
+            current_section = []
+            current_heading = None
+            chunk_num = 0
+            
+            for line in lines:
+                # Check if line is a heading
+                if line.strip().startswith('#'):
+                    # Save previous section if it exists
+                    if current_section:
+                        chunk_text = '\n'.join(current_section)
+                        chunks.append(chunk_text)
+                        
+                        metadata = {
+                            'chunk_num': chunk_num,
+                            'source': filename,
+                            'file_id': str(file_id),
+                            'user_id': str(user_id),
+                            'file_type': 'md'
+                        }
+                        
+                        if current_heading:
+                            metadata['heading'] = current_heading
+                        if folder_name:
+                            metadata['folder_name'] = folder_name
+                        
+                        metadatas.append(metadata)
+                        ids.append(f"{file_id}_chunk_{chunk_num}")
+                        chunk_num += 1
+                        current_section = []
+                    
+                    # Start new section with heading
+                    current_heading = line.strip().lstrip('#').strip()
+                    current_section.append(line)
+                else:
+                    current_section.append(line)
+            
+            # Save last section
+            if current_section:
+                chunk_text = '\n'.join(current_section)
+                chunks.append(chunk_text)
+                
+                metadata = {
+                    'chunk_num': chunk_num,
+                    'source': filename,
+                    'file_id': str(file_id),
+                    'user_id': str(user_id),
+                    'file_type': 'md'
+                }
+                
+                if current_heading:
+                    metadata['heading'] = current_heading
+                if folder_name:
+                    metadata['folder_name'] = folder_name
+                
+                metadatas.append(metadata)
+                ids.append(f"{file_id}_chunk_{chunk_num}")
+        
+        # Add all chunks to ChromaDB
+        if chunks:
+            collection.add(
+                documents=chunks,
+                metadatas=metadatas,
+                ids=ids
+            )
+            total_chunks = len(chunks)
+        
+        print(f"✓ Indexed {total_chunks} chunks from MD file: {filename}")
+        return total_chunks
+        
+    except Exception as e:
+        print(f"✗ Error indexing MD file {filename}: {str(e)}")
+        raise
+
+
 def index_file(file_path, file_id, filename, user_id, folder_name=None):
     """
     Index a file in ChromaDB based on its type.
@@ -516,6 +688,10 @@ def index_file(file_path, file_id, filename, user_id, folder_name=None):
         return index_pdf_file(file_path, file_id, filename, user_id, folder_name)
     elif file_extension in ['.docx', '.doc']:
         return index_docx_file(file_path, file_id, filename, user_id, folder_name)
+    elif file_extension == '.txt':
+        return index_txt_file(file_path, file_id, filename, user_id, folder_name)
+    elif file_extension == '.md':
+        return index_md_file(file_path, file_id, filename, user_id, folder_name)
     else:
         raise ValueError(f"Unsupported file type for indexing: {file_extension}")
 

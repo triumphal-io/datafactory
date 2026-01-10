@@ -42,6 +42,10 @@ class FileExtractor:
                 return self.pdf_to_md()
             elif self.file_extension in ['.docx', '.doc']:
                 return self.docx_to_md()
+            elif self.file_extension == '.txt':
+                return self.txt_to_md()
+            elif self.file_extension == '.md':
+                return self.md_to_md()
             # Future file types can be added here:
             # elif self.file_extension in ['.ppt', '.pptx']:
             #     return self.ppt_to_md()
@@ -251,6 +255,46 @@ class FileExtractor:
         except Exception as e:
             raise Exception(f"DOCX extraction failed: {str(e)}")
     
+    def txt_to_md(self):
+        """
+        Convert TXT file to markdown format.
+        Simply reads the text content and returns it.
+        
+        Returns:
+            Markdown formatted string representation of the TXT file
+        """
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as txt_file:
+                content = txt_file.read()
+                
+                if not content.strip():
+                    return "*Empty text file*"
+                
+                return content.strip()
+                
+        except Exception as e:
+            raise Exception(f"TXT extraction failed: {str(e)}")
+    
+    def md_to_md(self):
+        """
+        Convert MD (Markdown) file to markdown format.
+        Simply reads the markdown content and returns it as-is.
+        
+        Returns:
+            Markdown content from the file
+        """
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as md_file:
+                content = md_file.read()
+                
+                if not content.strip():
+                    return "*Empty markdown file*"
+                
+                return content.strip()
+                
+        except Exception as e:
+            raise Exception(f"MD extraction failed: {str(e)}")
+    
     # Placeholder methods for future file type support
     # def ppt_to_md(self):
     #     """Convert PowerPoint file to markdown format."""
@@ -298,9 +342,9 @@ def process_pending_files():
                 # Update database with extracted content
                 file_instance.extracted_content = content
                 
-                # Index file in ChromaDB for RAG (CSV, XLSX, PDF, and DOCX)
+                # Index file in ChromaDB for RAG (CSV, XLSX, PDF, DOCX, TXT, and MD)
                 file_extension = os.path.splitext(file_instance.filename)[1].lower()
-                if file_extension in ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc']:
+                if file_extension in ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.txt', '.md']:
                     try:
                         from core.handlers.knowledge import index_file, delete_file_chunks
                         
