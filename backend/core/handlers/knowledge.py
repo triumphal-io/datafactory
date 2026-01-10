@@ -664,6 +664,98 @@ def index_md_file(file_path, file_id, filename, user_id, folder_name=None):
         raise
 
 
+def index_pptx_file(file_path, file_id, filename, user_id, folder_name=None):
+    """
+    Index a PPTX file by creating chunks for each slide.
+    
+    Args:
+        file_path (str): Path to the PPTX file
+        file_id (str): UUID of the file in database
+        filename (str): Original filename
+        user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
+        
+    Returns:
+        int: Number of chunks created
+    """
+    try:
+        from pptx import Presentation
+        
+        chunks = []
+        metadatas = []
+        ids = []
+        
+        collection = get_or_create_collection()
+        total_chunks = 0
+        
+        prs = Presentation(file_path)
+        
+        for slide_num, slide in enumerate(prs.slides, start=1):
+            slide_texts = []
+            slide_title = None
+            
+            # Extract text from all shapes
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text.strip():
+                    text = shape.text.strip()
+                    
+                    # Capture title
+                    if hasattr(shape, "shape_type") and shape == slide.shapes.title:
+                        slide_title = text
+                    
+                    slide_texts.append(text)
+                
+                # Extract text from tables
+                if shape.has_table:
+                    table = shape.table
+                    for row in table.rows:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        slide_texts.append(" | ".join(cells))
+            
+            # Extract notes if present
+            if slide.has_notes_slide:
+                notes_text = slide.notes_slide.notes_text_frame.text.strip()
+                if notes_text:
+                    slide_texts.append(f"Notes: {notes_text}")
+            
+            # Create chunk if slide has content
+            if slide_texts:
+                chunk = f"Slide {slide_num}: " + " ".join(slide_texts)
+                chunks.append(chunk)
+                
+                metadata = {
+                    'slide_num': slide_num,
+                    'source': filename,
+                    'file_id': str(file_id),
+                    'user_id': str(user_id),
+                    'file_type': 'pptx'
+                }
+                
+                if slide_title:
+                    metadata['slide_title'] = slide_title
+                if folder_name:
+                    metadata['folder_name'] = folder_name
+                
+                metadatas.append(metadata)
+                ids.append(f"{file_id}_slide_{slide_num}")
+        
+        # Add all chunks to ChromaDB
+        if chunks:
+            collection.add(
+                documents=chunks,
+                metadatas=metadatas,
+                ids=ids
+            )
+            total_chunks = len(chunks)
+        
+        print(f"✓ Indexed {total_chunks} chunks from PPTX file: {filename}")
+        return total_chunks
+        
+    except Exception as e:
+        print(f"✗ Error indexing PPTX file {filename}: {str(e)}")
+        raise
+
+
 def index_file(file_path, file_id, filename, user_id, folder_name=None):
     """
     Index a file in ChromaDB based on its type.
@@ -692,6 +784,8 @@ def index_file(file_path, file_id, filename, user_id, folder_name=None):
         return index_txt_file(file_path, file_id, filename, user_id, folder_name)
     elif file_extension == '.md':
         return index_md_file(file_path, file_id, filename, user_id, folder_name)
+    elif file_extension in ['.pptx', '.ppt']:
+        return index_pptx_file(file_path, file_id, filename, user_id, folder_name)
     else:
         raise ValueError(f"Unsupported file type for indexing: {file_extension}")
 

@@ -451,14 +451,14 @@ def api_files(request, did, action):
             if folder:
                 folder_name = folder.name
         
-        # Validate file types (CSV, XLSX, PDF, DOCX, TXT, and MD allowed)
-        allowed_extensions = ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.txt', '.md']
+        # Validate file types (CSV, XLSX, PDF, DOCX, TXT, MD, and PPTX allowed)
+        allowed_extensions = ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.txt', '.md', '.pptx', '.ppt']
         for uploaded_file in uploaded_files:
             file_ext = os.path.splitext(uploaded_file.name)[1].lower()
             if file_ext not in allowed_extensions:
                 return JsonResponse({
                     'status': 'error', 
-                    'message': f'Invalid file type: {uploaded_file.name}. Only CSV, XLSX, XLS, PDF, DOCX, DOC, TXT, and MD files are allowed.'
+                    'message': f'Invalid file type: {uploaded_file.name}. Only CSV, XLSX, XLS, PDF, DOCX, DOC, TXT, MD, PPTX, and PPT files are allowed.'
                 }, status=400)
         
         uploaded_file_ids = []

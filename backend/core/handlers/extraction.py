@@ -46,9 +46,9 @@ class FileExtractor:
                 return self.txt_to_md()
             elif self.file_extension == '.md':
                 return self.md_to_md()
+            elif self.file_extension in ['.pptx', '.ppt']:
+                return self.pptx_to_md()
             # Future file types can be added here:
-            # elif self.file_extension in ['.ppt', '.pptx']:
-            #     return self.ppt_to_md()
             # elif self.file_extension in ['.png', '.jpg', '.jpeg']:
             #     return self.image_to_md()
             else:
@@ -295,11 +295,72 @@ class FileExtractor:
         except Exception as e:
             raise Exception(f"MD extraction failed: {str(e)}")
     
-    # Placeholder methods for future file type support
-    # def ppt_to_md(self):
-    #     """Convert PowerPoint file to markdown format."""
-    #     pass
+    def pptx_to_md(self):
+        """
+        Convert PPTX file to markdown format.
+        Extracts text from slides, including titles, content, and notes.
+        
+        Returns:
+            Markdown formatted string representation of the PPTX
+        """
+        try:
+            from pptx import Presentation
+            
+            prs = Presentation(self.file_path)
+            markdown_sections = []
+            
+            for slide_num, slide in enumerate(prs.slides, start=1):
+                slide_content = []
+                
+                # Add slide header
+                slide_content.append(f"## Slide {slide_num}\n")
+                
+                # Extract text from all shapes in the slide
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        text = shape.text.strip()
+                        
+                        # Check if this is a title shape
+                        if hasattr(shape, "shape_type") and shape == slide.shapes.title:
+                            slide_content.append(f"### {text}\n")
+                        else:
+                            # Regular text content
+                            slide_content.append(text + "\n")
+                    
+                    # Extract text from tables
+                    if shape.has_table:
+                        table = shape.table
+                        table_rows = []
+                        
+                        for row in table.rows:
+                            cells = [cell.text.strip().replace('|', '\\|') for cell in row.cells]
+                            table_rows.append('| ' + ' | '.join(cells) + ' |')
+                        
+                        if table_rows:
+                            # Add separator after first row (header)
+                            if len(table_rows) > 1:
+                                table_rows.insert(1, '| ' + ' | '.join(['---'] * len(table.columns)) + ' |')
+                            slide_content.append('\n'.join(table_rows) + '\n')
+                
+                # Extract notes if present
+                if slide.has_notes_slide:
+                    notes_text = slide.notes_slide.notes_text_frame.text.strip()
+                    if notes_text:
+                        slide_content.append(f"\n**Notes:** {notes_text}\n")
+                
+                # Only add slide if it has content
+                if len(slide_content) > 1:  # More than just the slide header
+                    markdown_sections.append('\n'.join(slide_content))
+            
+            if not markdown_sections:
+                return "*Empty or unreadable PowerPoint presentation*"
+            
+            return "\n\n".join(markdown_sections)
+            
+        except Exception as e:
+            raise Exception(f"PPTX extraction failed: {str(e)}")
     
+    # Placeholder methods for future file type support
     # def image_to_md(self):
     #     """Convert image file to markdown format (with OCR or description)."""
     #     pass
@@ -342,9 +403,9 @@ def process_pending_files():
                 # Update database with extracted content
                 file_instance.extracted_content = content
                 
-                # Index file in ChromaDB for RAG (CSV, XLSX, PDF, DOCX, TXT, and MD)
+                # Index file in ChromaDB for RAG (CSV, XLSX, PDF, DOCX, TXT, MD, and PPTX)
                 file_extension = os.path.splitext(file_instance.filename)[1].lower()
-                if file_extension in ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.txt', '.md']:
+                if file_extension in ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.txt', '.md', '.pptx', '.ppt']:
                     try:
                         from core.handlers.knowledge import index_file, delete_file_chunks
                         
