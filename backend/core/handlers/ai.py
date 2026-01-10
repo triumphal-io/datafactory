@@ -17,6 +17,55 @@ load_dotenv(dotenv_path=env_path)
 
 # os.environ['LITELLM_LOG'] = 'DEBUG'
 
+# Conversation length limits to prevent token overflow and control costs
+MAX_CONVERSATION_MESSAGES = 30  # Maximum messages to keep (excluding system message)
+# This allows for ~10-15 conversation turns while staying within token limits
+# and keeping API costs reasonable
+
+# Tool calling limits to prevent runaway costs and infinite loops
+MAX_TOOL_ITERATIONS = 5  # Maximum number of tool calling cycles per request
+# Prevents AI from calling tools indefinitely (e.g., querying 1000 files in a loop)
+MAX_TOOLS_PER_TURN = 10  # Maximum number of tools that can be called in one iteration
+# Prevents excessive parallel tool calls that could cause rate limits or high costs
+
+AI_MAX_TOKENS = 2048  # Max tokens for AI responses (adjust based on model capabilities)
+
+def trim_conversation(conversation, max_messages=MAX_CONVERSATION_MESSAGES):
+    """
+    Trim conversation history to stay within token limits and control costs.
+    
+    Keeps the most recent messages while always preserving the system message.
+    This prevents context window overflow and excessive API costs.
+    
+    Args:
+        conversation (list): List of message dicts with 'role' and 'content'
+        max_messages (int): Maximum number of messages to keep (excluding system message)
+    
+    Returns:
+        list: Trimmed conversation with system message + recent messages
+    """
+    if not conversation:
+        return conversation
+    
+    # Find and preserve system message(s) at the start
+    system_messages = []
+    other_messages = []
+    
+    for msg in conversation:
+        if msg.get('role') == 'system':
+            system_messages.append(msg)
+        else:
+            other_messages.append(msg)
+    
+    # If total non-system messages exceed limit, keep only the most recent ones
+    if len(other_messages) > max_messages:
+        print(f"Trimming conversation: {len(other_messages)} messages -> {max_messages} messages")
+        other_messages = other_messages[-max_messages:]
+    
+    # Return system messages + trimmed conversation
+    return system_messages + other_messages
+
+
 def get_ai_tools():
     """
     Get standard AI tools for web search and scraping.
@@ -554,18 +603,50 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                     msg['content'][-1]['cache_control'] = {"type": "ephemeral"}
                 break  # Only cache the first system message
     
+    # Trim conversation to prevent token overflow and control costs
+    # This keeps the most recent messages while preserving system messages
+    conversation = trim_conversation(conversation, max_messages=MAX_CONVERSATION_MESSAGES)
+    
     # Prepare completion parameters
     completion_params = {
         "model": model,
         "messages": conversation,
         "tools": tools,
         "tool_choice": "auto",  # Let model decide when to use tools
+        # "max_tokens": AI_MAX_TOKENS,
     }
     
     # Main conversation loop - continues until AI decides no more tool calls needed
+    # Safety: Limit iterations to prevent infinite tool calling loops
+    tool_iteration_count = 0
+    
     while True:
         try:
-            print("Generating AI response...")
+            # Check if we've exceeded maximum tool iterations
+            if tool_iteration_count >= MAX_TOOL_ITERATIONS:
+                print(f"WARNING: Reached maximum tool iterations ({MAX_TOOL_ITERATIONS}). Stopping to prevent runaway costs.")
+                # Force a final response from the AI
+                error_message = f"I've reached the maximum number of tool calls ({MAX_TOOL_ITERATIONS} iterations) to prevent excessive processing. Please refine your request or break it into smaller tasks."
+                
+                conversation.append({
+                    "role": "assistant",
+                    "content": error_message
+                })
+                
+                if conversation_obj:
+                    conversation_obj.conversations = conversation
+                    conversation_obj.save()
+                
+                if include_sheet_tools:
+                    return {
+                        'type': 'message',
+                        'content': error_message,
+                        'conversation_id': str(conversation_obj.uuid) if conversation_obj else None
+                    }
+                else:
+                    return error_message
+            
+            print(f"Generating AI response... (iteration {tool_iteration_count + 1}/{MAX_TOOL_ITERATIONS})")
             print("Current conversation:")
             print(conversation)
             # Call LiteLLM with full conversation history and available tools
@@ -577,6 +658,13 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             
             # Process tool calls if AI decided to use tools
             if tool_calls:
+                # Safety check: Limit number of tools per turn
+                if len(tool_calls) > MAX_TOOLS_PER_TURN:
+                    print(f"WARNING: AI requested {len(tool_calls)} tools, limiting to {MAX_TOOLS_PER_TURN}")
+                    tool_calls = tool_calls[:MAX_TOOLS_PER_TURN]
+                
+                # Increment iteration counter
+                tool_iteration_count += 1
                 # Add assistant's response to conversation history
                 # This preserves the tool calling decision for context
                 assistant_msg = {

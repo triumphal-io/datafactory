@@ -120,7 +120,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     const handleAssistantResponse = (data) => {
         if (data.type === 'message') {
             // Regular text message from assistant
-            setMessages(prev => [...prev, { 
+            setMessages(prev => [...prev.filter(m => m.type !== 'working'), { 
                 type: 'assistant', 
                 content: data.content 
             }]);
@@ -135,7 +135,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 status: 'pending'
             }));
             
-            setMessages(prev => [...prev, ...toolMessages]);
+            setMessages(prev => [...prev.filter(m => m.type !== 'working'), ...toolMessages]);
             
             // Update conversation ID if provided
             if (data.conversation_id) {
@@ -174,7 +174,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             const fileList = attachments.map(f => f.name).join(', ');
             userMessageContent = `${message}\n\n📎 Attached: ${fileList}`;
         }
-        setMessages(prev => [...prev, { type: 'user', content: userMessageContent }]);
+        setMessages(prev => [...prev, { type: 'user', content: userMessageContent }, { type: 'working' }]);
         setInputValue('');
         setIsProcessing(true);
 
@@ -245,7 +245,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             }
         } catch (error) {
             console.error('Error sending message:', error);
-            setMessages(prev => [...prev, { 
+            setMessages(prev => [...prev.filter(m => m.type !== 'working'), { 
                 type: 'error', 
                 content: 'Failed to send message. Please try again.' 
             }]);
@@ -412,6 +412,18 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
 
     // Update renderMessage to use formatArgs consistently
     const renderMessage = (msg, index) => {
+        if (msg.type === 'working') {
+            // Render working state exactly like a pending tool call
+            return (
+                <div key={index} className="message message-tool text--micro">
+                    <div className='flex flex-row-center' style={{padding: '6px 0', }}>
+                        <img src={Loader} alt="Loading" height="12" style={{marginRight: '6px', opacity: 0.5}} />
+                        <p className='text--micro'>Working...</p>
+                    </div>
+                </div>
+            );
+        }
+        
         if (msg.type === 'tool_call') {
             // Render tool call as a special message
             const toolDisplayName = msg.toolName.replace('tool_', '').replace(/_/g, ' ');
