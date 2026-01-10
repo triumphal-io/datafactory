@@ -574,6 +574,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             ref={fileInputRef}
                             type="file"
                             multiple
+                            accept=".csv,.xlsx,.xls,.pdf,.docx,.doc"
                             style={{ display: 'none' }}
                             onChange={handleFileSelect}
                         />

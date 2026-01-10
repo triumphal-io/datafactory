@@ -237,7 +237,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
-        input.accept = '.csv,.xlsx,.xls';
+        input.accept = '.csv,.xlsx,.xls,.pdf,.docx,.doc';
         input.onchange = async (e) => {
             const files = Array.from(e.target.files);
             if (files.length > 0) {

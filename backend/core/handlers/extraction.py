@@ -4,6 +4,8 @@ import threading
 from django.conf import settings
 from core.models import File
 from openpyxl import load_workbook
+import PyPDF2
+from docx import Document as DocxDocument
 
 
 class FileExtractor:
@@ -36,9 +38,11 @@ class FileExtractor:
                 return self.csv_to_md()
             elif self.file_extension in ['.xlsx', '.xls']:
                 return self.xlsx_to_md()
+            elif self.file_extension == '.pdf':
+                return self.pdf_to_md()
+            elif self.file_extension in ['.docx', '.doc']:
+                return self.docx_to_md()
             # Future file types can be added here:
-            # elif self.file_extension == '.pdf':
-            #     return self.pdf_to_md()
             # elif self.file_extension in ['.ppt', '.pptx']:
             #     return self.ppt_to_md()
             # elif self.file_extension in ['.png', '.jpg', '.jpeg']:
@@ -157,11 +161,97 @@ class FileExtractor:
         except Exception as e:
             raise Exception(f"XLSX extraction failed: {str(e)}")
     
-    # Placeholder methods for future file type support
-    # def pdf_to_md(self):
-    #     """Convert PDF file to markdown format."""
-    #     pass
+    def pdf_to_md(self):
+        """
+        Convert PDF file to markdown format.
+        Extracts text content from all pages.
+        
+        Returns:
+            Markdown formatted string representation of the PDF
+        """
+        try:
+            markdown_sections = []
+            
+            with open(self.file_path, 'rb') as pdf_file:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                num_pages = len(pdf_reader.pages)
+                
+                for page_num in range(num_pages):
+                    page = pdf_reader.pages[page_num]
+                    text = page.extract_text()
+                    
+                    if text.strip():
+                        # Add page header for multi-page PDFs
+                        if num_pages > 1:
+                            markdown_sections.append(f"## Page {page_num + 1}\n")
+                        markdown_sections.append(text.strip())
+                
+                if not markdown_sections:
+                    return "*Empty or unreadable PDF*"
+                
+                return "\n\n".join(markdown_sections)
+                
+        except Exception as e:
+            raise Exception(f"PDF extraction failed: {str(e)}")
     
+    def docx_to_md(self):
+        """
+        Convert DOCX file to markdown format.
+        Preserves headings, paragraphs, and basic formatting.
+        
+        Returns:
+            Markdown formatted string representation of the DOCX
+        """
+        try:
+            doc = DocxDocument(self.file_path)
+            markdown_lines = []
+            
+            for paragraph in doc.paragraphs:
+                text = paragraph.text.strip()
+                if not text:
+                    continue
+                
+                # Convert heading styles to markdown headings
+                if paragraph.style and paragraph.style.name and paragraph.style.name.startswith('Heading'):
+                    try:
+                        level = int(paragraph.style.name.replace('Heading ', ''))
+                        markdown_lines.append(f"{'#' * level} {text}")
+                    except (ValueError, AttributeError):
+                        markdown_lines.append(text)
+                else:
+                    markdown_lines.append(text)
+                
+                markdown_lines.append("")  # Add blank line between paragraphs
+            
+            # Handle tables
+            if doc.tables:
+                for table_num, table in enumerate(doc.tables):
+                    if markdown_lines and markdown_lines[-1] != "":
+                        markdown_lines.append("")
+                    
+                    if len(doc.tables) > 1:
+                        markdown_lines.append(f"### Table {table_num + 1}\n")
+                    
+                    # Process table rows
+                    for row_idx, row in enumerate(table.rows):
+                        cells = [cell.text.strip().replace('\n', ' ').replace('|', '\\|') for cell in row.cells]
+                        markdown_lines.append('| ' + ' | '.join(cells) + ' |')
+                        
+                        # Add separator after header row
+                        if row_idx == 0:
+                            markdown_lines.append('| ' + ' | '.join(['---'] * len(cells)) + ' |')
+                    
+                    markdown_lines.append("")  # Add blank line after table
+            
+            if not markdown_lines or all(not line for line in markdown_lines):
+                return "*Empty document*"
+            
+            return "\n".join(markdown_lines).strip()
+            
+        except Exception as e:
+            raise Exception(f"DOCX extraction failed: {str(e)}")
+    
+    # Placeholder methods for future file type support
     # def ppt_to_md(self):
     #     """Convert PowerPoint file to markdown format."""
     #     pass
@@ -208,9 +298,9 @@ def process_pending_files():
                 # Update database with extracted content
                 file_instance.extracted_content = content
                 
-                # Index file in ChromaDB for RAG (CSV and XLSX only)
+                # Index file in ChromaDB for RAG (CSV, XLSX, PDF, and DOCX)
                 file_extension = os.path.splitext(file_instance.filename)[1].lower()
-                if file_extension in ['.csv', '.xlsx', '.xls']:
+                if file_extension in ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc']:
                     try:
                         from core.handlers.knowledge import index_file, delete_file_chunks
                         

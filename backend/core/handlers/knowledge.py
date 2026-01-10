@@ -271,6 +271,227 @@ def index_xlsx_file(file_path, file_id, filename, user_id, folder_name=None):
         raise
 
 
+def index_pdf_file(file_path, file_id, filename, user_id, folder_name=None):
+    """
+    Index a PDF file by creating chunks for each page.
+    
+    Args:
+        file_path (str): Path to the PDF file
+        file_id (str): UUID of the file in database
+        filename (str): Original filename
+        user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
+        
+    Returns:
+        int: Number of chunks created
+    """
+    try:
+        import PyPDF2
+        
+        chunks = []
+        metadatas = []
+        ids = []
+        
+        collection = get_or_create_collection()
+        total_chunks = 0
+        
+        with open(file_path, 'rb') as pdf_file:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            num_pages = len(pdf_reader.pages)
+            
+            for page_num in range(num_pages):
+                page = pdf_reader.pages[page_num]
+                text = page.extract_text()
+                
+                if not text.strip():
+                    continue
+                
+                # Create text chunk for this page
+                chunk = f"Page {page_num + 1}: {text.strip()}"
+                chunks.append(chunk)
+                
+                # Create metadata for this chunk
+                metadata = {
+                    'page_num': page_num + 1,
+                    'source': filename,
+                    'file_id': str(file_id),
+                    'user_id': str(user_id),
+                    'file_type': 'pdf'
+                }
+                
+                # Add folder name if provided
+                if folder_name:
+                    metadata['folder_name'] = folder_name
+                
+                metadatas.append(metadata)
+                ids.append(f"{file_id}_page_{page_num}")
+        
+        # Add all chunks to ChromaDB
+        if chunks:
+            collection.add(
+                documents=chunks,
+                metadatas=metadatas,
+                ids=ids
+            )
+            total_chunks = len(chunks)
+        
+        print(f"✓ Indexed {total_chunks} chunks from PDF file: {filename}")
+        return total_chunks
+        
+    except Exception as e:
+        print(f"✗ Error indexing PDF file {filename}: {str(e)}")
+        raise
+
+
+def index_docx_file(file_path, file_id, filename, user_id, folder_name=None):
+    """
+    Index a DOCX file by creating chunks for paragraphs and tables.
+    
+    Args:
+        file_path (str): Path to the DOCX file
+        file_id (str): UUID of the file in database
+        filename (str): Original filename
+        user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
+        
+    Returns:
+        int: Number of chunks created
+    """
+    try:
+        from docx import Document as DocxDocument
+        
+        chunks = []
+        metadatas = []
+        ids = []
+        
+        collection = get_or_create_collection()
+        total_chunks = 0
+        chunk_num = 0
+        
+        doc = DocxDocument(file_path)
+        
+        # Index paragraphs
+        current_section = []
+        for para_idx, paragraph in enumerate(doc.paragraphs):
+            text = paragraph.text.strip()
+            if not text:
+                continue
+            
+            # If this is a heading, save previous section and start new one
+            if paragraph.style and paragraph.style.name and paragraph.style.name.startswith('Heading'):
+                # Save previous section if it exists
+                if current_section:
+                    chunk = "\n".join(current_section)
+                    chunks.append(chunk)
+                    
+                    metadata = {
+                        'chunk_num': chunk_num,
+                        'source': filename,
+                        'file_id': str(file_id),
+                        'user_id': str(user_id),
+                        'file_type': 'docx',
+                        'content_type': 'paragraph'
+                    }
+                    
+                    if folder_name:
+                        metadata['folder_name'] = folder_name
+                    
+                    metadatas.append(metadata)
+                    ids.append(f"{file_id}_chunk_{chunk_num}")
+                    chunk_num += 1
+                    current_section = []
+                
+                # Start new section with heading
+                current_section.append(text)
+            else:
+                current_section.append(text)
+            
+            # Create chunks of reasonable size (every 5 paragraphs)
+            if len(current_section) >= 5:
+                chunk = "\n".join(current_section)
+                chunks.append(chunk)
+                
+                metadata = {
+                    'chunk_num': chunk_num,
+                    'source': filename,
+                    'file_id': str(file_id),
+                    'user_id': str(user_id),
+                    'file_type': 'docx',
+                    'content_type': 'paragraph'
+                }
+                
+                if folder_name:
+                    metadata['folder_name'] = folder_name
+                
+                metadatas.append(metadata)
+                ids.append(f"{file_id}_chunk_{chunk_num}")
+                chunk_num += 1
+                current_section = []
+        
+        # Save any remaining section
+        if current_section:
+            chunk = "\n".join(current_section)
+            chunks.append(chunk)
+            
+            metadata = {
+                'chunk_num': chunk_num,
+                'source': filename,
+                'file_id': str(file_id),
+                'user_id': str(user_id),
+                'file_type': 'docx',
+                'content_type': 'paragraph'
+            }
+            
+            if folder_name:
+                metadata['folder_name'] = folder_name
+            
+            metadatas.append(metadata)
+            ids.append(f"{file_id}_chunk_{chunk_num}")
+            chunk_num += 1
+        
+        # Index tables separately
+        for table_idx, table in enumerate(doc.tables):
+            table_text = f"Table {table_idx + 1}:\n"
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                table_text += " | ".join(cells) + "\n"
+            
+            chunks.append(table_text)
+            
+            metadata = {
+                'table_num': table_idx + 1,
+                'chunk_num': chunk_num,
+                'source': filename,
+                'file_id': str(file_id),
+                'user_id': str(user_id),
+                'file_type': 'docx',
+                'content_type': 'table'
+            }
+            
+            if folder_name:
+                metadata['folder_name'] = folder_name
+            
+            metadatas.append(metadata)
+            ids.append(f"{file_id}_table_{table_idx}")
+            chunk_num += 1
+        
+        # Add all chunks to ChromaDB
+        if chunks:
+            collection.add(
+                documents=chunks,
+                metadatas=metadatas,
+                ids=ids
+            )
+            total_chunks = len(chunks)
+        
+        print(f"✓ Indexed {total_chunks} chunks from DOCX file: {filename}")
+        return total_chunks
+        
+    except Exception as e:
+        print(f"✗ Error indexing DOCX file {filename}: {str(e)}")
+        raise
+
+
 def index_file(file_path, file_id, filename, user_id, folder_name=None):
     """
     Index a file in ChromaDB based on its type.
@@ -291,6 +512,10 @@ def index_file(file_path, file_id, filename, user_id, folder_name=None):
         return index_csv_file(file_path, file_id, filename, user_id, folder_name)
     elif file_extension in ['.xlsx', '.xls']:
         return index_xlsx_file(file_path, file_id, filename, user_id, folder_name)
+    elif file_extension == '.pdf':
+        return index_pdf_file(file_path, file_id, filename, user_id, folder_name)
+    elif file_extension in ['.docx', '.doc']:
+        return index_docx_file(file_path, file_id, filename, user_id, folder_name)
     else:
         raise ValueError(f"Unsupported file type for indexing: {file_extension}")
 
