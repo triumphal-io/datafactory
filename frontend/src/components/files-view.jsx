@@ -447,8 +447,8 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             'txt': 'Text',
             'doc': 'Word',
             'docx': 'Word',
-            'ppt': 'PowerPoint',
-            'pptx': 'PowerPoint'
+            'ppt': 'PPT',
+            'pptx': 'PPT'
         };
         return types[ext] || 'File';
     }, []);
