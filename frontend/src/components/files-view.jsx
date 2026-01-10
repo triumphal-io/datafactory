@@ -718,22 +718,23 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                                         cursor: 'pointer',
                                         position: 'relative'
                                     }}
+                                    onClick={() => handleOpenFolder(folder)}
                                 >
                                     <div className="flex flex-column wdth-100">
                                         <div className='flex flex-column flex-center' style={{
                                             padding: '28px 10px', margin: 'auto',
                                             opacity: folder.in_use ? 1 : 0.2,
                                             transition: 'opacity 0.3s'
-                                        }} onClick={() => handleOpenFolder(folder)}>
+                                        }}>
                                             <img src={IconFolder} alt="Folder" width="64" style={{ marginBottom: '16px', opacity: 0.7 }} />
                                         </div>
                                         <div className='flex flex-column gap-5 padl-15 padr-15 padb-10'>
-                                            <div className='flex flex-row-center flex-space-between' onClick={() => handleOpenFolder(folder)}>
+                                            <div className='flex flex-row-center flex-space-between'>
                                                 <p className='text--micro'>{folder.name}</p>
                                                 <p className='text--nano opacity-5'>{folder.file_count} files</p>
                                             </div>
                                             <div className='flex flex-row-center flex-space-between'>
-                                                <p className='text--micro opacity-5' onClick={() => handleOpenFolder(folder)}>{getTimeAgo(new Date(folder.last_uploaded || folder.created_at))}</p>
+                                                <p className='text--micro opacity-5'>{getTimeAgo(new Date(folder.last_uploaded || folder.created_at))}</p>
                                                 {/* Folder actions menu */}
                                                 <div style={{ position: 'relative' }}>
                                                     <img 
