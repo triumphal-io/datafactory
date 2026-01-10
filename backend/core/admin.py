@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Document, Sheet, File, Conversation, BackgroundJob
+from .models import Document, Sheet, File, Folder, Conversation, BackgroundJob
 
 
 @admin.register(Document)
@@ -20,11 +20,20 @@ class SheetAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
 
 
+@admin.register(Folder)
+class FolderAdmin(admin.ModelAdmin):
+    list_display = ('name', 'document', 'in_use', 'uuid', 'created_at')
+    # list_filter = ('in_use', 'document', 'created_at')
+    search_fields = ('name', 'uuid', 'document__name')
+    readonly_fields = ('uuid', 'created_at')
+    date_hierarchy = 'created_at'
+
+
 @admin.register(File)
 class FileAdmin(admin.ModelAdmin):
-    list_display = ('file', 'document', 'use', 'uuid', 'uploaded_at')
-    # list_filter = ('use', 'document', 'uploaded_at')
-    search_fields = ('file', 'uuid', 'document__name', 'extracted_content')
+    list_display = ('file', 'document', 'folder', 'use', 'uuid', 'uploaded_at')
+    # list_filter = ('use', 'folder', 'document', 'uploaded_at')
+    search_fields = ('file', 'uuid', 'document__name', 'folder__name', 'extracted_content')
     readonly_fields = ('uuid', 'uploaded_at')
     date_hierarchy = 'uploaded_at'
 

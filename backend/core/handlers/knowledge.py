@@ -58,7 +58,7 @@ def get_or_create_collection(collection_name="file_chunks"):
     return collection
 
 
-def index_csv_file(file_path, file_id, filename, user_id):
+def index_csv_file(file_path, file_id, filename, user_id, folder_name=None):
     """
     Index a CSV file by creating chunks for each row and storing in ChromaDB.
     
@@ -67,6 +67,7 @@ def index_csv_file(file_path, file_id, filename, user_id):
         file_id (str): UUID of the file in database
         filename (str): Original filename
         user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
         
     Returns:
         int: Number of chunks created
@@ -97,6 +98,10 @@ def index_csv_file(file_path, file_id, filename, user_id):
                 'file_type': 'csv'
             }
             
+            # Add folder name if provided
+            if folder_name:
+                metadata['folder_name'] = folder_name
+            
             # Add first 3 columns as metadata for better filtering
             for col_idx, col in enumerate(df.columns[:3]):
                 if pd.notna(row[col]):
@@ -122,7 +127,7 @@ def index_csv_file(file_path, file_id, filename, user_id):
         raise
 
 
-def index_xlsx_file(file_path, file_id, filename, user_id):
+def index_xlsx_file(file_path, file_id, filename, user_id, folder_name=None):
     """
     Index an XLSX file by creating chunks for each row across all sheets.
     
@@ -131,6 +136,7 @@ def index_xlsx_file(file_path, file_id, filename, user_id):
         file_id (str): UUID of the file in database
         filename (str): Original filename
         user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
         
     Returns:
         int: Number of chunks created
@@ -170,6 +176,10 @@ def index_xlsx_file(file_path, file_id, filename, user_id):
                     'file_type': 'xlsx'
                 }
                 
+                # Add folder name if provided
+                if folder_name:
+                    metadata['folder_name'] = folder_name
+                
                 # Add first 3 columns as metadata for better filtering
                 for col_idx, col in enumerate(df.columns[:3]):
                     if pd.notna(row[col]):
@@ -196,7 +206,7 @@ def index_xlsx_file(file_path, file_id, filename, user_id):
         raise
 
 
-def index_file(file_path, file_id, filename, user_id):
+def index_file(file_path, file_id, filename, user_id, folder_name=None):
     """
     Index a file in ChromaDB based on its type.
     
@@ -205,6 +215,7 @@ def index_file(file_path, file_id, filename, user_id):
         file_id (str): UUID of the file in database
         filename (str): Original filename
         user_id (int): ID of the user who uploaded the file
+        folder_name (str, optional): Name of the folder containing the file
         
     Returns:
         int: Number of chunks created
@@ -212,9 +223,9 @@ def index_file(file_path, file_id, filename, user_id):
     file_extension = os.path.splitext(filename)[1].lower()
     
     if file_extension == '.csv':
-        return index_csv_file(file_path, file_id, filename, user_id)
+        return index_csv_file(file_path, file_id, filename, user_id, folder_name)
     elif file_extension in ['.xlsx', '.xls']:
-        return index_xlsx_file(file_path, file_id, filename, user_id)
+        return index_xlsx_file(file_path, file_id, filename, user_id, folder_name)
     else:
         raise ValueError(f"Unsupported file type for indexing: {file_extension}")
 
@@ -349,3 +360,108 @@ def get_user_files(user_id):
     except Exception as e:
         print(f"✗ Error getting user files: {str(e)}")
         return []
+
+
+def update_file_metadata(file_id, new_filename):
+    """
+    Update the filename in metadata for all chunks of a file.
+    
+    Args:
+        file_id (str): UUID of the file
+        new_filename (str): New filename to set
+    """
+    try:
+        collection = get_or_create_collection()
+        
+        # Get all chunks for this file
+        results = collection.get(
+            where={"file_id": str(file_id)},
+            include=["metadatas"]
+        )
+        
+        if results and results.get('ids'):
+            # Update each chunk's metadata
+            for idx, chunk_id in enumerate(results['ids']):
+                metadata = results['metadatas'][idx]
+                metadata['source'] = new_filename
+                
+                # Update the chunk with new metadata
+                collection.update(
+                    ids=[chunk_id],
+                    metadatas=[metadata]
+                )
+        
+        print(f"✓ Updated filename metadata for file: {file_id}")
+        
+    except Exception as e:
+        print(f"✗ Error updating file metadata: {str(e)}")
+        raise
+
+
+def update_folder_metadata(old_folder_name, new_folder_name, user_id):
+    """
+    Update the folder name in metadata for all chunks in a folder.
+    
+    Args:
+        old_folder_name (str): Current folder name
+        new_folder_name (str): New folder name
+        user_id (int): User ID to scope the update
+    """
+    try:
+        collection = get_or_create_collection()
+        
+        # Get all chunks for this folder
+        results = collection.get(
+            where={
+                "$and": [
+                    {"user_id": str(user_id)},
+                    {"folder_name": old_folder_name}
+                ]
+            },
+            include=["metadatas"]
+        )
+        
+        if results and results.get('ids'):
+            # Update each chunk's metadata
+            for idx, chunk_id in enumerate(results['ids']):
+                metadata = results['metadatas'][idx]
+                metadata['folder_name'] = new_folder_name
+                
+                # Update the chunk with new metadata
+                collection.update(
+                    ids=[chunk_id],
+                    metadatas=[metadata]
+                )
+        
+        print(f"✓ Updated folder metadata from '{old_folder_name}' to '{new_folder_name}'")
+        
+    except Exception as e:
+        print(f"✗ Error updating folder metadata: {str(e)}")
+        raise
+
+
+def delete_folder_chunks(folder_name, user_id):
+    """
+    Delete all chunks associated with files in a specific folder.
+    
+    Args:
+        folder_name (str): Name of the folder
+        user_id (int): User ID to scope the deletion
+    """
+    try:
+        collection = get_or_create_collection()
+        
+        # Delete all chunks with this folder_name and user_id
+        collection.delete(
+            where={
+                "$and": [
+                    {"user_id": str(user_id)},
+                    {"folder_name": folder_name}
+                ]
+            }
+        )
+        
+        print(f"✓ Deleted chunks for folder: {folder_name}")
+        
+    except Exception as e:
+        print(f"✗ Error deleting folder chunks: {str(e)}")

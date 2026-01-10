@@ -17,7 +17,8 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from core.handlers import ai
 from core.handlers.extraction import start_background_processing
-from core.models import Document, Sheet, File, Conversation
+from core.handlers import knowledge
+from core.models import Document, Sheet, File, Folder, Conversation
 
 
 @api_view(['GET', 'POST', 'PATCH'])
@@ -174,6 +175,154 @@ def api_update_document(request, did):
 @api_view(['GET', 'POST', 'DELETE', 'PATCH'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+def api_folders(request, did, action):
+    """Handle folder operations"""
+    response = {'status': 'error'}
+    
+    # Handle folder-specific operations (DELETE/PATCH) when action is a UUID
+    if request.method in ['DELETE', 'PATCH']:
+        try:
+            folder_id = action
+            folder = Folder.objects.filter(uuid=folder_id, document__uuid=did).first()
+            if not folder:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Folder not found'},
+                    status=404
+                )
+            
+            if request.method == 'DELETE':
+                # Delete all files in the folder
+                for file in folder.files.all():
+                    # Delete from ChromaDB
+                    try:
+                        knowledge.delete_file_chunks(str(file.uuid))
+                    except Exception as e:
+                        print(f"Error deleting file chunks: {e}")
+                    
+                    # Delete physical file
+                    if file.file:
+                        file.file.delete(save=False)
+                    
+                    # Delete database record
+                    file.delete()
+                
+                # Delete folder chunks from ChromaDB
+                try:
+                    knowledge.delete_folder_chunks(folder.name, folder.document.user.id)
+                except Exception as e:
+                    print(f"Error deleting folder chunks: {e}")
+                
+                folder.delete()
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Folder and all files deleted successfully'
+                })
+            
+            elif request.method == 'PATCH':
+                try:
+                    body = json.loads(request.body)
+                except json.JSONDecodeError:
+                    return JsonResponse(
+                        {'status': 'error', 'message': 'Invalid JSON'},
+                        status=400
+                    )
+                
+                # Handle folder rename
+                if 'name' in body:
+                    old_name = folder.name
+                    new_name = body['name']
+                    
+                    # Update ChromaDB metadata if name changed
+                    if old_name != new_name:
+                        try:
+                            knowledge.update_folder_metadata(old_name, new_name, folder.document.user.id)
+                        except Exception as e:
+                            print(f"Error updating folder metadata: {e}")
+                    
+                    folder.name = new_name
+                
+                if 'in_use' in body:
+                    folder.in_use = body['in_use']
+                folder.save()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Folder updated successfully'
+                })
+        except Exception as e:
+            return JsonResponse(
+                {'status': 'error', 'message': str(e)},
+                status=500
+            )
+    
+    if action == "list":
+        document = Document.objects.filter(uuid=did).first()
+        if not document:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Document not found'},
+                status=404
+            )
+        
+        folders = Folder.objects.filter(document=document)
+        response['folders'] = []
+        for folder in folders:
+            file_count = folder.files.count()
+            # Get the most recent file upload time in this folder
+            latest_file = folder.files.order_by('-uploaded_at').first()
+            last_uploaded = latest_file.uploaded_at if latest_file else folder.created_at
+            
+            response['folders'].append({
+                'id': str(folder.uuid),
+                'name': folder.name,
+                'in_use': folder.in_use,
+                'file_count': file_count,
+                'created_at': folder.created_at.isoformat(),
+                'last_uploaded': last_uploaded.isoformat()
+            })
+        response['status'] = 'success'
+        return JsonResponse(response)
+    
+    elif action == "create":
+        try:
+            body = json.loads(request.body)
+            name = body.get('name', 'New Folder')
+            
+            document = Document.objects.filter(uuid=did).first()
+            if not document:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Document not found'},
+                    status=404
+                )
+            
+            folder = Folder.objects.create(
+                document=document,
+                name=name,
+                in_use=True
+            )
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Folder created successfully',
+                'folder': {
+                    'id': str(folder.uuid),
+                    'name': folder.name,
+                    'in_use': folder.in_use,
+                    'file_count': 0,
+                    'created_at': folder.created_at.isoformat()
+                }
+            })
+        except Exception as e:
+            return JsonResponse(
+                {'status': 'error', 'message': str(e)},
+                status=500
+            )
+    
+    return JsonResponse(response)
+
+
+@api_view(['GET', 'POST', 'DELETE', 'PATCH'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def api_files(request, did, action):
     response = {'status': 'error'}
     
@@ -191,6 +340,12 @@ def api_files(request, did, action):
                 )
             
             if request.method == 'DELETE':
+                # Delete from ChromaDB
+                try:
+                    knowledge.delete_file_chunks(str(file.uuid))
+                except Exception as e:
+                    print(f"Error deleting file chunks: {e}")
+                
                 # Delete the physical file from storage
                 if file.file:
                     file.file.delete(save=False)
@@ -215,15 +370,28 @@ def api_files(request, did, action):
                         status=400
                     )
                 
-                visible = body.get('visible', True)
+                # Handle file rename
+                if 'filename' in body:
+                    new_filename = body['filename']
+                    
+                    # Update ChromaDB metadata
+                    try:
+                        knowledge.update_file_metadata(str(file.uuid), new_filename)
+                    except Exception as e:
+                        print(f"Error updating file metadata: {e}")
+                    
+                    file.filename = new_filename
                 
-                # Update the 'use' field (True = visible, False = hidden)
-                file.use = visible
+                # Handle visibility toggle
+                if 'visible' in body:
+                    visible = body.get('visible', True)
+                    file.use = visible
+                
                 file.save()
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': f'File {"shown" if visible else "hidden"} successfully',
+                    'message': 'File updated successfully',
                     'visible': file.use
                 })
         except Exception as e:
@@ -236,7 +404,18 @@ def api_files(request, did, action):
             )
     
     if action == "list":
-        files = File.objects.filter(document__uuid=did)
+        # Get folder_id from query params if provided
+        folder_id = request.GET.get('folder_id', None)
+        
+        if folder_id:
+            # Filter files by folder - only show files in this folder
+            files = File.objects.filter(document__uuid=did, folder__uuid=folder_id)
+            print(f"📂 Loading files for folder {folder_id}: {files.count()} files")
+        else:
+            # Get files not in any folder - exclude files that are in folders
+            files = File.objects.filter(document__uuid=did, folder__isnull=True)
+            print(f"📁 Loading root files (no folder): {files.count()} files")
+        
         response['files'] = []
         for file in files:
             if file.is_processing:
@@ -249,11 +428,13 @@ def api_files(request, did, action):
                 'size': file.calculated_size,
                 'uploaded_at': file.uploaded_at.isoformat(),
                 'is_processing': file.is_processing,
-                'use': file.use
+                'use': file.use,
+                'folder_id': str(file.folder.uuid) if file.folder else None
             })
         response['status'] = 'success'
     elif action == "upload":
         uploaded_files = request.FILES.getlist('files')
+        folder_id = request.POST.get('folder_id', None)
         print( uploaded_files)
         if not uploaded_files:
             return JsonResponse({'status': 'error', 'message': 'No files uploaded'}, status=400)
@@ -261,6 +442,14 @@ def api_files(request, did, action):
         document = Document.objects.filter(uuid=did).first()
         if not document:
             return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
+        
+        # Get folder if folder_id provided
+        folder = None
+        folder_name = None
+        if folder_id:
+            folder = Folder.objects.filter(uuid=folder_id, document=document).first()
+            if folder:
+                folder_name = folder.name
         
         # Validate file types (only CSV and XLSX allowed)
         allowed_extensions = ['.csv', '.xlsx', '.xls']
@@ -289,9 +478,10 @@ def api_files(request, did, action):
             file_uuid = uuid_lib.uuid4()
             new_filename = f"{sanitized_name}-{file_uuid}{extension}"
             
-            # Create file instance
+            # Create file instance with folder assignment
             file_instance = File.objects.create(
                 document=document,
+                folder=folder,
                 filename=original_name,
                 calculated_size=uploaded_file.size,
                 extracted_content="",  # Will be populated by background processing

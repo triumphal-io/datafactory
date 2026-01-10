@@ -221,11 +221,13 @@ def process_pending_files():
                         
                         # Index the file
                         user_id = file_instance.document.user.id
+                        folder_name = file_instance.folder.name if file_instance.folder else None
                         num_chunks = index_file(
                             file_path=file_instance.file.path,
                             file_id=str(file_instance.uuid),
                             filename=file_instance.filename,
-                            user_id=user_id
+                            user_id=user_id,
+                            folder_name=folder_name
                         )
                         print(f"✓ Indexed {num_chunks} chunks in ChromaDB")
                     except Exception as index_error:

@@ -32,9 +32,24 @@ class Sheet(models.Model):
     class Meta:
         verbose_name_plural = "Sheets"
 
+class Folder(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='folders')
+    
+    name = models.CharField(max_length=255)
+    in_use = models.BooleanField(default=True)
+    created_at = models.DateTimeField('Created at', auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name_plural = "Folders"
+
 class File(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='files')
+    folder = models.ForeignKey(Folder, on_delete=models.SET_NULL, related_name='files', null=True, blank=True)
     
     filename = models.CharField(max_length=255)
     calculated_size = models.BigIntegerField()
