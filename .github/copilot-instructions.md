@@ -5,18 +5,19 @@
 **DataFactory** is a Django + React application that provides AI-powered spreadsheet manipulation with file processing, RAG-based querying, and real-time collaboration via WebSockets.
 
 ### Core Components
-- **Backend**: Django 6.0 + Django REST Framework + Django Channels (WebSockets)
+- **Backend**: Django 5.2 + Django REST Framework + Django Channels (WebSockets)
 - **Frontend**: React 19 + Vite (dev server on :80, proxies `/api` to Django :50)
 - **Database**: SQLite (main DB at `backend/db.sqlite3`, ChromaDB at `storage/chromadb/`)
 - **AI Layer**: LiteLLM for model abstraction, ChromaDB for vector search/RAG
 - **Real-time**: Django Channels with InMemoryChannelLayer (no Redis)
+- **Embedding Models**: Supports OpenAI (`text-embedding-3-small`), default, and sentence-transformers
 
 ### Data Model Hierarchy
 ```
 Workbook (uuid-based)
 ├── Sheets (spreadsheet tabs - editable grids with columns/rows stored as JSONField)
-├── Resources (uploaded files - CSV/XLSX/PDF/DOCX/etc. with extracted markdown)
-│   ├── Files (individual uploaded documents)
+├── Resources (uploaded files - CSV/XLSX/PDF/DOCX/TXT/MD/PPTX with extracted markdown)
+│   ├── Files (individual uploaded documents with file linking support)
 │   └── Folders (for organizing files)
 └── Conversations (chat history with AI assistant)
 ```
@@ -29,7 +30,9 @@ Workbook (uuid-based)
 
 **AI Tool Usage Guide:**
 - Use `get_sheet_tools()` for manipulating **Sheets** (spreadsheet tabs in workbook)
-- Use `get_file_tools()` for querying **Resources** (uploaded CSV/XLSX/PDF/DOCX files)
+- Use `get_file_tools()` for querying **Resources** (uploaded CSV/XLSX/PDF/DOCX/TXT/MD/PPTX files)
+- Use `get_workbook_tools()` for getting workbook structure and reading other sheets
+- Use `get_ai_tools()` for web search and scraping capabilities
 - When user says "add data to sheet" → manipulate the Sheet (spreadsheet tab)
 - When user says "query the CSV file" → search Resources (uploaded files)
 
@@ -60,23 +63,35 @@ The assistant uses a **client-side tool execution** model (not server-side):
 4. Backend continues conversation with tool results
 
 **Tool categories** (see [handlers/ai.py](backend/core/handlers/ai.py)):
-- `get_ai_tools()`: Web search, scraping
-- `get_file_tools()`: RAG-based querying of uploaded Resources (CSV/XLSX/PDF/DOCX files)
-- `get_sheet_tools()`: Spreadsheet tab manipulation (add/delete rows/columns, populate cells)
+- `get_ai_tools()`: Web search (`tool_search`), web scraping (`tool_web_scraper`)
+- `get_workbook_tools()`: Get workbook structure (`tool_get_workbook_structure`), view sheet data (`tool_get_sheet_data`)
+- `get_file_tools()`: Read file content (`tool_read_file`), RAG-based file querying (`tool_query_file_data`)
+- `get_sheet_tools()`: Spreadsheet tab manipulation (`tool_add_rows`, `tool_delete_rows`, `tool_add_column`, `tool_delete_column`, `tool_populate_cells`)
 
 **IMPORTANT DISTINCTION:**
 - **Sheet Tools** (`tool_add_rows`, `tool_populate_cells`, etc.) → Operate on workbook Sheets (spreadsheet tabs)
-- **File Tools** (`tool_query_file_data`) → Query uploaded Resources (CSV/XLSX/PDF files in Resources section)
+- **File Tools** (`tool_query_file_data`, `tool_read_file`) → Query uploaded Resources (CSV/XLSX/PDF/DOCX/TXT/MD/PPTX files in Resources section)
+- **Workbook Tools** (`tool_get_workbook_structure`, `tool_get_sheet_data`) → Get overview of workbook and view data from other sheets
+
+**AI Conversation Limits** (see [handlers/ai.py](backend/core/handlers/ai.py)):
+- `MAX_CONVERSATION_MESSAGES = 30`: Maximum messages to keep (excludes system message)
+- `MAX_TOOL_ITERATIONS = 5`: Maximum tool calling cycles per request
+- `MAX_TOOLS_PER_TURN = 10`: Maximum parallel tool calls per iteration
+- `AI_MAX_TOKENS = 2048`: Maximum tokens for AI responses
 
 ### 4. File Processing Pipeline
 Files go through async processing (see [handlers/extraction.py](backend/core/handlers/extraction.py)):
 
 1. Upload → `File` model created with `is_processing=True`
-2. Background thread extracts to markdown (CSV/XLSX → tables)
+2. Background thread extracts to markdown (CSV/XLSX → tables, PDF/DOCX/PPTX/TXT/MD → text)
 3. Content indexed to ChromaDB via [handlers/knowledge.py](backend/core/handlers/knowledge.py)
 4. `is_processing=False` → file ready for RAG queries
 
-**Key**: Use `tool_query_file_data` with `search_type='identifier'` for exact ID lookups, `search_type='query'` for semantic search.
+**Supported file types**: CSV, XLSX, PDF, DOCX, PPTX, TXT, MD
+
+**Key**: Use `tool_query_file_data` with `search_type='identifier'` for exact ID lookups (SKUs, customer IDs, order numbers), `search_type='query'` for semantic search (natural language questions).
+
+**File Linking**: Files can be linked via the `file` datatype in columns. This enables relationship mapping between spreadsheet data and uploaded documents.
 
 ### 5. Bulk Enrichment System
 [handlers/enrich.py](backend/core/handlers/enrich.py) handles concurrent AI enrichment:
@@ -169,8 +184,6 @@ Collections use OpenAI `text-embedding-3-small`. Key functions in [handlers/know
 - Default AI model: `DEFAULT_AI_MODEL='gpt-5-nano'`
 
 ## Planned Features (from NOTES.md)
-- Folder view UI, file operations (move/rename/delete)
-- PDF, DOCX, PPTX, TXT/MD support
-- User authentication
-- Chat history access
+- User authentication and profiles
+- Access chat history and continue conversations
 - Settings page for model/credential management
