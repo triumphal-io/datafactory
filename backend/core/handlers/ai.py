@@ -111,6 +111,56 @@ def get_ai_tools():
     return [search_tool, web_scraper_tool]
 
 
+def get_document_tools():
+    """
+    Get tools for viewing document structure and sheet data.
+    
+    These tools allow the AI to:
+    - Get complete document structure (sheets + files tree)
+    - View data from any specific sheet
+    
+    Returns:
+        list: List of tool definitions for document operations
+    """
+    get_structure_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_get_document_structure",
+            "description": "Get complete document structure including all sheets and files. Returns a JSON overview showing: 1) All available sheets with their names and IDs, 2) All uploaded files organized in a tree structure with folders. Use this to understand what data is available in the document before querying specific sheets or files.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        }
+    }
+    
+    get_sheet_data_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_get_sheet_data",
+            "description": "View data from a specific sheet by name or UUID. Returns the sheet's column structure and row data. Use this when you need to see what data is in a particular sheet. You can get the list of available sheets using tool_get_document_structure.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sheet_identifier": {
+                        "type": "string",
+                        "description": "The sheet name (e.g., 'Sheet1', 'Sales Data') or UUID to view. Get available sheets using tool_get_document_structure."
+                    },
+                    "max_rows": {
+                        "type": "integer",
+                        "description": "Maximum number of rows to return. Default: 50, max: 200. Use lower values for large sheets to avoid token overflow.",
+                        "default": 50
+                    }
+                },
+                "required": ["sheet_identifier"],
+            },
+        }
+    }
+    
+    return [get_structure_tool, get_sheet_data_tool]
+
+
 def get_file_tools():
     """
     Get static tool definitions for accessing files from the database.
@@ -145,7 +195,7 @@ def get_file_tools():
         "type": "function",
         "function": {
             "name": "tool_query_file_data",
-            "description": "Query data from uploaded CSV/XLSX files using semantic search. This tool searches through file contents and returns relevant records. You must specify the filename to search within. The available files will be listed in the conversation context.\n\nIMPORTANT - Use 'identifier' search type when:\n- Looking up specific IDs, codes, SKUs, product numbers, customer IDs, order numbers\n- Query is a short alphanumeric string (e.g., 'AB1234', 'CUST-001', 'SKU123')\n- Need exact match for a unique identifier\n- Examples: 'AB1234', 'ORDER-12345', 'CUST001', 'INV-2024-001'\n\nUse 'query' search type when:\n- Natural language questions (e.g., 'customers in New York')\n- Descriptive searches (e.g., 'products with high ratings')\n- Date-based queries (e.g., 'orders from January 2024')\n- Multi-criteria searches",
+            "description": "Query data from UPLOADED CSV/XLSX files using semantic search. This tool searches through file contents and returns relevant records. You must specify the filename to search within. The available files will be listed in the conversation context.\n\nIMPORTANT: This tool is ONLY for uploaded files (CSV/XLSX). DO NOT use this for spreadsheet sheets - use tool_get_sheet_data instead to view sheet data.\n\nIMPORTANT - Use 'identifier' search type when:\n- Looking up specific IDs, codes, SKUs, product numbers, customer IDs, order numbers\n- Query is a short alphanumeric string (e.g., 'AB1234', 'CUST-001', 'SKU123')\n- Need exact match for a unique identifier\n- Examples: 'AB1234', 'ORDER-12345', 'CUST001', 'INV-2024-001'\n\nUse 'query' search type when:\n- Natural language questions (e.g., 'customers in New York')\n- Descriptive searches (e.g., 'products with high ratings')\n- Date-based queries (e.g., 'orders from January 2024')\n- Multi-criteria searches",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -559,6 +609,10 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     if include_sheet_tools:
         tools = get_sheet_tools() + tools
     
+    # Add document structure and sheet viewing tools if working with documents
+    if document_id:
+        tools = get_document_tools() + tools
+    
     # Add file reading tools if working with documents (STATIC - no dynamic file list in tools)
     if document_id:
         tools = get_file_tools() + tools
@@ -566,8 +620,8 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     # Define tool categories for routing execution
     # Sheet tools modify spreadsheet UI (handled by frontend)
     sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
-    # File tools read document content (handled by backend)
-    file_tool_names = {'tool_query_file_data'}  # Updated to use RAG-based querying
+    # File and document tools read content (handled by backend)
+    file_tool_names = {'tool_query_file_data', 'tool_get_document_structure', 'tool_get_sheet_data'}  # Updated to include document tools
     # Frontend tools require UI updates (sent back to client)
     frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     
@@ -1132,12 +1186,196 @@ def tool_read_file(file_id, document_id=None):
         return f"Error reading file: {str(e)}"
 
 
+def tool_get_document_structure(document_id=None):
+    """
+    Get complete document structure including all sheets and files.
+    
+    Returns a comprehensive overview of:
+    - All available sheets (names and UUIDs)
+    - All uploaded files organized in folder tree structure
+    
+    Args:
+        document_id (str, optional): Document UUID for access
+    
+    Returns:
+        str: JSON-formatted document structure
+    """
+    try:
+        Document = apps.get_model('core', 'Document')
+        Sheet = apps.get_model('core', 'Sheet')
+        File = apps.get_model('core', 'File')
+        Folder = apps.get_model('core', 'Folder')
+        
+        if not document_id:
+            return "Error: Document ID is required."
+        
+        # Get the document
+        document = Document.objects.get(uuid=document_id)
+        
+        # Build structure
+        structure = {
+            "document_name": document.name,
+            "sheets": [],
+            "files": {
+                "root": [],
+                "folders": {}
+            }
+        }
+        
+        # Get all sheets
+        sheets = Sheet.objects.filter(document=document).order_by('created_at')
+        for sheet in sheets:
+            row_count = len(sheet.data.get('rows', [])) if sheet.data else 0
+            col_count = len(sheet.data.get('columns', [])) if sheet.data else 0
+            
+            structure["sheets"].append({
+                "name": sheet.name,
+                "uuid": str(sheet.uuid),
+                "rows": row_count,
+                "columns": col_count
+            })
+        
+        # Get all folders
+        folders = Folder.objects.filter(document=document)
+        for folder in folders:
+            structure["files"]["folders"][folder.name] = {
+                "uuid": str(folder.uuid),
+                "files": []
+            }
+        
+        # Get all files
+        files = File.objects.filter(document=document, use=True)
+        for file in files:
+            file_info = {
+                "name": file.filename,
+                "uuid": str(file.uuid),
+                "size": file.calculated_size,
+                "processing": file.is_processing
+            }
+            
+            if file.folder:
+                # Add to folder
+                folder_name = file.folder.name
+                if folder_name in structure["files"]["folders"]:
+                    structure["files"]["folders"][folder_name]["files"].append(file_info)
+            else:
+                # Add to root
+                structure["files"]["root"].append(file_info)
+        
+        # Format as readable JSON
+        import json
+        return json.dumps(structure, indent=2)
+        
+    except Document.DoesNotExist:
+        return f"Error: Document with ID {document_id} not found."
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"Error getting document structure: {str(e)}"
+
+
+def tool_get_sheet_data(sheet_identifier, max_rows=50, document_id=None):
+    """
+    View data from a specific sheet by name or UUID.
+    
+    Returns the sheet's column structure and row data.
+    
+    Args:
+        sheet_identifier (str): Sheet name or UUID
+        max_rows (int, optional): Maximum rows to return (default: 50, max: 200)
+        document_id (str, optional): Document UUID for access validation
+    
+    Returns:
+        str: Formatted sheet data or error message
+    """
+    try:
+        Document = apps.get_model('core', 'Document')
+        Sheet = apps.get_model('core', 'Sheet')
+        
+        if not document_id:
+            return "Error: Document ID is required."
+        
+        # Validate max_rows
+        max_rows = min(max(1, max_rows), 200)
+        
+        # Get the document
+        document = Document.objects.get(uuid=document_id)
+        
+        # Try to find sheet by UUID first, then by name
+        try:
+            sheet = Sheet.objects.get(uuid=sheet_identifier, document=document)
+        except Sheet.DoesNotExist:
+            # Try by name
+            sheet = Sheet.objects.filter(name=sheet_identifier, document=document).first()
+            if not sheet:
+                return f"Error: Sheet '{sheet_identifier}' not found in this document. Use tool_get_document_structure to see available sheets."
+        
+        # Get sheet data
+        sheet_data = sheet.data or {}
+        columns = sheet_data.get('columns', [])
+        rows = sheet_data.get('rows', [])
+        
+        # Build formatted response
+        result = f"Sheet: {sheet.name}\n"
+        result += f"UUID: {sheet.uuid}\n"
+        result += f"Total Rows: {len(rows)}\n"
+        result += f"Total Columns: {len(columns)}\n\n"
+        
+        # Show column structure
+        if columns:
+            result += "Columns:\n"
+            for idx, col in enumerate(columns):
+                col_info = f"  {idx + 1}. {col.get('title', 'Untitled')}"
+                if col.get('type') and col['type'] != 'text':
+                    col_info += f" (Type: {col['type']})"
+                if col.get('prompt'):
+                    col_info += f" - {col['prompt']}"
+                result += col_info + "\n"
+            result += "\n"
+        
+        # Show row data (limited)
+        if rows:
+            rows_to_show = min(len(rows), max_rows)
+            result += f"Data (showing {rows_to_show} of {len(rows)} rows):\n\n"
+            
+            # Filter non-empty rows
+            non_empty_rows = []
+            for i, row in enumerate(rows):
+                has_data = any(cell not in [None, '', ' '] and str(cell).strip() != '' for cell in row)
+                if has_data:
+                    non_empty_rows.append((i, row))
+            
+            # Show the data
+            for idx, (row_num, row) in enumerate(non_empty_rows[:rows_to_show]):
+                result += f"Row {row_num + 1}:\n"
+                for col_idx, cell_value in enumerate(row):
+                    if col_idx < len(columns) and cell_value not in [None, '', ' '] and str(cell_value).strip() != '':
+                        col_name = columns[col_idx].get('title', f'Column {col_idx + 1}')
+                        result += f"  {col_name}: {cell_value}\n"
+                result += "\n"
+            
+            if len(non_empty_rows) > rows_to_show:
+                result += f"... and {len(non_empty_rows) - rows_to_show} more rows with data\n"
+        else:
+            result += "No data in this sheet.\n"
+        
+        return result.strip()
+        
+    except Document.DoesNotExist:
+        return f"Error: Document with ID {document_id} not found."
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"Error getting sheet data: {str(e)}"
+
+
 def tool_query_file_data(query, filename, max_results=5, search_type='query', document_id=None):
     """
     Query data from uploaded files using RAG (Retrieval Augmented Generation).
     
     This tool searches through indexed file chunks and returns relevant records.
     Only works with CSV and XLSX files that have been indexed.
+    DOES NOT work with spreadsheet sheets - use tool_get_sheet_data for that.
     
     Automatically detects if query looks like an identifier and switches to identifier search.
     
@@ -1210,11 +1448,18 @@ def tool_query_file_data(query, filename, max_results=5, search_type='query', do
             # Validate max_results for query search
             max_results = min(max(1, max_results), 20)  # Clamp between 1 and 20
         
+        # Validate that this is for uploaded files, not sheets
+        Sheet = apps.get_model('core', 'Sheet')
+        if document_id:
+            sheet_exists = Sheet.objects.filter(name=filename, document__uuid=document_id).exists()
+            if sheet_exists:
+                return f"Error: '{filename}' is a spreadsheet sheet, not an uploaded file. Use tool_get_sheet_data to view sheet data instead."
+        
         # Find the file to get user_id and validate access
         file_obj = File.objects.filter(filename=filename).first()
         
         if not file_obj:
-            return f"Error: File '{filename}' not found. Please check the filename and try again."
+            return f"Error: File '{filename}' not found. Please check the filename and try again. Use tool_get_document_structure to see available files."
         
         # Security check: Verify file belongs to the document (if document_id provided)
         if document_id and str(file_obj.document.uuid) != str(document_id):
