@@ -156,6 +156,16 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                     if (data.sheet_data) {
                         setSheetData(data.sheet_data);
                         loadedDataRef.current = JSON.stringify(data.sheet_data);
+                        
+                        // Load column widths from sheet data
+                        const widths = {};
+                        data.sheet_data.columns.forEach((col, idx) => {
+                            if (col.width) {
+                                widths[idx] = col.width;
+                            }
+                        });
+                        setColumnWidths(widths);
+                        
                         if (onLastSavedChange) {
                             onLastSavedChange(new Date(data.last_modified));
                         }
@@ -790,11 +800,23 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     }, [isResizing, resizingColumn]);
     
     const handleResizeMouseUp = useCallback(() => {
+        if (resizingColumn !== null && columnWidths[resizingColumn]) {
+            // Update sheetData to persist the column width
+            setSheetData(prev => ({
+                ...prev,
+                columns: prev.columns.map((col, idx) => 
+                    idx === resizingColumn 
+                        ? { ...col, width: columnWidths[resizingColumn] }
+                        : col
+                )
+            }));
+        }
+        
         setIsResizing(false);
         setResizingColumn(null);
         resizeStartXRef.current = null;
         resizeStartWidthRef.current = null;
-    }, []);
+    }, [resizingColumn, columnWidths]);
     
     const handleSelectAllRows = useCallback((checked) => {
         if (checked) {
