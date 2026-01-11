@@ -15,7 +15,7 @@ import Loader from '../assets/loader-mini.gif';
 // (Keeps other mention categories like files/folders/sheets.)
 const ENABLE_COLUMN_MENTIONS = false;
 
-const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
+const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', sheetId = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
     const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -300,6 +300,12 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             }
             if (sheetData) {
                 formData.append('sheet_data', JSON.stringify(sheetData));
+            }
+            if (sheetName) {
+                formData.append('sheet_name', sheetName);
+            }
+            if (sheetId) {
+                formData.append('sheet_id', sheetId);
             }
             if (selectedRange) {
                 formData.append('selected_range', selectedRange);

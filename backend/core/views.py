@@ -644,6 +644,8 @@ def api_assistant(request, did, action):
             conversation_id = request.POST.get('conversation_id')
             tool_results = json.loads(request.POST.get('tool_results', '[]'))
             sheet_data = json.loads(request.POST.get('sheet_data', 'null'))
+            sheet_name = request.POST.get('sheet_name', '')
+            sheet_id = request.POST.get('sheet_id', '')
             selected_range = request.POST.get('selected_range')
             model = request.POST.get('model', settings.DEFAULT_AI_MODEL)
         else:
@@ -653,6 +655,8 @@ def api_assistant(request, did, action):
             conversation_id = body.get('conversation_id')
             tool_results = body.get('tool_results', [])
             sheet_data = body.get('sheet_data')
+            sheet_name = body.get('sheet_name', '')
+            sheet_id = body.get('sheet_id', '')
             selected_range = body.get('selected_range')
             model = body.get('model', settings.DEFAULT_AI_MODEL)
         
@@ -711,15 +715,34 @@ def api_assistant(request, did, action):
         if sheet_data:
             sheet_context = {}
             sheet_context['data'] = sheet_data
+            if sheet_name:
+                sheet_context['name'] = sheet_name
+            if sheet_id:
+                sheet_context['uuid'] = sheet_id
         
-        # Append selected cells to user message if provided
-        if selected_range and message:
-            message = f"{message}\n\n[Selected cells: {selected_range}]"
-        
-        # Append attachment info to user message if files were uploaded
-        if attachment_info:
-            attachment_text = "\n\n[User attached files: " + ", ".join([f"{att['name']} (ID: {att['id']})" for att in attachment_info]) + "]"
-            message = message + attachment_text
+        # Prepend metadata to user message (context before message)
+        if message:
+            metadata_parts = []
+            
+            # Add attachment info first if files were uploaded
+            if attachment_info:
+                attachment_text = "[User attached files: " + ", ".join([f"{att['name']} (ID: {att['id']})" for att in attachment_info]) + "]"
+                metadata_parts.append(attachment_text)
+            
+            # Add active page/sheet info
+            if sheet_name:
+                metadata_parts.append(f"[Selected sheet: {sheet_name} (ID: {sheet_id})]")
+            else:
+                # When no sheet is selected, user is on Project Files
+                metadata_parts.append("[Active page: Project Files]")
+            
+            # Add selected cells info
+            if selected_range:
+                metadata_parts.append(f"[Selected cells: {selected_range}]")
+            
+            # Combine metadata with message
+            if metadata_parts:
+                message = "\n".join(metadata_parts) + "\n\n" + message
         
         print(f"Assistant {action}: type={message_type}, conv_id={conversation_id}, attachments={len(uploaded_file_ids)}")
         
@@ -743,10 +766,13 @@ def api_assistant(request, did, action):
         # Handle different message types
         if message_type == 'user_message':
             # User sent a new message
+            # Only include sheet tools if user is actually viewing a sheet
+            include_sheet_tools = sheet_context is not None
+            
             result = ai.assistant(
                 message=message,
                 conversation_obj=conversation,
-                include_sheet_tools=True,
+                include_sheet_tools=include_sheet_tools,
                 document_id=did,
                 sheet_context=sheet_context,
                 model=model

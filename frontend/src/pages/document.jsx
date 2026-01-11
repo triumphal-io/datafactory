@@ -140,6 +140,7 @@ export default function DocumentPage() {
                 onToolsRequested={handleToolsRequested}
                 selectedCells={selectedCells}
                 sheetName={sheetName}
+                sheetId={sheetId}
                 getSheetData={getSheetData}
                 droppedFiles={droppedFiles}
                 selectedModel={selectedModel}

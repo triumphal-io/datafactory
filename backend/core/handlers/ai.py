@@ -508,13 +508,18 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     dynamic_context_parts = []
     
     if sheet_context and include_sheet_tools:
-        # Build DYNAMIC spreadsheet context (actual data - changes frequently, should NOT be cached)
+        # Build DYNAMIC spreadsheet context (metadata only - actual data fetched via tool)
         if sheet_context.get('data'):
             sheet_data = sheet_context['data']
             columns = sheet_data.get('columns', [])
             rows = sheet_data.get('rows', [])
             
-            sheet_context_msg = "Current spreadsheet structure and data:\n\n"
+            # Get sheet identifier (name and UUID) from sheet_context
+            sheet_name = sheet_context.get('name', 'Unknown Sheet')
+            sheet_uuid = sheet_context.get('uuid', 'Unknown UUID')
+            
+            sheet_context_msg = f"Currently active sheet: {sheet_name} (UUID: {sheet_uuid})\n\n"
+            sheet_context_msg += "Sheet structure:\n\n"
             
             # Build column information summary with type and format constraints
             column_info = []
@@ -534,36 +539,18 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             
             sheet_context_msg += f"Columns ({len(columns)}): {' | '.join(column_info)}\n\n"
             
-            # Filter and prepare row data for context
-            # Limit rows to prevent token overflow in the AI prompt
-            # Filter rows to exclude completely empty rows or rows with only empty values
-            non_empty_rows = []
-            for i, row in enumerate(rows):
+            # Count non-empty rows for metadata
+            non_empty_rows = 0
+            for row in rows:
                 # Check if row has at least one non-empty, non-null value
                 has_data = any(cell not in [None, '', ' '] and str(cell).strip() != '' for cell in row)
                 if has_data:
-                    non_empty_rows.append((i, row))
+                    non_empty_rows += 1
             
             sheet_context_msg += f"Total Rows: {len(rows)}\n"
-            sheet_context_msg += f"Rows with data: {len(non_empty_rows)}\n"
+            sheet_context_msg += f"Rows with data: {non_empty_rows}\n\n"
             
-            if non_empty_rows:
-                sheet_context_msg += "\nExisting data:\n"
-                # Show first 50 rows maximum to prevent token overflow
-                max_rows_to_show = min(50, len(non_empty_rows))
-                for idx, (i, row) in enumerate(non_empty_rows[:max_rows_to_show]):
-                    row_values = []
-                    for j, cell_value in enumerate(row):
-                        if j < len(columns):
-                            # Only include cells with actual values (skip empty/null cells)
-                            if cell_value not in [None, '', ' '] and str(cell_value).strip() != '':
-                                row_values.append(f"{columns[j].get('title', '')}: {cell_value}")
-                    if row_values:  # Only add row if it has displayable values
-                        sheet_context_msg += f"  Row {i+1}: {', '.join(row_values)}\n"
-                
-                # Indicate if there are more rows than shown
-                if len(non_empty_rows) > max_rows_to_show:
-                    sheet_context_msg += f"  ... and {len(non_empty_rows) - max_rows_to_show} more rows with data\n"
+            sheet_context_msg += f"Note: To view the actual data in this sheet, use tool_get_sheet_data with sheet_identifier='{sheet_uuid}'.\n"
             
             dynamic_context_parts.append(sheet_context_msg)
     

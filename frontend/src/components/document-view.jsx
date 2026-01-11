@@ -238,6 +238,13 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         }
     }, [sheetId, sheetsList, onSheetNameChange]);
 
+    // Clear sheet name when switching to project files
+    useEffect(() => {
+        if (activeView === 'project-files' && onSheetNameChange) {
+            onSheetNameChange('');
+        }
+    }, [activeView, onSheetNameChange]);
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
