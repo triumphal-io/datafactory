@@ -804,10 +804,20 @@ def api_assistant(request, did, action):
             return JsonResponse({'status': 'error', 'message': 'Invalid message_type'}, status=400)
         
         # Return the result from assistant
-        return JsonResponse({
-            'status': 'success',
-            **result
-        })
+        # Handle both string (legacy) and dict (new tool-based) responses
+        if isinstance(result, dict):
+            return JsonResponse({
+                'status': 'success',
+                **result
+            })
+        else:
+            # Legacy string response when sheet tools are disabled
+            return JsonResponse({
+                'status': 'success',
+                'type': 'message',
+                'content': result,
+                'conversation_id': str(conversation.uuid)
+            })
         
     except Exception as e:
         print(f"Error in api_assistant: {e}")
