@@ -390,6 +390,15 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                         if (offset === 0 && previousSibling && previousSibling.classList?.contains('mention-tag')) {
                             e.preventDefault();
                             previousSibling.remove();
+                            
+                            // Manually update input value and check for empty
+                            if (editableRef.current) {
+                                const text = editableRef.current.textContent;
+                                setInputValue(text);
+                                if (text === '' && editableRef.current.innerHTML !== '') {
+                                    editableRef.current.innerHTML = '';
+                                }
+                            }
                             return;
                         }
                     }
@@ -400,6 +409,15 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             if (previousNode && previousNode.classList?.contains('mention-tag')) {
                                 e.preventDefault();
                                 previousNode.remove();
+
+                                // Manually update input value and check for empty
+                                if (editableRef.current) {
+                                    const text = editableRef.current.textContent;
+                                    setInputValue(text);
+                                    if (text === '' && editableRef.current.innerHTML !== '') {
+                                        editableRef.current.innerHTML = '';
+                                    }
+                                }
                                 return;
                             }
                         }
@@ -425,6 +443,11 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         
         const text = e.target.textContent;
         setInputValue(text);
+
+        // Ensure the element is empty for CSS :empty selector to work
+        if (text === '' && e.target.innerHTML !== '') {
+            e.target.innerHTML = '';
+        }
         
         // Check if user is typing @ for mentions
         const selection = window.getSelection();
@@ -870,7 +893,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                             contentEditable
                             role="textbox"
                             aria-multiline="true"
-                            data-placeholder='Type your message... (use @ to mention files, folders, sheets)'
+                            data-placeholder='How can I help you today?'
                             onInput={handleInput}
                             onKeyDown={handleKeyDown}
                             onCompositionStart={() => isComposingRef.current = true}
@@ -914,8 +937,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                                         overflowY: 'auto',
                                         boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                                         zIndex: 1000,
-                                        minWidth: '200px',
-                                        maxWidth: '300px',
+                                        width: '300px',
                                     }}
                                 >
                                     {filtered.map((item, index) => {

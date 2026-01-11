@@ -169,6 +169,7 @@ aside {
 
 .message-user {
     display: flex;
+    margin-bottom: 10px;
     justify-content: flex-end;
 }
 
@@ -177,6 +178,14 @@ aside {
     padding: 0.5rem 1rem;
     max-width: 80%;
     align-self: flex-end;
+}
+
+.message-assistant {
+    margin-top: 12px;
+}
+
+.message-tool {
+    margin-top: 5px;
 }
 
 /* Assistant message formatting */
