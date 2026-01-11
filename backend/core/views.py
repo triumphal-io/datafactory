@@ -69,6 +69,107 @@ def api_documents(request, action):
             'name': document.name
         }
         return Response(response)
+    elif action == "mentions":
+        # Get mention suggestions for a specific document
+        try:
+            document_id = request.GET.get('document_id')
+            if not document_id:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'document_id parameter required'},
+                    status=400
+                )
+            
+            document = Document.objects.filter(uuid=document_id).first()
+            if not document:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Document not found'},
+                    status=404
+                )
+            
+            suggestions = []
+            
+            # Get files
+            files = File.objects.filter(document=document)
+            for file in files:
+                suggestions.append({
+                    'id': f'file:{file.uuid}',
+                    'display': f'📄 {file.filename}',
+                    'category': 'FILES',
+                    'type': 'file',
+                    'name': file.filename
+                })
+            
+            # Get folders
+            folders = Folder.objects.filter(document=document)
+            for folder in folders:
+                suggestions.append({
+                    'id': f'folder:{folder.uuid}',
+                    'display': f'📁 {folder.name}',
+                    'category': 'FOLDERS',
+                    'type': 'folder',
+                    'name': folder.name
+                })
+            
+            # Get sheets and columns
+            sheets = Sheet.objects.filter(document=document)
+            for sheet in sheets:
+                suggestions.append({
+                    'id': f'sheet:{sheet.uuid}',
+                    'display': f'📊 {sheet.name}',
+                    'category': 'SHEETS',
+                    'type': 'sheet',
+                    'name': sheet.name
+                })
+                
+                # Add columns from sheet data
+                if sheet.data and 'columns' in sheet.data:
+                    for column in sheet.data['columns']:
+                        # Normalize column definitions.
+                        # Columns may be plain strings ("Name") or structured dicts
+                        # (e.g. {"title": "Requirement No.", "prompt": ...}).
+                        column_name = column
+
+                        if isinstance(column, dict):
+                            column_name = (
+                                column.get('title')
+                                or column.get('name')
+                                or column.get('column')
+                                or str(column)
+                            )
+                        elif isinstance(column, str) and column.strip().startswith('{'):
+                            try:
+                                import ast
+                                column_dict = ast.literal_eval(column)
+                                if isinstance(column_dict, dict):
+                                    column_name = (
+                                        column_dict.get('title')
+                                        or column_dict.get('name')
+                                        or column_dict.get('column')
+                                        or column
+                                    )
+                            except (ValueError, SyntaxError):
+                                # If parsing fails, use the original column
+                                column_name = column
+                        
+                        suggestions.append({
+                            'id': f'column:{sheet.uuid}:{column}',
+                            'display': f'📋 {sheet.name}:{column_name}',
+                            'category': 'COLUMNS',
+                            'type': 'column',
+                            'name': f'{sheet.name}:{column_name}',
+                            'sheetName': sheet.name,
+                            'columnName': column_name
+                        })
+            
+            return JsonResponse({
+                'status': 'success',
+                'suggestions': suggestions
+            })
+        except Exception as e:
+            return JsonResponse(
+                {'status': 'error', 'message': str(e)},
+                status=500
+            )
     else:
         document = Document.objects.filter(uuid=action).first()
         if not document:
@@ -737,11 +838,11 @@ def api_bulk_enrich(request):
 
 
 
-@api_view(['GET', 'POST', 'DELETE'])
+@api_view(['GET', 'POST', 'DELETE', 'PATCH'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_sheets(request, did, sheet_id):
-    """Handle sheet data GET (load), POST (save/create), and DELETE operations"""
+    """Handle sheet data GET (load), POST (save/create), DELETE, and PATCH (metadata update) operations"""
     
     if request.method == 'GET':
         if sheet_id == 'list':
@@ -872,6 +973,43 @@ def api_sheets(request, did, sheet_id):
         return JsonResponse({
             'status': 'success',
             'message': 'Sheet deleted successfully'
+        })
+    elif request.method == 'PATCH':
+        # Update sheet metadata (e.g., name)
+        sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+        if not sheet:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Sheet not found'},
+                status=404
+            )
+        
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Invalid JSON'},
+                status=400
+            )
+        
+        # Update sheet name if provided
+        if 'name' in body:
+            new_name = body['name'].strip()
+            if not new_name:
+                return JsonResponse(
+                    {'status': 'error', 'message': 'Sheet name cannot be empty'},
+                    status=400
+                )
+            sheet.name = new_name
+            sheet.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Sheet updated successfully',
+            'sheet': {
+                'id': str(sheet.uuid),
+                'name': sheet.name,
+                'last_modified': sheet.last_modified.isoformat()
+            }
         })
     
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)

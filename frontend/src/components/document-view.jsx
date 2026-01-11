@@ -427,20 +427,34 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         }
 
         try {
-            // For now, we'll update the sheet name by updating the sheet data
-            // You may need to add a PATCH endpoint to update only metadata
-            const updatedSheets = sheetsList.map(sheet => 
-                sheet.id === editingSheetId 
-                    ? { ...sheet, name: editingSheetName }
-                    : sheet
-            );
-            setSheetsList(updatedSheets);
-            onSheetsListChange && onSheetsListChange(updatedSheets);
-            
-            // TODO: Send update to backend when PATCH endpoint is available
-            // For now, the name will be reset on reload
-            showToast('Sheet name updated (temporary)', 'info');
-            setIsEditModalOpen(false);
+            // Send PATCH request to update sheet name
+            const response = await apiFetch(`/api/documents/${documentId}/sheets/${editingSheetId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    name: editingSheetName
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Update local state with the updated sheet info
+                    const updatedSheets = sheetsList.map(sheet => 
+                        sheet.id === editingSheetId 
+                            ? { ...sheet, name: editingSheetName }
+                            : sheet
+                    );
+                    setSheetsList(updatedSheets);
+                    onSheetsListChange && onSheetsListChange(updatedSheets);
+                    
+                    showToast('Sheet name updated successfully', 'success');
+                    setIsEditModalOpen(false);
+                } else {
+                    showToast(data.message || 'Failed to update sheet name', 'error');
+                }
+            } else {
+                showToast('Failed to update sheet name', 'error');
+            }
         } catch (error) {
             console.error('Error updating sheet metadata:', error);
             showToast('Failed to update sheet metadata', 'error');

@@ -11,6 +11,10 @@ import IconFile from '../assets/sheet.svg';
 import IconHand from '../assets/hand.svg';
 import Loader from '../assets/loader-mini.gif';
 
+// Temporarily disable column mentions.
+// (Keeps other mention categories like files/folders/sheets.)
+const ENABLE_COLUMN_MENTIONS = false;
+
 const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
     const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [messages, setMessages] = useState([]);
@@ -18,13 +22,51 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     const [conversationId, setConversationId] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [attachments, setAttachments] = useState([]);
+    const [mentionSuggestions, setMentionSuggestions] = useState([]);
+    const [showMentions, setShowMentions] = useState(false);
+    const [mentionSearch, setMentionSearch] = useState('');
+    const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+    const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+    const [mentionStartPos, setMentionStartPos] = useState(null);
+    const [mentionEndPos, setMentionEndPos] = useState(null);
+    const [mentions, setMentions] = useState([]);
     const bodyRef = useRef(null);
-    const textareaRef = useRef(null);
+    const editableRef = useRef(null);
     const fileInputRef = useRef(null);
+    const mentionDropdownRef = useRef(null);
     const selectedCellsRef = useRef(selectedCells);
+    const isComposingRef = useRef(false);
 
     // Update ref synchronously during render to avoid being one step behind
     selectedCellsRef.current = selectedCells;
+
+    // Fetch mention suggestions when document loads or sheet data changes
+    useEffect(() => {
+        const fetchMentions = async () => {
+            try {
+                const response = await apiFetch(`/api/documents/mentions?document_id=${documentId}`, { 
+                    method: 'GET' 
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+                    const filtered = ENABLE_COLUMN_MENTIONS
+                        ? suggestions
+                        : suggestions.filter(s => s?.category !== 'COLUMNS' && s?.type !== 'column');
+                    setMentionSuggestions(filtered);
+                } else {
+                    console.error('Error fetching mentions:', data.message);
+                }
+            } catch (error) {
+                console.error('Error fetching mention suggestions:', error);
+            }
+        };
+        
+        if (documentId) {
+            fetchMentions();
+        }
+    }, [documentId]);
 
     // Handle dropped files from parent component
     useEffect(() => {
@@ -42,17 +84,36 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         }
     }, [messages]);
 
-    // Blur textarea when clicking outside of it
+    // Blur editable div when clicking outside of it
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (textareaRef.current && !textareaRef.current.contains(event.target)) {
-                textareaRef.current.blur();
+            if (editableRef.current && !editableRef.current.contains(event.target)) {
+                editableRef.current.blur();
+            }
+            
+            // Close mentions dropdown when clicking outside
+            if (showMentions && 
+                mentionDropdownRef.current && 
+                !mentionDropdownRef.current.contains(event.target) &&
+                editableRef.current && 
+                !editableRef.current.contains(event.target)) {
+                setShowMentions(false);
             }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [showMentions]);
+
+    // Scroll selected mention into view when navigating with keyboard
+    useEffect(() => {
+        if (showMentions && mentionDropdownRef.current) {
+            const selectedItem = mentionDropdownRef.current.querySelector(`[data-mention-index="${selectedMentionIndex}"]`);
+            if (selectedItem) {
+                selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+    }, [selectedMentionIndex, showMentions]);
 
     // Expose method to send tool results back
     useImperativeHandle(ref, () => ({
@@ -76,6 +137,9 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 }
                 return msg;
             }));
+
+            // Add working message to show the assistant is processing tool results
+            setMessages(prev => [...prev, { type: 'working' }]);
 
             try {
                 const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
@@ -157,15 +221,40 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         }
     };
 
+    const getPlainTextFromEditable = () => {
+        if (!editableRef.current) return '';
+        
+        let text = '';
+        const processNode = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.classList.contains('mention-tag')) {
+                    const mentionName = node.getAttribute('data-mention-name');
+                    text += '@' + mentionName;
+                } else {
+                    node.childNodes.forEach(processNode);
+                }
+            }
+        };
+        
+        editableRef.current.childNodes.forEach(processNode);
+        return text;
+    };
+
     const newChat = () => {
         setConversationId(null);
         setMessages([]);
         setAttachments([]);
         setInputValue('');
+        if (editableRef.current) {
+            editableRef.current.innerHTML = '';
+        }
+        setMentions([]);
     };
 
     const sendMessage = async () => {
-        const message = inputValue.trim();
+        const message = getPlainTextFromEditable().trim();
         if (!message || isProcessing) return;
 
         // Add user message to the list (with attachment info if present)
@@ -176,6 +265,10 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
         }
         setMessages(prev => [...prev, { type: 'user', content: userMessageContent }, { type: 'working' }]);
         setInputValue('');
+        if (editableRef.current) {
+            editableRef.current.innerHTML = '';
+        }
+        setMentions([]);
         setIsProcessing(true);
 
         try {
@@ -255,6 +348,66 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     };
 
     const handleKeyDown = (e) => {
+        // Handle mentions dropdown navigation
+        if (showMentions) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const filtered = getFilteredMentions();
+                setSelectedMentionIndex((prev) => (prev + 1) % filtered.length);
+                return;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const filtered = getFilteredMentions();
+                setSelectedMentionIndex((prev) => (prev - 1 + filtered.length) % filtered.length);
+                return;
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                const filtered = getFilteredMentions();
+                if (filtered.length > 0) {
+                    insertMention(filtered[selectedMentionIndex]);
+                }
+                return;
+            } else if (e.key === 'Escape') {
+                setShowMentions(false);
+                return;
+            }
+        }
+        
+        // Handle backspace to delete entire mention at once
+        if (e.key === 'Backspace') {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                if (range.collapsed) {
+                    // Check if cursor is right after a mention tag
+                    const container = range.startContainer;
+                    const offset = range.startOffset;
+                    
+                    // If we're in a text node
+                    if (container.nodeType === Node.TEXT_NODE) {
+                        const previousSibling = container.previousSibling;
+                        // If at the start of a text node and previous sibling is a mention
+                        if (offset === 0 && previousSibling && previousSibling.classList?.contains('mention-tag')) {
+                            e.preventDefault();
+                            previousSibling.remove();
+                            return;
+                        }
+                    }
+                    // If we're directly in the editable div
+                    else if (container === editableRef.current) {
+                        if (offset > 0) {
+                            const previousNode = container.childNodes[offset - 1];
+                            if (previousNode && previousNode.classList?.contains('mention-tag')) {
+                                e.preventDefault();
+                                previousNode.remove();
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         if (e.key === 'Enter') {
             if (e.shiftKey) {
                 // Shift+Enter: allow default behavior (new line)
@@ -265,6 +418,146 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 sendMessage();
             }
         }
+    };
+
+    const handleInput = (e) => {
+        if (isComposingRef.current) return;
+        
+        const text = e.target.textContent;
+        setInputValue(text);
+        
+        // Check if user is typing @ for mentions
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const container = range.startContainer;
+            
+            if (container.nodeType === Node.TEXT_NODE) {
+                const textBeforeCursor = container.textContent.substring(0, range.startOffset);
+                const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+                
+                if (lastAtIndex !== -1) {
+                    const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
+                    if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
+                        const searchText = textBeforeCursor.substring(lastAtIndex + 1);
+                        if (!searchText.includes(' ') && !searchText.includes('\n')) {
+                            setMentionSearch(searchText);
+                            setMentionStartPos(lastAtIndex);
+                            setShowMentions(true);
+                            setSelectedMentionIndex(0);
+                            updateMentionPosition(e.target);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        
+        setShowMentions(false);
+    };
+
+    const updateMentionPosition = (element) => {
+        if (!element) return;
+        
+        const rect = element.getBoundingClientRect();
+        const top = rect.top - 10;
+        const left = rect.left + 10;
+        
+        setMentionPosition({ top, left });
+    };
+
+    const getCategoryLabel = (category) => {
+        // Convert plural category to singular lowercase (e.g., FILES -> file)
+        return category.toLowerCase().replace(/s$/, '');
+    };
+
+    const getFilteredMentions = () => {
+        if (!mentionSearch) return mentionSuggestions;
+        
+        const search = mentionSearch.toLowerCase();
+        return mentionSuggestions.filter(s => 
+            s.display?.toLowerCase().includes(search) ||
+            s.name.toLowerCase().includes(search)
+        );
+    };
+
+    const insertMention = (mention) => {
+        if (!ENABLE_COLUMN_MENTIONS && (mention?.category === 'COLUMNS' || mention?.type === 'column')) {
+            setShowMentions(false);
+            setMentionSearch('');
+            setMentionStartPos(null);
+            return;
+        }
+
+        const selection = window.getSelection();
+        if (!selection.rangeCount || !editableRef.current) return;
+        
+        const range = selection.getRangeAt(0);
+        let container = range.startContainer;
+        
+        // Find the text node containing the @ symbol
+        while (container && container.nodeType !== Node.TEXT_NODE) {
+            container = container.firstChild;
+        }
+        
+        if (container && container.nodeType === Node.TEXT_NODE && mentionStartPos !== null) {
+            const text = container.textContent;
+            
+            // Get text before the @, and text after the current cursor (which includes what the user typed after @)
+            const beforeAt = text.substring(0, mentionStartPos);
+            const afterMention = text.substring(range.startOffset);
+            
+            // Create mention tag element
+            const mentionTag = document.createElement('span');
+            mentionTag.className = 'mention-tag';
+            mentionTag.contentEditable = 'false';
+            mentionTag.setAttribute('data-mention-id', mention.id);
+            mentionTag.setAttribute('data-mention-name', mention.name);
+            mentionTag.setAttribute('data-mention-category', mention.category);
+            const categoryPrefix = getCategoryLabel(mention.category);
+            mentionTag.textContent = `@${categoryPrefix}:${mention.name}`;
+            
+            // Create a space after the mention
+            const spaceNode = document.createTextNode(' ');
+            
+            // Create new text nodes (before @ and after the typed mention search)
+            const parent = container.parentNode;
+            
+            if (beforeAt) {
+                const beforeNode = document.createTextNode(beforeAt);
+                parent.insertBefore(beforeNode, container);
+            }
+            
+            parent.insertBefore(mentionTag, container);
+            parent.insertBefore(spaceNode, container);
+            
+            if (afterMention) {
+                const afterNode = document.createTextNode(afterMention);
+                parent.insertBefore(afterNode, container);
+            }
+            
+            // Remove the original text node that contained everything
+            parent.removeChild(container);
+            
+            // Set cursor after the space
+            const newRange = document.createRange();
+            newRange.setStartAfter(spaceNode);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+            
+            // Update state
+            setMentions(prev => [...prev, mention]);
+        }
+        
+        setShowMentions(false);
+        setMentionSearch('');
+        setMentionStartPos(null);
+        editableRef.current.focus();
+    };
+
+    const handleMentionClick = (mention) => {
+        insertMention(mention);
     };
 
     const handleFileSelect = (e) => {
@@ -570,17 +863,106 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                         </div>
                     )}
                     
-                    <textarea 
-                        ref={textareaRef}
-                        className={`flex-expanded input-empty`}
-                        id="assistant-input"
-                        onKeyDown={handleKeyDown}
-                        rows="2"
-                        placeholder="Type your message..."
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        disabled={isProcessing}
-                    />
+                    <div style={{ position: 'relative' }}>
+                        <div
+                            ref={editableRef}
+                            className='input-empty text--white text--micro editable-input'
+                            contentEditable
+                            role="textbox"
+                            aria-multiline="true"
+                            data-placeholder='Type your message... (use @ to mention files, folders, sheets)'
+                            onInput={handleInput}
+                            onKeyDown={handleKeyDown}
+                            onCompositionStart={() => isComposingRef.current = true}
+                            onCompositionEnd={() => {
+                                isComposingRef.current = false;
+                                handleInput({ target: editableRef.current });
+                            }}
+                            style={{
+                                minHeight: '60px',
+                                width: '100%',
+                                border: 'none',
+                                outline: 'none',
+                                fontFamily: 'inherit',
+                                lineHeight: '1.5',
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                position: 'relative',
+                                backgroundColor: 'transparent',
+                                zIndex: 1,
+                                whiteSpace: 'pre-wrap',
+                                wordWrap: 'break-word',
+                            }}
+                        />
+                        
+                        {/* Custom Mentions Dropdown */}
+                        {showMentions && (() => {
+                            const filtered = getFilteredMentions();
+                            
+                            return filtered.length > 0 ? (
+                                <div 
+                                    ref={mentionDropdownRef}
+                                    className="mentions-dropdown"
+                                    style={{
+                                        position: 'fixed',
+                                        bottom: `calc(100vh - ${mentionPosition.top}px)`,
+                                        left: `${mentionPosition.left}px`,
+                                        backgroundColor: '#2B2B2B',
+                                        border: '1px solid #464646',
+                                        borderRadius: '4px',
+                                        maxHeight: '200px',
+                                        overflowY: 'auto',
+                                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                        zIndex: 1000,
+                                        minWidth: '200px',
+                                        maxWidth: '300px',
+                                    }}
+                                >
+                                    {filtered.map((item, index) => {
+                                        const isSelected = index === selectedMentionIndex;
+                                        const categoryLabel = item.category.slice(0, -1); // Remove 'S' from plural
+                                        
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                className="mention-item"
+                                                data-mention-index={index}
+                                                onClick={() => handleMentionClick(item)}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                style={{
+                                                    display: 'flex',
+                                                    // justifyContent: 'space-between',
+                                                    // alignItems: 'center',
+                                                    padding: '6px 10px',
+                                                    cursor: 'pointer',
+                                                    backgroundColor: isSelected ? '#3a3a3a' : 'transparent',
+                                                    fontSize: '11px',
+                                                    gap: '10px',
+                                                }}
+                                                onMouseEnter={() => setSelectedMentionIndex(index)}
+                                            >
+                                                <span style={{ 
+                                                    color: '#888', 
+                                                    fontSize: '11px',
+                                                    textTransform: 'uppercase',
+                                                    fontWeight: '500',
+                                                    flexShrink: 0,
+                                                }}>{categoryLabel}</span>
+                                                <span style={{ 
+                                                    color: '#fff',
+                                                    flex: 1,
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                }}>{item.name}</span>
+                                                
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : null;
+                        })()}
+                    </div>
                     <div className="flex flex-row-center flex-space-between">
                         <input
                             ref={fileInputRef}

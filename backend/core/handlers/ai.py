@@ -122,23 +122,23 @@ def get_file_tools():
         list: List of tool definitions for file operations
     """
     # COMMENTED OUT: Old direct file reading tool - replaced with RAG-based querying
-    # read_file_tool = {
-    #     "type": "function",
-    #     "function": {
-    #         "name": "tool_read_file",
-    #         "description": "Read the extracted markdown content of a specific file by its UUID. Use this to access information from uploaded documents. The available files will be listed in the conversation context.",
-    #         "parameters": {
-    #             "type": "object",
-    #             "properties": {
-    #                 "file_id": {
-    #                     "type": "string",
-    #                     "description": "The UUID of the file to read."
-    #                 },
-    #             },
-    #             "required": ["file_id"],
-    #         },
-    #     }
-    # }
+    read_file_tool = {
+        "type": "function",
+        "function": {
+            "name": "tool_read_file",
+            "description": "Read the extracted markdown content of a specific file by its UUID. Use this to access information from uploaded documents. The available files will be listed in the conversation context.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "The UUID of the file to read."
+                    },
+                },
+                "required": ["file_id"],
+            },
+        }
+    }
     
     # NEW: RAG-based query tool for efficient file access
     query_file_tool = {
@@ -172,7 +172,7 @@ def get_file_tools():
         }
     }
     
-    return [query_file_tool]
+    return [query_file_tool, read_file_tool]
 
 
 def get_available_files_context(document_id):
@@ -1066,70 +1066,70 @@ def crawler(url):
 
 
 # COMMENTED OUT: Old direct file reading - kept for reference but not used
-# def tool_read_file(file_id, document_id=None):
-#     """
-#     Read the extracted markdown content of a specific file from the database.
-#     
-#     This tool is called by the AI to access uploaded document content.
-#     If the file is in processing state or has no extracted content, it will force extract immediately.
-#     
-#     Args:
-#         file_id (str): UUID of the file to read
-#         document_id (str, optional): Document UUID for access validation
-#     
-#     Returns:
-#         str: Extracted markdown content or error message
-#     """
-#     try:
-#         File = apps.get_model('core', 'File')
-#         
-#         # Fetch the file by UUID from database
-#         file_obj = File.objects.get(uuid=file_id)
-#         
-#         # Security check: Verify file belongs to the document (if document_id provided)
-#         if document_id and str(file_obj.document.uuid) != str(document_id):
-#             return "Error: File does not belong to the current document."
-#         
-#         if not file_obj.use:
-#             return "Error: This file is not available for use."
-#         
-#         # Force extract if file is processing or has no content
-#         if file_obj.is_processing or not file_obj.extracted_content:
-#             try:
-#                 from core.handlers.extraction import extract_file_content
-#                 
-#                 print(f"Force extracting content for file: {file_obj.filename}")
-#                 
-#                 # Extract content immediately
-#                 content = extract_file_content(file_obj)
-#                 
-#                 # Update database
-#                 file_obj.extracted_content = content
-#                 file_obj.is_processing = False
-#                 file_obj.save()
-#                 
-#                 print(f"✓ Successfully extracted content for: {file_obj.filename}")
-#                 
-#                 return content
-#                 
-#             except Exception as extraction_error:
-#                 error_msg = f"Error during extraction: {str(extraction_error)}"
-#                 print(f"✗ {error_msg}")
-#                 
-#                 # Mark as not processing and save error
-#                 file_obj.is_processing = False
-#                 file_obj.extracted_content = error_msg
-#                 file_obj.save()
-#                 
-#                 return error_msg
-#         
-#         # Return the extracted content if available
-#         return file_obj.extracted_content
-#     
-#     except File.DoesNotExist:
-#         return f"Error: File with ID {file_id} not found."
-#     except Exception as e:
-#         return f"Error reading file: {str(e)}"
+def tool_read_file(file_id, document_id=None):
+    """
+    Read the extracted markdown content of a specific file from the database.
+    
+    This tool is called by the AI to access uploaded document content.
+    If the file is in processing state or has no extracted content, it will force extract immediately.
+    
+    Args:
+        file_id (str): UUID of the file to read
+        document_id (str, optional): Document UUID for access validation
+    
+    Returns:
+        str: Extracted markdown content or error message
+    """
+    try:
+        File = apps.get_model('core', 'File')
+        
+        # Fetch the file by UUID from database
+        file_obj = File.objects.get(uuid=file_id)
+        
+        # Security check: Verify file belongs to the document (if document_id provided)
+        if document_id and str(file_obj.document.uuid) != str(document_id):
+            return "Error: File does not belong to the current document."
+        
+        if not file_obj.use:
+            return "Error: This file is not available for use."
+        
+        # Force extract if file is processing or has no content
+        if file_obj.is_processing or not file_obj.extracted_content:
+            try:
+                from core.handlers.extraction import extract_file_content
+                
+                print(f"Force extracting content for file: {file_obj.filename}")
+                
+                # Extract content immediately
+                content = extract_file_content(file_obj)
+                
+                # Update database
+                file_obj.extracted_content = content
+                file_obj.is_processing = False
+                file_obj.save()
+                
+                print(f"✓ Successfully extracted content for: {file_obj.filename}")
+                
+                return content
+                
+            except Exception as extraction_error:
+                error_msg = f"Error during extraction: {str(extraction_error)}"
+                print(f"✗ {error_msg}")
+                
+                # Mark as not processing and save error
+                file_obj.is_processing = False
+                file_obj.extracted_content = error_msg
+                file_obj.save()
+                
+                return error_msg
+        
+        # Return the extracted content if available
+        return file_obj.extracted_content
+    
+    except File.DoesNotExist:
+        return f"Error: File with ID {file_id} not found."
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
 
 
 def tool_query_file_data(query, filename, max_results=5, search_type='query', document_id=None):

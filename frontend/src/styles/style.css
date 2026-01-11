@@ -87,6 +87,81 @@ aside {
     /* border: 4px SOLID #464646; */
 }
 
+/* Custom Mentions Dropdown Styling */
+.mentions-dropdown {
+    animation: slideUp 0.15s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mentions-dropdown::-webkit-scrollbar {
+    width: 4px;
+}
+
+.mentions-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.mentions-dropdown::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 2px;
+}
+
+.mentions-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+.mention-item {
+    transition: background-color 0.1s ease;
+}
+
+.mention-item:hover {
+    background-color: #3a3a3a !important;
+}
+
+/* Contenteditable Input Styles */
+.editable-input {
+    cursor: text;
+}
+
+.editable-input:empty:before {
+    content: attr(data-placeholder);
+    color: #666;
+    pointer-events: none;
+}
+
+.editable-input:focus {
+    outline: none;
+}
+
+/* Mention Tag Styles - Inline chips */
+.mention-tag {
+    display: inline-block;
+    background: #4A4A4A;
+    color: #E0E0E0;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin: 0 2px;
+    font-size: 12px;
+    user-select: none;
+    cursor: default;
+    vertical-align: baseline;
+    line-height: 1.4;
+}
+
+.mention-tag:hover {
+    background: #555555;
+}
+
 .message {
     margin-top: 12px;
     overflow-wrap: anywhere;
