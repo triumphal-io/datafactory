@@ -60,6 +60,17 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
             background-color: rgba(34, 197, 94, 0.3) !important;
             // border: 1px solid rgba(34, 197, 94, 0.6) !important;
         }
+        @keyframes enrichment-complete-blink {
+            0% {
+                background-color: rgba(59, 130, 246, 0.6);
+            }
+            100% {
+                background-color: transparent;
+            }
+        }
+        .enrichment-complete-blink {
+            animation: enrichment-complete-blink 500ms ease-out forwards;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -110,6 +121,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const [pendingAiChanges, setPendingAiChanges] = useState(new Set());
     const [originalValues, setOriginalValues] = useState({});
     const [availableFiles, setAvailableFiles] = useState([]);
+    const [blinkingCells, setBlinkingCells] = useState(new Set());
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -560,6 +572,20 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 // Cell enrichment completed with value
                 const { row, column, value } = data;
                 handleCellEdit(row, column, value);
+
+                // Trigger blink animation
+                const cellKey = `${row}-${column}`;
+                setBlinkingCells(prev => new Set(prev).add(cellKey));
+
+                // Remove blink class after animation completes (500ms)
+                setTimeout(() => {
+                    setBlinkingCells(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(cellKey);
+                        return newSet;
+                    });
+                }, 500);
+
                 console.log(`Cell [${row}, ${column}] enriched with: ${value}`);
             } else if (type === 'enrichment_error') {
                 // Cell enrichment failed
@@ -1992,6 +2018,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                                 selectedCells.has(`${rowIndex}-${colIndex}`) ? 'selected' : ''
                                             } ${
                                                 pendingAiChanges.has(`${rowIndex}-${colIndex}`) ? 'ai-pending-change' : ''
+                                            } ${
+                                                blinkingCells.has(`${rowIndex}-${colIndex}`) ? 'enrichment-complete-blink' : ''
                                             }`}
                                             style={{ width: `${columnWidths[colIndex] || 160}px` }}
                                             data-row={rowIndex}
