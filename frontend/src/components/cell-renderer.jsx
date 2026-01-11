@@ -153,7 +153,7 @@ const CellRenderer = ({
                 >
                     <span className="chip" style={{
                         backgroundColor: '#0066cc',
-                        color: 'grey',
+                        color: 'white',
                         padding: '2px 6px',
                         // borderRadius: '12px',
                         fontSize: '11px',
