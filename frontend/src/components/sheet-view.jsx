@@ -109,6 +109,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     const [overlayEditor, setOverlayEditor] = useState(null);
     const [pendingAiChanges, setPendingAiChanges] = useState(new Set());
     const [originalValues, setOriginalValues] = useState({});
+    const [availableFiles, setAvailableFiles] = useState([]);
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -120,6 +121,28 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     const loadedDataRef = useRef(null);
     const autoScrollIntervalRef = useRef(null);
     const lastMousePositionRef = useRef({ x: 0, y: 0 });
+
+    // Load available files for file column type
+    useEffect(() => {
+        const loadFiles = async () => {
+             try {
+                // Fetch ALL files for the document by adding ?all=true
+                const response = await apiFetch(`/api/documents/${documentId}/files/list?all=true`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'success' && data.files) {
+                        setAvailableFiles(data.files.map(f => f.name));
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading files:', error);
+            }
+        };
+        
+        if (documentId) {
+            loadFiles();
+        }
+    }, [documentId]);
 
     // Load data from JSON on mount
     useEffect(() => {
@@ -1937,8 +1960,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                 {row.map((cell, colIndex) => {
                                     const column = sheetData.columns[colIndex];
                                     const columnType = column?.type || 'text';
-                                    const shouldUseCustomRenderer = ['select', 'multiselect', 'url', 'email', 'checkbox'].includes(columnType);
-                                    const shouldBlockOverlayEditor = ['select', 'multiselect', 'checkbox'].includes(columnType);
+                                    const shouldUseCustomRenderer = ['select', 'multiselect', 'url', 'email', 'checkbox', 'file'].includes(columnType);
+                                    const shouldBlockOverlayEditor = ['select', 'multiselect', 'checkbox', 'file'].includes(columnType);
                                     
                                     return (
                                         <div
@@ -1983,7 +2006,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                                                 <CellRenderer
                                                     value={cell}
                                                     columnType={columnType}
-                                                    columnOptions={column?.options || []}
+                                                    columnOptions={columnType === 'file' ? availableFiles : (column?.options || [])}
                                                     isSelected={selectedCells.has(`${rowIndex}-${colIndex}`)}
                                                     onEdit={(newValue) => handleCellEdit(rowIndex, colIndex, newValue)}
                                                     rowIndex={rowIndex}

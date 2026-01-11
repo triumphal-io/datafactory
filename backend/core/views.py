@@ -507,8 +507,12 @@ def api_files(request, did, action):
     if action == "list":
         # Get folder_id from query params if provided
         folder_id = request.GET.get('folder_id', None)
+        show_all = request.GET.get('all', 'false').lower() == 'true'
         
-        if folder_id:
+        if show_all:
+            # Show all files for the document regardless of folder
+            files = File.objects.filter(document__uuid=did)
+        elif folder_id:
             # Filter files by folder - only show files in this folder
             files = File.objects.filter(document__uuid=did, folder__uuid=folder_id)
             # print(f"📂 Loading files for folder {folder_id}: {files.count()} files")

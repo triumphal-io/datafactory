@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import IconSheet from '../assets/sheet.svg';
+import IconDocument from '../assets/document-black.svg';
 
 const CellRenderer = ({ 
     value, 
@@ -119,7 +121,7 @@ const CellRenderer = ({
                                     style={{
                                         padding: '8px 12px',
                                         cursor: 'pointer',
-                                        fontSize: '12px',
+                                        fontSize: '11px',
                                         color: currentValue === option ? '#0066cc' : '#e0e0e0',
                                         backgroundColor: currentValue === option ? 'rgba(0, 102, 204, 0.1)' : 'transparent'
                                     }}
@@ -151,8 +153,8 @@ const CellRenderer = ({
                 >
                     <span className="chip" style={{
                         backgroundColor: '#0066cc',
-                        color: 'white',
-                        padding: '3px 8px',
+                        color: 'grey',
+                        padding: '2px 6px',
                         // borderRadius: '12px',
                         fontSize: '11px',
                         display: 'flex',
@@ -210,7 +212,7 @@ const CellRenderer = ({
                             <span key={idx} className="chip" style={{
                                 backgroundColor: '#0066cc',
                                 color: 'white',
-                                padding: '2px 8px',
+                                padding: '2px 6px',
                                 // borderRadius: '12px',
                                 fontSize: '11px',
                                 display: 'inline-flex',
@@ -318,7 +320,7 @@ const CellRenderer = ({
                         <span key={idx} className="chip" style={{
                             backgroundColor: '#0066cc',
                             color: 'white',
-                            padding: '2px 8px',
+                            padding: '2px 6px',
                             // borderRadius: '12px',
                             fontSize: '11px',
                             display: 'inline-block'
@@ -434,6 +436,169 @@ const CellRenderer = ({
         );
     };
 
+    // Render File field
+    const renderFile = () => {
+        const options = columnOptions || [];
+        const selectedValues = value ? value.split(',').map(v => v.trim()).filter(v => v) : [];
+
+        if (isEditing || dropdownOpen) {
+            return (
+                <>
+                    <div 
+                        ref={triggerRef}
+                        className="multiselect-trigger"
+                        onClick={() => setDropdownOpen(!dropdownOpen)}
+                        style={{
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            flexWrap: 'wrap'
+                        }}
+                    >
+                        {selectedValues.length > 0 ? selectedValues.map((val, idx) => (
+                            <span key={idx} className="chip" style={{
+                                backgroundColor: '#ffffff', // White
+                                color: '#000000', // Black
+                                // border: '1px solid #e0e0e0', // Light border for visibility
+                                padding: '2px 6px',
+                                fontSize: '11px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                borderRadius: '4px' // Consistent look
+                            }}>
+                                <img src={IconSheet} width="10" height="10" alt="file" />
+                                {val}
+                                <span 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newValues = selectedValues.filter(v => v !== val);
+                                        onEdit(newValues.join(', '));
+                                    }}
+                                    style={{ cursor: 'pointer', fontWeight: 'bold', marginLeft: '2px' }}
+                                >
+                                    ×
+                                </span>
+                            </span>
+                        )) : (
+                            <span style={{ color: '#888', fontSize: '12px' }}>Select files...</span>
+                        )}
+                    </div>
+                    {dropdownOpen && (
+                        <div 
+                            ref={dropdownRef}
+                            className="dropdown-menu"
+                            style={{
+                                position: 'fixed',
+                                top: `${dropdownPosition.top}px`,
+                                left: `${dropdownPosition.left}px`,
+                                width: `${dropdownPosition.width}px`,
+                                backgroundColor: '#2a2a2a',
+                                border: '1px solid #444',
+                                borderRadius: '4px',
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                zIndex: 10000,
+                                boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                            }}
+                        >
+                            {options.map((option, index) => {
+                                const isSelected = selectedValues.includes(option);
+                                return (
+                                    <div
+                                        key={index}
+                                        className="dropdown-item"
+                                        onClick={() => {
+                                            let newValues;
+                                            if (isSelected) {
+                                                newValues = selectedValues.filter(v => v !== option);
+                                            } else {
+                                                newValues = [...selectedValues, option];
+                                            }
+                                            onEdit(newValues.join(', '));
+                                        }}
+                                        style={{
+                                            padding: '8px 12px',
+                                            cursor: 'pointer',
+                                            fontSize: '12px',
+                                            color: '#e0e0e0',
+                                            backgroundColor: isSelected ? 'rgba(0, 102, 204, 0.2)' : 'transparent',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.target.style.backgroundColor = 'rgba(0, 102, 204, 0.3)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.target.style.backgroundColor = isSelected ? 'rgba(0, 102, 204, 0.2)' : 'transparent';
+                                        }}
+                                    >
+                                        <input 
+                                            type="checkbox" 
+                                            checked={isSelected} 
+                                            readOnly 
+                                            style={{ pointerEvents: 'none' }}
+                                        />
+                                        {option}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </>
+            );
+        }
+
+        // View mode - show as chips
+        if (selectedValues.length > 0) {
+            return (
+                <div 
+                    onDoubleClick={() => {
+                        setIsEditing(true);
+                        setDropdownOpen(true);
+                    }}
+                    style={{ 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        gap: '4px',
+                        flexWrap: 'wrap'
+                    }}
+                >
+                    {selectedValues.map((val, idx) => (
+                        <span key={idx} className="chip" style={{
+                            backgroundColor: '#ffffff', // White
+                            color: '#000000', // Black
+                            // border: '1px solid #e0e0e0',
+                            padding: '2px 6px',
+                            fontSize: '11px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            borderRadius: '4px'
+                        }}>
+                             <img src={IconDocument} width="10" height="10" alt="file" />
+                            {val}
+                        </span>
+                    ))}
+                </div>
+            );
+        }
+
+        return (
+            <div 
+                onDoubleClick={() => {
+                    setIsEditing(true);
+                    setDropdownOpen(true);
+                }}
+                style={{ cursor: 'pointer', color: '#888', fontSize: '12px' }}
+            >
+                Select files...
+            </div>
+        );
+    };
+
     // Render based on column type
     switch (columnType) {
         case 'select':
@@ -446,6 +611,8 @@ const CellRenderer = ({
             return renderEmail();
         case 'checkbox':
             return renderCheckbox();
+        case 'file':
+            return renderFile();
         default:
             return value || '';
     }
