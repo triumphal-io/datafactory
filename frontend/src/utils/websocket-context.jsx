@@ -3,21 +3,21 @@ import { useParams } from 'react-router-dom';
 
 const WebSocketContext = createContext(null);
 
-// Global map to store WebSocket connections per document
+// Global map to store WebSocket connections per workbook
 const wsConnections = new Map();
 const connectingDocs = new Set();
 
 export function WebSocketProvider({ children }) {
-    const { documentId } = useParams();
+    const { workbookId } = useParams();
     const wsRef = useRef(null);
     const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
-        if (!documentId) return;
+        if (!workbookId) return;
 
-        // Check if we already have a WebSocket for this document
-        if (wsConnections.has(documentId)) {
-            const existingWs = wsConnections.get(documentId);
+        // Check if we already have a WebSocket for this workbook
+        if (wsConnections.has(workbookId)) {
+            const existingWs = wsConnections.get(workbookId);
             if (existingWs.readyState === WebSocket.OPEN || existingWs.readyState === WebSocket.CONNECTING) {
                 wsRef.current = existingWs;
                 setIsConnected(existingWs.readyState === WebSocket.OPEN);
@@ -25,17 +25,17 @@ export function WebSocketProvider({ children }) {
                 return;
             } else {
                 // Clean up dead connection
-                wsConnections.delete(documentId);
+                wsConnections.delete(workbookId);
             }
         }
 
         // Check if another component is already connecting
-        if (connectingDocs.has(documentId)) {
+        if (connectingDocs.has(workbookId)) {
             console.log('WebSocket connection already in progress');
             // Wait for the other connection to complete
             const checkInterval = setInterval(() => {
-                if (wsConnections.has(documentId)) {
-                    const existingWs = wsConnections.get(documentId);
+                if (wsConnections.has(workbookId)) {
+                    const existingWs = wsConnections.get(workbookId);
                     if (existingWs.readyState === WebSocket.OPEN) {
                         wsRef.current = existingWs;
                         setIsConnected(true);
@@ -47,26 +47,26 @@ export function WebSocketProvider({ children }) {
             return () => clearInterval(checkInterval);
         }
 
-        // Mark this document as connecting
-        connectingDocs.add(documentId);
+        // Mark this workbook as connecting
+        connectingDocs.add(workbookId);
 
         // Determine WebSocket protocol based on current protocol
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const backendHost = 'localhost:50';
-        const wsUrl = `${wsProtocol}//${backendHost}/ws/document/${documentId}/`;
+        const wsUrl = `${wsProtocol}//${backendHost}/ws/workbook/${workbookId}/`;
         
         console.log('Connecting to WebSocket:', wsUrl);
         
         const ws = new WebSocket(wsUrl);
         
         // Store in global map immediately
-        wsConnections.set(documentId, ws);
+        wsConnections.set(workbookId, ws);
         wsRef.current = ws;
         
         ws.onopen = () => {
             console.log('WebSocket connected');
             setIsConnected(true);
-            connectingDocs.delete(documentId);
+            connectingDocs.delete(workbookId);
         };
         
         ws.onmessage = (event) => {
@@ -79,21 +79,21 @@ export function WebSocketProvider({ children }) {
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
             setIsConnected(false);
-            wsConnections.delete(documentId);
-            connectingDocs.delete(documentId);
+            wsConnections.delete(workbookId);
+            connectingDocs.delete(workbookId);
         };
         
         ws.onclose = () => {
             setIsConnected(false);
-            wsConnections.delete(documentId);
-            connectingDocs.delete(documentId);
+            wsConnections.delete(workbookId);
+            connectingDocs.delete(workbookId);
         };
         
         return () => {
             // Don't close immediately - other components might be using it
             // Only cleanup when page unloads
         };
-    }, [documentId]);
+    }, [workbookId]);
 
     const sendMessage = (message) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

@@ -9,10 +9,10 @@ import IconMore from '../assets/more.svg';
 import { apiFetch } from '../utils/api';
 import { showToast, getTimeAgo, convertMarkdownToHtml } from '../utils/utils';
 
-const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
+const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
     // State management
-    const [projectFiles, setProjectFiles] = useState([]);
-    const [projectFolders, setProjectFolders] = useState([]);
+    const [resourceFiles, setresourceFiles] = useState([]);
+    const [resourceFolders, setresourceFolders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [openDropdownIndex, setOpenDropdownIndex] = useState(null);
     const [showFolderPopup, setShowFolderPopup] = useState(false);
@@ -25,50 +25,50 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
     // Expose methods to parent via ref
     useImperativeHandle(ref, () => ({
         uploadFiles: uploadFiles,
-        loadProjectFiles: loadProjectFiles
+        loadresourceFiles: loadresourceFiles
     }));
 
-    // Load project files and folders from backend
-    const loadProjectFiles = useCallback(async () => {
+    // Load resources (uploaded files) and folders from backend
+    const loadresourceFiles = useCallback(async () => {
         try {
             setIsLoading(true);
             
             // Load files and folders in parallel
             const filesUrl = currentFolder 
-                ? `/api/documents/${documentId}/files/list?folder_id=${currentFolder.id}`
-                : `/api/documents/${documentId}/files/list`;
+                ? `/api/workbooks/${workbookId}/files/list?folder_id=${currentFolder.id}`
+                : `/api/workbooks/${workbookId}/files/list`;
             
             const [foldersResponse, filesResponse] = await Promise.all([
-                apiFetch(`/api/documents/${documentId}/folders/list`),
+                apiFetch(`/api/workbooks/${workbookId}/folders/list`),
                 apiFetch(filesUrl)
             ]);
             
             if (foldersResponse.ok) {
                 const foldersData = await foldersResponse.json();
                 if (foldersData.status === 'success') {
-                    setProjectFolders(foldersData.folders || []);
+                    setresourceFolders(foldersData.folders || []);
                 }
             }
             
             if (filesResponse.ok) {
                 const filesData = await filesResponse.json();
                 if (filesData.status === 'success') {
-                    setProjectFiles(filesData.files || []);
+                    setresourceFiles(filesData.files || []);
                 }
             }
         } catch (error) {
-            console.error('Error loading project files:', error);
+            console.error('Error loading resources:', error);
             showToast('Failed to load files', 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [documentId, currentFolder]);
+    }, [workbookId, currentFolder]);
 
     useEffect(() => {
-        if (documentId) {
-            loadProjectFiles();
+        if (workbookId) {
+            loadresourceFiles();
         }
-    }, [documentId, loadProjectFiles]);
+    }, [workbookId, loadresourceFiles]);
 
     // Upload files to backend
     const uploadFiles = useCallback(async (files) => {
@@ -84,7 +84,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 formData.append('folder_id', currentFolder.id);
             }
 
-            const response = await apiFetch(`/api/documents/${documentId}/files/upload`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/files/upload`, {
                 method: 'POST',
                 body: formData
             });
@@ -94,7 +94,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 if (data.status === 'success') {
                     showToast('Uploaded', 'success', 3000, toastId);
                     // Refresh the files list
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Upload failed', 'error', 3000, toastId);
                 }
@@ -105,7 +105,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             console.error('Error uploading files:', error);
             showToast('Upload failed', 'error', 3000, toastId);
         }
-    }, [documentId, currentFolder, loadProjectFiles]);
+    }, [workbookId, currentFolder, loadresourceFiles]);
 
     // Handle add folder
     const handleAddFolder = useCallback(() => {
@@ -122,7 +122,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         
         const toastId = showToast('Creating folder...', 'info', 999999);
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/folders/create`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/folders/create`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -135,7 +135,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 if (data.status === 'success') {
                     showToast('Folder created', 'success', 3000, toastId);
                     setShowFolderPopup(false);
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Failed to create folder', 'error', 3000, toastId);
                 }
@@ -146,7 +146,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             console.error('Error creating folder:', error);
             showToast('Failed to create folder', 'error', 3000, toastId);
         }
-    }, [documentId, folderName, loadProjectFiles]);
+    }, [workbookId, folderName, loadresourceFiles]);
 
     // Handle open folder
     const handleOpenFolder = useCallback((folder) => {
@@ -173,7 +173,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         
         const toastId = showToast('Renaming folder...', 'info', 999999);
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/folders/${renamingFolder.id}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/folders/${renamingFolder.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: renameValue })
@@ -189,7 +189,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                     if (currentFolder && currentFolder.id === renamingFolder.id) {
                         setCurrentFolder({ ...currentFolder, name: renameValue });
                     }
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Rename failed', 'error', 3000, toastId);
                 }
@@ -200,7 +200,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             console.error('Error renaming folder:', error);
             showToast('Rename failed', 'error', 3000, toastId);
         }
-    }, [documentId, renamingFolder, renameValue, currentFolder, loadProjectFiles]);
+    }, [workbookId, renamingFolder, renameValue, currentFolder, loadresourceFiles]);
 
     // Handle delete folder
     const handleDeleteFolder = useCallback(async (folderId, folderName) => {
@@ -210,7 +210,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         
         const toastId = showToast('Deleting folder...', 'info', 999999);
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/folders/${folderId}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/folders/${folderId}`, {
                 method: 'DELETE'
             });
             
@@ -218,7 +218,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 const data = await response.json();
                 if (data.status === 'success') {
                     showToast('Folder deleted', 'success', 3000, toastId);
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Delete failed', 'error', 3000, toastId);
                 }
@@ -229,7 +229,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             console.error('Error deleting folder:', error);
             showToast('Delete failed', 'error', 3000, toastId);
         }
-    }, [documentId, loadProjectFiles]);
+    }, [workbookId, loadresourceFiles]);
 
     // Handle add files
     const handleAddFiles = useCallback(() => {
@@ -255,7 +255,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         
         const toastId = showToast('Deleting...', 'info', 999999);
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/files/${fileId}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/files/${fileId}`, {
                 method: 'DELETE'
             });
             
@@ -263,7 +263,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 const data = await response.json();
                 if (data.status === 'success') {
                     showToast('File deleted', 'success', 3000, toastId);
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Delete failed', 'error', 3000, toastId);
                 }
@@ -275,7 +275,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             showToast('Delete failed', 'error', 3000, toastId);
         }
         setOpenDropdownIndex(null);
-    }, [documentId, loadProjectFiles]);
+    }, [workbookId, loadresourceFiles]);
 
     // Handle rename file
     const handleRenameFile = useCallback((file) => {
@@ -351,7 +351,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
         
         const toastId = showToast('Renaming file...', 'info', 999999);
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/files/${renamingFile.id}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/files/${renamingFile.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: renameValue })
@@ -363,7 +363,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                     showToast('File renamed', 'success', 3000, toastId);
                     setRenamingFile(null);
                     setRenameValue('');
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Rename failed', 'error', 3000, toastId);
                 }
@@ -374,14 +374,14 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             console.error('Error renaming file:', error);
             showToast('Rename failed', 'error', 3000, toastId);
         }
-    }, [documentId, renamingFile, renameValue, loadProjectFiles]);
+    }, [workbookId, renamingFile, renameValue, loadresourceFiles]);
 
     // Handle toggle visibility
     const handleToggleVisibility = useCallback(async (fileId, fileName, currentVisibility) => {
         const newVisibility = !currentVisibility;
         const toastId = showToast('Updating...', 'info', 999999);
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/files/${fileId}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/files/${fileId}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json'
@@ -393,7 +393,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                 const data = await response.json();
                 if (data.status === 'success') {
                     showToast(newVisibility ? 'File shown' : 'File hidden', 'success', 3000, toastId);
-                    await loadProjectFiles();
+                    await loadresourceFiles();
                 } else {
                     showToast('Update failed', 'error', 3000, toastId);
                 }
@@ -405,7 +405,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             showToast('Update failed', 'error', 3000, toastId);
         }
         setOpenDropdownIndex(null);
-    }, [documentId, loadProjectFiles]);
+    }, [workbookId, loadresourceFiles]);
 
     // Toggle dropdown menu
     const toggleDropdown = useCallback((index, e) => {
@@ -456,11 +456,11 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
     // Memoize converted HTML for files to avoid re-converting on every render
     // Only convert first 500 characters for thumbnail preview
     const filesWithHtml = useMemo(() => {
-        return projectFiles.map(file => ({
+        return resourceFiles.map(file => ({
             ...file,
             htmlContent: file.content ? convertMarkdownToHtml(file.content.slice(0, 500)) : null
         }));
-    }, [projectFiles]);
+    }, [resourceFiles]);
 
     // Memoize navigation component
     const navigationContent = useMemo(() => (
@@ -473,7 +473,7 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
                     onClick={handleBackToAllFiles}
                     style={{ opacity: currentFolder ? 0.7 : 1 }}
                 >
-                    Project Files
+                    Resources
                 </p>
                 {currentFolder && (
                     <>
@@ -702,14 +702,14 @@ const FilesView = forwardRef(({ documentId, onSavingChange, onLastSavedChange, o
             <div className="sheet-content flex-expanded scroll-x scroll-y thin-scroll">
                 <div className="flex flex-column" style={{ padding: '20px' }}>
                     
-                    {projectFiles.length === 0 && projectFolders.length === 0 ? (
+                    {resourceFiles.length === 0 && resourceFolders.length === 0 ? (
                         <div className="flex flex-column flex-center" style={{ padding: '40px' }}>
-                            <p style={{ color: '#6b7280' }}>No project files yet</p>
+                            <p style={{ color: '#6b7280' }}>No resources yet</p>
                         </div>
                     ) : (
                         <div className="grid-flexible gap-10">
                             {/* Render folders first (only when not inside a folder) */}
-                            {!currentFolder && projectFolders.map((folder, index) => (
+                            {!currentFolder && resourceFolders.map((folder, index) => (
                                 <div 
                                     key={`folder-${index}`}
                                     className="file flex flex-row-center flex-space-between"

@@ -415,7 +415,7 @@ def process_pending_files():
                         delete_file_chunks(str(file_instance.uuid))
                         
                         # Index the file
-                        user_id = file_instance.document.user.id
+                        user_id = file_instance.workbook.user.id
                         folder_name = file_instance.folder.name if file_instance.folder else None
                         num_chunks = index_file(
                             file_path=file_instance.file.path,

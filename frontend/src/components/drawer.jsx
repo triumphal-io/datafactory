@@ -12,7 +12,7 @@ export default function Drawer({ isOpen, onClose }) {
     const navigate = useNavigate();
     const [opacity, setOpacity] = useState(isOpen ? 1 : 0);
     const [transition, setTransition] = useState(isOpen ? 'opacity 0.2s ease' : 'none');
-    const [documents, setDocuments] = useState([]);
+    const [workbooks, setWorkbooks] = useState([]);
     const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
@@ -26,44 +26,44 @@ export default function Drawer({ isOpen, onClose }) {
     }, [isOpen]);
 
     useEffect(() => {
-        const fetchDocuments = async () => {
+        const fetchWorkbooks = async () => {
             try {
-                const response = await apiFetch('/api/documents/list');
+                const response = await apiFetch('/api/workbooks/list');
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('Fetched documents:', data);
-                    setDocuments(data.documents);
+                    console.log('Fetched workbooks:', data);
+                    setWorkbooks(data.workbooks);
                 }
             } catch (error) {
-                console.error('Error fetching documents:', error);
+                console.error('Error fetching workbooks:', error);
             }
         };
 
         if (isOpen) {
-            fetchDocuments();
+            fetchWorkbooks();
         }
     }, [isOpen]);
 
-    const handleNewDocument = async (e) => {
+    const handleNewWorkbook = async (e) => {
         e.preventDefault();
         if (isCreating) return; // Prevent double clicks
         
         setIsCreating(true);
         try {
-            const response = await apiFetch('/api/documents/create', {
+            const response = await apiFetch('/api/workbooks/create', {
                 method: 'POST'
             });
             if (response.ok) {
                 const data = await response.json();
-                console.log('Created new document:', data);
-                // Navigate to the newly created document
-                navigate(`/document/${data.document_id}/sheet/${data.sheet_id}`);
+                console.log('Created New Workbook:', data);
+                // Navigate to the newly created workbook
+                navigate(`/workbook/${data.workbook_id}/sheet/${data.sheet_id}`);
                 onClose();
             } else {
-                console.error('Failed to create document');
+                console.error('Failed to create workbook');
             }
         } catch (error) {
-            console.error('Error creating document:', error);
+            console.error('Error creating workbook:', error);
         } finally {
             setIsCreating(false);
         }
@@ -86,7 +86,7 @@ export default function Drawer({ isOpen, onClose }) {
         <div className='flex flex-column hght-100' style={{ opacity, transition }}>
         <div className='flex flex-column gap-10 mrgnt-15'>
             <div 
-                onClick={handleNewDocument} 
+                onClick={handleNewWorkbook} 
                 style={{ 
                     textDecoration: 'none', 
                     color: 'inherit', 
@@ -97,40 +97,40 @@ export default function Drawer({ isOpen, onClose }) {
             >
                 <img 
                     src={isCreating ? LoaderGif : IconNew} 
-                    alt={isCreating ? "Loading" : "New Document"} 
+                    alt={isCreating ? "Loading" : "New Workbook"} 
                     height="16" 
                 />
                 <p className='text--micro text__medium'>
-                    {isCreating ? 'Creating...' : 'New Document'}
+                    {isCreating ? 'Creating...' : 'New Workbook'}
                 </p>
             </div>
         </div>
         <div style={{ color: '#ccc' }}>
             <p className='text--micro text__semibold opacity-5 mrgnt-15' style={{ padding: "0 15px" }}>History</p>
-            <ul className='mrgnt-10 text--micro document-history'>
-                {documents.length > 0 ? (
-                    [...documents].reverse().map((doc) => (
-                        <Link 
-                            key={doc.id} 
-                            to={`/document/${doc.id}/sheet/default-sheet`} 
+            <ul className='mrgnt-10 text--micro workbook-history'>
+                {workbooks.length > 0 ? (
+                    [...workbooks].reverse().map((workbook) => (
+                        <Link
+                            key={workbook.id}
+                            to={`/workbook/${workbook.id}/sheet/default-sheet`}
                             style={{ textDecoration: 'none', color: 'inherit' }}
                         >
-                            <li>{doc.name || doc.title}</li>
+                            <li>{workbook.name || workbook.title}</li>
                         </Link>
                     ))
                 ) : (
-                    <li style={{ opacity: 0.5, paddingLeft: '15px' }}>No documents yet</li>
+                    <li style={{ opacity: 0.5, paddingLeft: '15px' }}>No workbooks yet</li>
                 )}
             </ul>
         </div>
         <div className='spacer'></div>
         <div className='flex flex-column gap-5 mrgnt-15 mrgnb-10'>
             <Link to="/settings" style={{ textDecoration: 'none', color: 'inherit' }} className='drawer-item flex flex-row-center gap-12'>
-                <img src={IconSettings} alt="New Document" height="16" />
+                <img src={IconSettings} alt="New Workbook" height="16" />
                 <p className='text--micro text__medium'>Settings</p>
             </Link>
             <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}  className='drawer-item flex flex-row-center gap-12'>
-                <img src={IconLogout} alt="New Document" height="16" />
+                <img src={IconLogout} alt="New Workbook" height="16" />
                 <p className='text--micro text__medium'>Logout</p>
             </Link>
         </div>

@@ -12,23 +12,23 @@ import FilesView from './files-view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo, showToast } from '../utils/utils';
 
-const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propSheetId, onSelectionChange, onSheetNameChange, onFilesDropped, selectedModel, sheetsList: propSheetsList, documentName: propDocumentName, onDocumentNameChange, onSheetsListChange }, ref) => {
+const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propSheetId, onSelectionChange, onSheetNameChange, onFilesDropped, selectedModel, sheetsList: propSheetsList, workbookName: propWorkbookName, onWorkbookNameChange, onSheetsListChange }, ref) => {
     const navigate = useNavigate();
     const sheetViewRef = useRef(null);
     const filesViewRef = useRef(null);
     const nameChangeTimeoutRef = useRef(null);
 
     // State management
-    const [documentId, setDocumentId] = useState(propDocumentId);
+    const [workbookId, setWorkbookId] = useState(propWorkbookId);
     const [sheetId, setSheetId] = useState(propSheetId);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [sheetsList, setSheetsList] = useState(propSheetsList || []);
-    const [documentName, setDocumentName] = useState(propDocumentName || 'Loading...');
-    const [activeView, setActiveView] = useState(propSheetId ? 'sheet' : 'project-files'); // 'sheet' or 'project-files'
+    const [workbookName, setWorkbookName] = useState(propWorkbookName || 'Loading...');
+    const [activeView, setActiveView] = useState(propSheetId ? 'sheet' : 'resources'); // 'sheet' or 'resources'
     const [lastSaved, setLastSaved] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [sheetNavState, setSheetNavState] = useState(null);
-    const [initialDocumentName, setInitialDocumentName] = useState('');
+    const [initialWorkbookName, setInitialWorkbookName] = useState('');
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [dropdownOpenForSheet, setDropdownOpenForSheet] = useState(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -201,8 +201,8 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
 
     // Sync props to state when they change (for navigation)
     useEffect(() => {
-        setDocumentId(propDocumentId);
-    }, [propDocumentId]);
+        setWorkbookId(propWorkbookId);
+    }, [propWorkbookId]);
 
     useEffect(() => {
         if (propSheetsList) {
@@ -211,22 +211,22 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
     }, [propSheetsList]);
 
     useEffect(() => {
-        if (propDocumentName) {
-            setDocumentName(propDocumentName);
+        if (propWorkbookName) {
+            setWorkbookName(propWorkbookName);
         }
-    }, [propDocumentName]);
+    }, [propWorkbookName]);
 
     useEffect(() => {
         setSheetId(propSheetId);
-        setActiveView(propSheetId ? 'sheet' : 'project-files');
+        setActiveView(propSheetId ? 'sheet' : 'resources');
     }, [propSheetId]);
 
-    // Initialize document name when it first loads
+    // Initialize workbook name when it first loads
     useEffect(() => {
-        if (propDocumentName && !initialDocumentName) {
-            setInitialDocumentName(propDocumentName);
+        if (propWorkbookName && !initialWorkbookName) {
+            setInitialWorkbookName(propWorkbookName);
         }
-    }, [propDocumentName, initialDocumentName]);
+    }, [propWorkbookName, initialWorkbookName]);
 
     // Update sheet name when sheetId or sheetsList changes
     useEffect(() => {
@@ -238,9 +238,9 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         }
     }, [sheetId, sheetsList, onSheetNameChange]);
 
-    // Clear sheet name when switching to project files
+    // Clear sheet name when switching to resources
     useEffect(() => {
-        if (activeView === 'project-files' && onSheetNameChange) {
+        if (activeView === 'resources' && onSheetNameChange) {
             onSheetNameChange('');
         }
     }, [activeView, onSheetNameChange]);
@@ -262,10 +262,10 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         };
     }, [dropdownOpenForSheet]);
 
-    // Auto-save document name when it changes (debounced)
+    // Auto-save workbook name when it changes (debounced)
     useEffect(() => {
         // Don't save if name hasn't loaded yet or hasn't changed
-        if (!initialDocumentName || documentName === initialDocumentName) return;
+        if (!initialWorkbookName || workbookName === initialWorkbookName) return;
 
         // Clear existing timer
         if (nameChangeTimeoutRef.current) {
@@ -276,23 +276,23 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         nameChangeTimeoutRef.current = setTimeout(async () => {
             try {
                 setIsSaving(true);
-                const response = await apiFetch(`/api/documents/${documentId}`, {
+                const response = await apiFetch(`/api/workbooks/${workbookId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ name: documentName }),
+                    body: JSON.stringify({ name: workbookName }),
                 });
 
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === 'success') {
-                        setInitialDocumentName(documentName);
+                        setInitialWorkbookName(workbookName);
                         setLastSaved(new Date());
                     }
                 }
             } catch (error) {
-                console.error('Error saving document name:', error);
+                console.error('Error saving workbook name:', error);
             } finally {
                 setIsSaving(false);
             }
@@ -304,7 +304,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                 clearTimeout(nameChangeTimeoutRef.current);
             }
         };
-    }, [documentName, initialDocumentName, documentId]);
+    }, [workbookName, initialWorkbookName, workbookId]);
 
     // Drag and drop handlers
     const handleDragEnter = (e) => {
@@ -349,7 +349,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
     // Handle creating a new sheet
     const handleCreateNewSheet = async () => {
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/sheets/new`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/sheets/new`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -361,14 +361,14 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                 if (data.status === 'success') {
                     showToast(`Created ${data.sheet.name}`, 'success');
                     // Refresh sheets list
-                    const listResponse = await apiFetch(`/api/documents/${documentId}`);
+                    const listResponse = await apiFetch(`/api/workbooks/${workbookId}`);
                     if (listResponse.ok) {
                         const listData = await listResponse.json();
                         if (listData.status === 'success' && listData.sheets) {
                             setSheetsList(listData.sheets);
                             onSheetsListChange && onSheetsListChange(listData.sheets);
                             // Navigate to the new sheet
-                            navigate(`/document/${documentId}/sheet/${data.sheet.id}`);
+                            navigate(`/workbook/${workbookId}/sheet/${data.sheet.id}`);
                         }
                     }
                 }
@@ -386,7 +386,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
         }
 
         try {
-            const response = await apiFetch(`/api/documents/${documentId}/sheets/${sheetIdToDelete}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/sheets/${sheetIdToDelete}`, {
                 method: 'DELETE',
             });
 
@@ -395,7 +395,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                 if (data.status === 'success') {
                     showToast('Sheet deleted successfully', 'success');
                     // Refresh sheets list
-                    const listResponse = await apiFetch(`/api/documents/${documentId}`);
+                    const listResponse = await apiFetch(`/api/workbooks/${workbookId}`);
                     if (listResponse.ok) {
                         const listData = await listResponse.json();
                         if (listData.status === 'success' && listData.sheets) {
@@ -403,7 +403,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                             onSheetsListChange && onSheetsListChange(listData.sheets);
                             // If we deleted the current sheet, navigate to the first sheet
                             if (sheetIdToDelete === sheetId && listData.sheets.length > 0) {
-                                navigate(`/document/${documentId}/sheet/${listData.sheets[0].id}`);
+                                navigate(`/workbook/${workbookId}/sheet/${listData.sheets[0].id}`);
                             }
                         }
                     }
@@ -435,7 +435,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
 
         try {
             // Send PATCH request to update sheet name
-            const response = await apiFetch(`/api/documents/${documentId}/sheets/${editingSheetId}`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/sheets/${editingSheetId}`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     name: editingSheetName
@@ -487,7 +487,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
 
             {/* Main Content */}
             <div className="flex flex-column" style={{ flex: 1, height: '100vh', overflow: 'hidden' }}>
-                {/* Document Navigation Bar */}
+                {/* Workbook Navigation Bar */}
                 <div className="sheet-nav flex flex-row-center flex-space-between padr-10">
                     <div className="flex flex-row-center gap-15 pad-14 padr-15 padl-15">
                         {!isDrawerOpen && (
@@ -496,10 +496,10 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                         <input 
                             type="text" 
                             className='input-empty text--white' 
-                            value={documentName}
+                            value={workbookName}
                             onChange={(e) => {
-                                setDocumentName(e.target.value);
-                                onDocumentNameChange && onDocumentNameChange(e.target.value);
+                                setWorkbookName(e.target.value);
+                                onWorkbookNameChange && onWorkbookNameChange(e.target.value);
                             }}
                         />
                     </div>
@@ -512,7 +512,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                 {activeView === 'sheet' && sheetId && (
                     <SheetView 
                         ref={sheetViewRef}
-                        documentId={documentId} 
+                        workbookId={workbookId} 
                         sheetId={sheetId}
                         onSavingChange={setIsSaving}
                         onLastSavedChange={setLastSaved}
@@ -522,17 +522,17 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                     />
                 )}
 
-                {activeView === 'project-files' && (
+                {activeView === 'resources' && (
                     <FilesView 
                         ref={filesViewRef}
-                        documentId={documentId}
+                        workbookId={workbookId}
                         onSavingChange={setIsSaving}
                         onLastSavedChange={setLastSaved}
                         onNavigationChange={setSheetNavState}
                     />
                 )}
 
-                {/* Document Footer */}
+                {/* Workbook Footer */}
                 <div>
                     <div className="sheet-footer flex flex-row-center flex-space-betweenw">
                         <div className="sheet-footer-add pointer" onClick={handleCreateNewSheet}>
@@ -549,7 +549,7 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                                         }`}
                                         onClick={() => {
                                             setActiveView('sheet');
-                                            navigate(`/document/${documentId}/sheet/${sheet.id}`);
+                                            navigate(`/workbook/${workbookId}/sheet/${sheet.id}`);
                                         }}
                                     >
                                         <img src={IconSheet} alt="Sheet Icon" height="16" />
@@ -619,15 +619,15 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
                             })}
                             <div 
                                 className={`sheet-footer-tab flex flex-row-center gap-5 pointer ${
-                                    activeView === 'project-files' ? 'active' : ''
+                                    activeView === 'resources' ? 'active' : ''
                                 }`}
                                 onClick={() => {
-                                    setActiveView('project-files');
-                                    navigate(`/document/${documentId}/files`);
+                                    setActiveView('resources');
+                                    navigate(`/workbook/${workbookId}/files`);
                                 }}
                             >
-                                <img src={IconProject} alt="Project Icon" height="16" />
-                                <p className="text--micro">Project Files</p>
+                                <img src={IconProject} alt="Resources Icon" height="16" />
+                                <p className="text--micro">Resources</p>
                             </div>
                             <div className='spacer'></div>
                             <div className="flex flex-row-center padr-15">
@@ -701,6 +701,6 @@ const DocumentView = forwardRef(({ documentId: propDocumentId, sheetId: propShee
     );
 });
 
-DocumentView.displayName = 'DocumentView';
+WorkbookView.displayName = 'WorkbookView';
 
-export default DocumentView;
+export default WorkbookView;

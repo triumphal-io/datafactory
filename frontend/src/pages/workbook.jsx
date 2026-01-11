@@ -1,15 +1,15 @@
 import { useRef, useState, useEffect } from 'react';
 import Resizer from '../components/resizer.jsx';
 import Assistant from '../components/assistant.jsx';
-import DocumentView from '../components/document-view.jsx';
+import WorkbookView from '../components/workbook-view.jsx';
 import { useParams } from 'react-router-dom';
 import { useWebSocket } from '../utils/websocket-context.jsx';
 import { DEFAULT_AI_MODEL } from '../utils/utils';
 import { apiFetch } from '../utils/api';
 
-export default function DocumentPage() {
-    const { sheetId, documentId } = useParams();
-    const documentViewRef = useRef(null);
+export default function WorkbookPage() {
+    const { sheetId, workbookId } = useParams();
+    const workbookViewRef = useRef(null);
     const assistantRef = useRef(null);
     const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -17,13 +17,13 @@ export default function DocumentPage() {
     const [droppedFiles, setDroppedFiles] = useState(null);
     const [selectedModel, setSelectedModel] = useState(DEFAULT_AI_MODEL);
     const [sheetsList, setSheetsList] = useState([]);
-    const [documentName, setDocumentName] = useState('Loading...');
+    const [workbookName, setWorkbookName] = useState('Loading...');
 
-    // Load document data including selected model, sheets, and name
+    // Load workbook data including selected model, sheets, and name
     useEffect(() => {
-        const loadDocument = async () => {
+        const loadWorkbook = async () => {
             try {
-                const response = await apiFetch(`/api/documents/${documentId}`);
+                const response = await apiFetch(`/api/workbooks/${workbookId}`);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === 'success') {
@@ -34,26 +34,26 @@ export default function DocumentPage() {
                             setSheetsList(data.sheets);
                         }
                         if (data.name) {
-                            setDocumentName(data.name);
+                            setWorkbookName(data.name);
                         }
                     }
                 }
             } catch (error) {
-                console.error('Error loading document:', error);
+                console.error('Error loading workbook:', error);
             }
         };
 
-        if (documentId) {
-            loadDocument();
+        if (workbookId) {
+            loadWorkbook();
         }
-    }, [documentId]);
+    }, [workbookId]);
 
     // Save selected model when it changes
     const handleModelChange = async (newModel) => {
         setSelectedModel(newModel);
         
         try {
-            await apiFetch(`/api/documents/${documentId}`, {
+            await apiFetch(`/api/workbooks/${workbookId}`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     selected_model: newModel
@@ -74,9 +74,9 @@ export default function DocumentPage() {
         setSheetName(name);
     };
 
-    // Handle document name changes
-    const handleDocumentNameChange = (name) => {
-        setDocumentName(name);
+    // Handle workbook name changes
+    const handleWorkbookNameChange = (name) => {
+        setWorkbookName(name);
     };
 
     // Handle sheets list refresh
@@ -86,13 +86,13 @@ export default function DocumentPage() {
 
     // Handle tool execution requests from assistant
     const handleToolsRequested = async (tools, conversationId) => {
-        if (!documentViewRef.current) {
-            console.error('DocumentView ref not available');
+        if (!workbookViewRef.current) {
+            console.error('WorkbookView ref not available');
             return;
         }
 
-        // Execute tools via DocumentView
-        const toolResults = await documentViewRef.current.executeTools(tools);
+        // Execute tools via WorkbookView
+        const toolResults = await workbookViewRef.current.executeTools(tools);
         
         // Send results back to assistant with conversation ID
         if (assistantRef.current) {
@@ -102,13 +102,13 @@ export default function DocumentPage() {
     
     // Get current sheet data
     const getSheetData = () => {
-        if (documentViewRef.current) {
-            return documentViewRef.current.getSheetData();
+        if (workbookViewRef.current) {
+            return workbookViewRef.current.getSheetData();
         }
         return null;
     };
 
-    // Handle files dropped anywhere on the document view
+    // Handle files dropped anywhere on the workbook view
     const handleFilesDropped = (files) => {
         setDroppedFiles(files);
         // Clear after a brief moment to allow it to be picked up by the assistant
@@ -118,17 +118,17 @@ export default function DocumentPage() {
     return (
         <div className="sheet-container">
         <main>
-            <DocumentView 
-                ref={documentViewRef}
-                documentId={documentId} 
+            <WorkbookView 
+                ref={workbookViewRef}
+                workbookId={workbookId} 
                 sheetId={sheetId}
                 onSelectionChange={handleSelectionChange}
                 onSheetNameChange={handleSheetNameChange}
                 onFilesDropped={handleFilesDropped}
                 selectedModel={selectedModel}
                 sheetsList={sheetsList}
-                documentName={documentName}
-                onDocumentNameChange={handleDocumentNameChange}
+                workbookName={workbookName}
+                onWorkbookNameChange={handleWorkbookNameChange}
                 onSheetsListChange={handleSheetsListChange}
             />
         </main>
@@ -136,7 +136,7 @@ export default function DocumentPage() {
         <aside>
             <Assistant 
                 ref={assistantRef}
-                documentId={documentId}
+                workbookId={workbookId}
                 onToolsRequested={handleToolsRequested}
                 selectedCells={selectedCells}
                 sheetName={sheetName}

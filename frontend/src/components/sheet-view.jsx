@@ -75,7 +75,7 @@ const getColumnLetter = (index) => {
     return letter;
 };
 
-const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
+const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
     // WebSocket connection
     const { isConnected } = useWebSocket();
     
@@ -126,8 +126,8 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     useEffect(() => {
         const loadFiles = async () => {
              try {
-                // Fetch ALL files for the document by adding ?all=true
-                const response = await apiFetch(`/api/documents/${documentId}/files/list?all=true`);
+                // Fetch ALL files for the workbook by adding ?all=true
+                const response = await apiFetch(`/api/workbooks/${workbookId}/files/list?all=true`);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === 'success' && data.files) {
@@ -139,17 +139,17 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             }
         };
         
-        if (documentId) {
+        if (workbookId) {
             loadFiles();
         }
-    }, [documentId]);
+    }, [workbookId]);
 
     // Load data from JSON on mount
     useEffect(() => {
         const loadSheetData = async () => {
             try {
                 setIsLoading(true);
-                const response = await apiFetch(`/api/documents/${documentId}/sheets/${sheetId}`);
+                const response = await apiFetch(`/api/workbooks/${workbookId}/sheets/${sheetId}`);
                 
                 if (response.ok) {
                     const data = await response.json();
@@ -192,7 +192,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         };
 
         loadSheetData();
-    }, [documentId, sheetId, onLastSavedChange]);
+    }, [workbookId, sheetId, onLastSavedChange]);
 
     // Update enrich text based on selection
     useEffect(() => {
@@ -229,7 +229,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
         saveTimerRef.current = setTimeout(async () => {
             try {
                 if (onSavingChange) onSavingChange(true);
-                const response = await apiFetch(`/api/documents/${documentId}/sheets/${sheetId}`, {
+                const response = await apiFetch(`/api/workbooks/${workbookId}/sheets/${sheetId}`, {
                     method: 'POST',
                     body: {
                         sheet_data: sheetData,
@@ -261,7 +261,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 clearTimeout(saveTimerRef.current);
             }
         };
-    }, [sheetData, isLoading, documentId, sheetId, onSavingChange, onLastSavedChange]);
+    }, [sheetData, isLoading, workbookId, sheetId, onSavingChange, onLastSavedChange]);
 
     // Update row checkbox states based on cell selection
     useEffect(() => {
@@ -648,7 +648,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 method: 'POST',
                 body: {
                     cells: cellsToEnrich,
-                    documentId: documentId,
+                    workbookId: workbookId,
                     model: selectedModel
                 }
             });
@@ -674,7 +674,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
                 setCellStatus(cellData.position.Row, cellData.position.Column, null);
             });
         }
-    }, [selectedCells, sheetData, setCellStatus, clearSelection, documentId, selectedModel]);
+    }, [selectedCells, sheetData, setCellStatus, clearSelection, workbookId, selectedModel]);
 
     // Popup handlers
     const openPopupForNewColumn = useCallback(() => {
@@ -1081,16 +1081,16 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
     // Export all sheets as XLSX file
     const handleExportXLSX = useCallback(async () => {
         try {
-            // Fetch all sheets for this document
-            const response = await apiFetch(`/api/documents/${documentId}`);
+            // Fetch all sheets for this workbook
+            const response = await apiFetch(`/api/workbooks/${workbookId}`);
             if (!response.ok) {
-                alert('Failed to fetch document sheets');
+                alert('Failed to fetch workbook sheets');
                 return;
             }
             
             const docData = await response.json();
             if (docData.status !== 'success' || !docData.sheets) {
-                alert('No sheets found in document');
+                alert('No sheets found in workbook');
                 return;
             }
             
@@ -1101,7 +1101,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             
             // Fetch and add each sheet to the workbook
             for (const sheet of docData.sheets) {
-                const sheetResponse = await apiFetch(`/api/documents/${documentId}/sheets/${sheet.id}`);
+                const sheetResponse = await apiFetch(`/api/workbooks/${workbookId}/sheets/${sheet.id}`);
                 if (sheetResponse.ok) {
                     const sheetDataResponse = await sheetResponse.json();
                     if (sheetDataResponse.status === 'success' && sheetDataResponse.sheet_data) {
@@ -1160,13 +1160,13 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             
             // Generate Excel file and trigger download
             const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { 
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+            const blob = new Blob([buffer], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            const fileName = `${docData.name || 'document'}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+            const fileName = `${docData.name || 'workbook'}-${new Date().toISOString().slice(0, 10)}.xlsx`;
             link.download = fileName;
             document.body.appendChild(link);
             link.click();
@@ -1178,7 +1178,7 @@ const SheetView = forwardRef(({ documentId, sheetId, onSavingChange, onLastSaved
             console.error('Error exporting XLSX:', error);
             alert('Failed to export Excel file');
         }
-    }, [documentId]);
+    }, [workbookId]);
 
     // Accept AI changes
     const handleAcceptAiChanges = useCallback(() => {

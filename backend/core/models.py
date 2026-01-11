@@ -1,7 +1,10 @@
 from django.db import models
 import uuid
 
-class Document(models.Model):
+class Workbook(models.Model):
+    """
+    Workbook model - represents a workbook containing sheets and resources (uploaded files).
+    """
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
 
@@ -15,11 +18,16 @@ class Document(models.Model):
         return self.name
 
     class Meta:
-        verbose_name_plural = "Documents"
+        verbose_name = "Workbook"
+        verbose_name_plural = "Workbooks"
 
 class Sheet(models.Model):
+    """
+    Spreadsheet tab within a workbook (like Excel sheets).
+    Contains editable grid data with columns and rows.
+    """
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='sheets')
+    workbook = models.ForeignKey(Workbook, on_delete=models.CASCADE, related_name='sheets')
 
     name = models.CharField(max_length=255)
     data = models.JSONField(default=dict)
@@ -33,8 +41,12 @@ class Sheet(models.Model):
         verbose_name_plural = "Sheets"
 
 class Folder(models.Model):
+    """
+    Folder for organizing resources (uploaded files) within a workbook.
+    Part of the Resources section, separate from Sheets.
+    """
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='folders')
+    workbook = models.ForeignKey(Workbook, on_delete=models.CASCADE, related_name='folders')
     
     name = models.CharField(max_length=255)
     in_use = models.BooleanField(default=True)
@@ -47,8 +59,13 @@ class Folder(models.Model):
         verbose_name_plural = "Folders"
 
 class File(models.Model):
+    """
+    Uploaded resource file (CSV, XLSX, PDF, DOCX, etc.) in a workbook.
+    Part of the Resources section, separate from Sheets (spreadsheet tabs).
+    Content is extracted and indexed for RAG-based querying.
+    """
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='files')
+    workbook = models.ForeignKey(Workbook, on_delete=models.CASCADE, related_name='files')
     folder = models.ForeignKey(Folder, on_delete=models.SET_NULL, related_name='files', null=True, blank=True)
     
     filename = models.CharField(max_length=255)
@@ -67,8 +84,12 @@ class File(models.Model):
 
 
 class Conversation(models.Model):
+    """
+    AI assistant conversation history within a workbook.
+    Stores multi-turn chat messages for context and persistence.
+    """
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='conversations')
+    workbook = models.ForeignKey(Workbook, on_delete=models.CASCADE, related_name='conversations')
 
     conversations = models.JSONField(default=list)  # Stores conversation history as array of message objects
     title = models.CharField(max_length=255, default='New Conversation')
@@ -83,6 +104,10 @@ class Conversation(models.Model):
 
 
 class BackgroundJob(models.Model):
+    """
+    Background processing jobs for workbooks (file processing, AI enrichment).
+    Tracked for status updates via WebSocket and automatic cleanup.
+    """
     JOB_TYPES = [
         ('file_processing', 'File Processing'),
         ('data_enrichment', 'Data Enrichment'),
@@ -96,7 +121,7 @@ class BackgroundJob(models.Model):
     ]
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='background_jobs')
+    workbook = models.ForeignKey(Workbook, on_delete=models.CASCADE, related_name='background_jobs')
     job_type = models.CharField(max_length=50, choices=JOB_TYPES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='queued')
     created_at = models.DateTimeField('Created at', auto_now_add=True)

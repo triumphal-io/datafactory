@@ -15,7 +15,7 @@ import Loader from '../assets/loader-mini.gif';
 // (Keeps other mention categories like files/folders/sheets.)
 const ENABLE_COLUMN_MENTIONS = false;
 
-const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = new Set(), sheetName = '', sheetId = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
+const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = new Set(), sheetName = '', sheetId = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
     const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -44,7 +44,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
     useEffect(() => {
         const fetchMentions = async () => {
             try {
-                const response = await apiFetch(`/api/documents/mentions?document_id=${documentId}`, { 
+                const response = await apiFetch(`/api/workbooks/mentions?workbook_id=${workbookId}`, { 
                     method: 'GET' 
                 });
                 const data = await response.json();
@@ -63,10 +63,10 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             }
         };
         
-        if (documentId) {
+        if (workbookId) {
             fetchMentions();
         }
-    }, [documentId]);
+    }, [workbookId]);
 
     // Handle dropped files from parent component
     useEffect(() => {
@@ -142,7 +142,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
             setMessages(prev => [...prev, { type: 'working' }]);
 
             try {
-                const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
+                const response = await apiFetch(`/api/workbooks/${workbookId}/assistant/ask`, {
                     method: 'POST',
                     body: JSON.stringify({
                         message_type: 'tool_result',
@@ -321,7 +321,7 @@ const Assistant = forwardRef(({ documentId, onToolsRequested, selectedCells = ne
                 });
             }
 
-            const response = await apiFetch(`/api/documents/${documentId}/assistant/ask`, {
+            const response = await apiFetch(`/api/workbooks/${workbookId}/assistant/ask`, {
                 method: 'POST',
                 body: formData,
             });

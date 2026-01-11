@@ -111,22 +111,22 @@ def get_ai_tools():
     return [search_tool, web_scraper_tool]
 
 
-def get_document_tools():
+def get_workbook_tools():
     """
-    Get tools for viewing document structure and sheet data.
+    Get tools for viewing workbook structure and sheet data.
     
     These tools allow the AI to:
-    - Get complete document structure (sheets + files tree)
+    - Get complete workbook structure (sheets + files tree)
     - View data from any specific sheet
     
     Returns:
-        list: List of tool definitions for document operations
+        list: List of tool definitions for workbook operations
     """
     get_structure_tool = {
         "type": "function",
         "function": {
-            "name": "tool_get_document_structure",
-            "description": "Get complete document structure including all sheets and files. Returns a JSON overview showing: 1) All available sheets with their names and IDs, 2) All uploaded files organized in a tree structure with folders. Use this to understand what data is available in the document before querying specific sheets or files.",
+            "name": "tool_get_workbook_structure",
+            "description": "Get complete workbook structure including all sheets and files. Returns a JSON overview showing: 1) All available sheets with their names and IDs, 2) All uploaded files organized in a tree structure with folders. Use this to understand what data is available in the workbook before querying specific sheets or files.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -139,13 +139,13 @@ def get_document_tools():
         "type": "function",
         "function": {
             "name": "tool_get_sheet_data",
-            "description": "View data from a specific sheet by name or UUID. Returns the sheet's column structure and row data. Use this when you need to see what data is in a particular sheet. You can get the list of available sheets using tool_get_document_structure.",
+            "description": "View data from a specific sheet by name or UUID. Returns the sheet's column structure and row data. Use this when you need to see what data is in a particular sheet. You can get the list of available sheets using tool_get_workbook_structure.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "sheet_identifier": {
                         "type": "string",
-                        "description": "The sheet name (e.g., 'Sheet1', 'Sales Data') or UUID to view. Get available sheets using tool_get_document_structure."
+                        "description": "The sheet name (e.g., 'Sheet1', 'Sales Data') or UUID to view. Get available sheets using tool_get_workbook_structure."
                     },
                     "max_rows": {
                         "type": "integer",
@@ -225,26 +225,26 @@ def get_file_tools():
     return [query_file_tool, read_file_tool]
 
 
-def get_available_files_context(document_id):
+def get_available_files_context(workbook_id):
     """
-    Get dynamic file list context for a document.
+    Get dynamic file list context for a workbook.
     
     This returns the DYNAMIC file list that should be added to user messages,
     not to tool definitions, to preserve tool caching.
     
     Args:
-        document_id (str): UUID of the document to get files for
+        workbook_id (str): UUID of the workbook to get files for
     
     Returns:
         str or None: Formatted file list or None if no files available
     """
-    if not document_id:
+    if not workbook_id:
         return None
     
     try:
         File = apps.get_model('core', 'File')
-        # Query only processed and enabled files for the document
-        files = File.objects.filter(document__uuid=document_id, use=True, is_processing=False)
+        # Query only processed and enabled files for the workbook
+        files = File.objects.filter(workbook__uuid=workbook_id, use=True, is_processing=False)
         
         if files.exists():
             # Build a human-readable list of available files
@@ -253,7 +253,7 @@ def get_available_files_context(document_id):
                 file_list.append(f"- {f.filename} (ID: {f.uuid}, Size: {f.calculated_size} bytes)")
             
             file_info = "\n".join(file_list)
-            return f"Available files in this document:\n{file_info}\n"
+            return f"Available files in this workbook:\n{file_info}\n"
         
         return None
     except Exception as e:
@@ -451,20 +451,20 @@ If you need to populate cells, you must specify which cells and what values. If 
     return [add_rows_tool, delete_rows_tool, add_column_tool, delete_column_tool, populate_cells_tool]
 
 
-def assistant(message, conversation_obj=None, include_sheet_tools=False, document_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL):
+def assistant(message, conversation_obj=None, include_sheet_tools=False, workbook_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL):
     """
     AI assistant with optional conversation persistence, sheet tool support, and file access.
     
     This is the main entry point for AI interactions. It supports:
     - Multi-turn conversations with persistence
     - Tool calling (web search, file reading, spreadsheet manipulation)
-    - Context awareness for spreadsheets and documents
+    - Context awareness for spreadsheets and workbooks
     
     Args:
         message (str or None): User message string. Can be None if continuing from tool results
         conversation_obj (Conversation, optional): Django model instance for conversation persistence
         include_sheet_tools (bool): If True, includes sheet tools and returns tool calls for frontend execution
-        document_id (str, optional): Document UUID to enable file access tools
+        workbook_id (str, optional): Workbook UUID to enable file access tools
         sheet_context (dict, optional): Dict with 'data' (sheet structure) and 'selection' (selected cells info)
         model (str, optional): AI model to use (e.g., 'gpt-5-nano', 'gpt-5', 'gemini-3-flash'). Defaults to settings.DEFAULT_AI_MODEL
     
@@ -499,9 +499,9 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
         static_system_message += "- For 'email' type columns: Provide valid email addresses only\n"
         static_system_message += "- For 'url' type columns: Provide valid URLs only (starting with http:// or https://)\n"
         static_system_message += "- Respect the format specification if provided\n"
-    elif document_id:
-        # Document assistant mode
-        static_system_message = "You are a document assistant with access to uploaded files. Use the tool_query_file_data tool to search and retrieve relevant information from files when needed to answer questions.\n"
+    elif workbook_id:
+        # Workbook assistant mode
+        static_system_message = "You are a workbook assistant with access to uploaded files. Use the tool_query_file_data tool to search and retrieve relevant information from files when needed to answer questions.\n"
     
     # Add sheet context - split into STATIC and DYNAMIC parts for better prompt caching
     # DYNAMIC parts go in user message (not cached, changes frequently)
@@ -554,9 +554,9 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
             
             dynamic_context_parts.append(sheet_context_msg)
     
-    # Add file context if working with documents
-    if document_id:
-        files_context = get_available_files_context(document_id)
+    # Add file context if working with workbooks
+    if workbook_id:
+        files_context = get_available_files_context(workbook_id)
         if files_context:
             dynamic_context_parts.append(files_context)
         
@@ -596,19 +596,19 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
     if include_sheet_tools:
         tools = get_sheet_tools() + tools
     
-    # Add document structure and sheet viewing tools if working with documents
-    if document_id:
-        tools = get_document_tools() + tools
+    # Add workbook structure and sheet viewing tools if working with workbooks
+    if workbook_id:
+        tools = get_workbook_tools() + tools
     
-    # Add file reading tools if working with documents (STATIC - no dynamic file list in tools)
-    if document_id:
+    # Add file reading tools if working with workbooks (STATIC - no dynamic file list in tools)
+    if workbook_id:
         tools = get_file_tools() + tools
     
     # Define tool categories for routing execution
     # Sheet tools modify spreadsheet UI (handled by frontend)
     sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
-    # File and document tools read content (handled by backend)
-    file_tool_names = {'tool_query_file_data', 'tool_get_document_structure', 'tool_get_sheet_data'}  # Updated to include document tools
+    # File and workbook tools read content (handled by backend)
+    file_tool_names = {'tool_query_file_data', 'tool_get_workbook_structure', 'tool_get_sheet_data'}  # Updated to include workbook tools
     # Frontend tools require UI updates (sent back to client)
     frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     
@@ -819,10 +819,10 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
                     print(f"Executing backend tool: {tool_info['name']} with arguments: {tool_info['arguments']}")
                     
                     try:
-                        # Inject document_id for file tools that need context
-                        # This ensures file access is scoped to the current document
-                        if tool_info['name'] in file_tool_names and document_id:
-                            tool_info['arguments']['document_id'] = document_id
+                        # Inject workbook_id for file tools that need context
+                        # This ensures file access is scoped to the current workbook
+                        if tool_info['name'] in file_tool_names and workbook_id:
+                            tool_info['arguments']['workbook_id'] = workbook_id
                         
                         # Execute tool function by name lookup
                         tool_result = globals()[tool_info['name']](**tool_info['arguments'])
@@ -907,12 +907,12 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, documen
 
 
 
-def enrichment(data, document_id=None, model=settings.DEFAULT_AI_MODEL):
+def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL):
     """
     Enrich a spreadsheet cell using AI based on context from other cells.
     
     Uses AI to infer missing data based on surrounding cell values and column descriptions.
-    Can access uploaded documents for additional context.
+    Can access uploaded workbooks for additional context.
     
     Args:
         data (dict): Enrichment request with keys:
@@ -924,7 +924,7 @@ def enrichment(data, document_id=None, model=settings.DEFAULT_AI_MODEL):
             - 'type' (str, optional): Data type (text, number, select, multiselect, etc.)
             - 'format' (str, optional): Format specification
             - 'options' (list, optional): Available options for select/multiselect types
-        document_id (str, optional): Document UUID for file access
+        workbook_id (str, optional): Workbook UUID for file access
         model (str, optional): AI model to use. Defaults to settings.DEFAULT_AI_MODEL
     
     Returns:
@@ -979,12 +979,12 @@ def enrichment(data, document_id=None, model=settings.DEFAULT_AI_MODEL):
     # Critical instruction to ensure only the value is returned
     prompt += "\n\nIMPORTANT: Your response must contain ONLY the value itself. Do not include any explanations, sentences, or additional context. Just the bare value."
     
-    # Enable file access if document is available
-    if document_id:
+    # Enable file access if workbook is available
+    if workbook_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
     
     # Use AI assistant to generate enrichment value
-    result = assistant(prompt, document_id=document_id, model=model)
+    result = assistant(prompt, workbook_id=workbook_id, model=model)
     print(f"Enrichment result: {result}")
     
     # Post-process result to extract just the value if AI still includes explanation
@@ -1107,16 +1107,16 @@ def crawler(url):
 
 
 # COMMENTED OUT: Old direct file reading - kept for reference but not used
-def tool_read_file(file_id, document_id=None):
+def tool_read_file(file_id, workbook_id=None):
     """
     Read the extracted markdown content of a specific file from the database.
     
-    This tool is called by the AI to access uploaded document content.
+    This tool is called by the AI to access uploaded workbook content.
     If the file is in processing state or has no extracted content, it will force extract immediately.
     
     Args:
         file_id (str): UUID of the file to read
-        document_id (str, optional): Document UUID for access validation
+        workbook_id (str, optional): Workbook UUID for access validation
     
     Returns:
         str: Extracted markdown content or error message
@@ -1127,9 +1127,9 @@ def tool_read_file(file_id, document_id=None):
         # Fetch the file by UUID from database
         file_obj = File.objects.get(uuid=file_id)
         
-        # Security check: Verify file belongs to the document (if document_id provided)
-        if document_id and str(file_obj.document.uuid) != str(document_id):
-            return "Error: File does not belong to the current document."
+        # Security check: Verify file belongs to the workbook (if workbook_id provided)
+        if workbook_id and str(file_obj.workbook.uuid) != str(workbook_id):
+            return "Error: File does not belong to the current workbook."
         
         if not file_obj.use:
             return "Error: This file is not available for use."
@@ -1173,35 +1173,35 @@ def tool_read_file(file_id, document_id=None):
         return f"Error reading file: {str(e)}"
 
 
-def tool_get_document_structure(document_id=None):
+def tool_get_workbook_structure(workbook_id=None):
     """
-    Get complete document structure including all sheets and files.
+    Get complete workbook structure including all sheets and files.
     
     Returns a comprehensive overview of:
     - All available sheets (names and UUIDs)
     - All uploaded files organized in folder tree structure
     
     Args:
-        document_id (str, optional): Document UUID for access
+        workbook_id (str, optional): Workbook UUID for access
     
     Returns:
-        str: JSON-formatted document structure
+        str: JSON-formatted workbook structure
     """
     try:
-        Document = apps.get_model('core', 'Document')
+        Workbook = apps.get_model('core', 'Workbook')
         Sheet = apps.get_model('core', 'Sheet')
         File = apps.get_model('core', 'File')
         Folder = apps.get_model('core', 'Folder')
         
-        if not document_id:
-            return "Error: Document ID is required."
+        if not workbook_id:
+            return "Error: Workbook ID is required."
         
-        # Get the document
-        document = Document.objects.get(uuid=document_id)
+        # Get the workbook
+        workbook = Workbook.objects.get(uuid=workbook_id)
         
         # Build structure
         structure = {
-            "document_name": document.name,
+            "workbook_name": workbook.name,
             "sheets": [],
             "files": {
                 "root": [],
@@ -1210,7 +1210,7 @@ def tool_get_document_structure(document_id=None):
         }
         
         # Get all sheets
-        sheets = Sheet.objects.filter(document=document).order_by('created_at')
+        sheets = Sheet.objects.filter(workbook=workbook).order_by('created_at')
         for sheet in sheets:
             row_count = len(sheet.data.get('rows', [])) if sheet.data else 0
             col_count = len(sheet.data.get('columns', [])) if sheet.data else 0
@@ -1223,7 +1223,7 @@ def tool_get_document_structure(document_id=None):
             })
         
         # Get all folders
-        folders = Folder.objects.filter(document=document)
+        folders = Folder.objects.filter(workbook=workbook)
         for folder in folders:
             structure["files"]["folders"][folder.name] = {
                 "uuid": str(folder.uuid),
@@ -1231,7 +1231,7 @@ def tool_get_document_structure(document_id=None):
             }
         
         # Get all files
-        files = File.objects.filter(document=document, use=True)
+        files = File.objects.filter(workbook=workbook, use=True)
         for file in files:
             file_info = {
                 "name": file.filename,
@@ -1253,15 +1253,15 @@ def tool_get_document_structure(document_id=None):
         import json
         return json.dumps(structure, indent=2)
         
-    except Document.DoesNotExist:
-        return f"Error: Document with ID {document_id} not found."
+    except Workbook.DoesNotExist:
+        return f"Error: Workbook with ID {workbook_id} not found."
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f"Error getting document structure: {str(e)}"
+        return f"Error getting workbook structure: {str(e)}"
 
 
-def tool_get_sheet_data(sheet_identifier, max_rows=50, document_id=None):
+def tool_get_sheet_data(sheet_identifier, max_rows=50, workbook_id=None):
     """
     View data from a specific sheet by name or UUID.
     
@@ -1270,32 +1270,32 @@ def tool_get_sheet_data(sheet_identifier, max_rows=50, document_id=None):
     Args:
         sheet_identifier (str): Sheet name or UUID
         max_rows (int, optional): Maximum rows to return (default: 50, max: 200)
-        document_id (str, optional): Document UUID for access validation
+        workbook_id (str, optional): Workbook UUID for access validation
     
     Returns:
         str: Formatted sheet data or error message
     """
     try:
-        Document = apps.get_model('core', 'Document')
+        Workbook = apps.get_model('core', 'Workbook')
         Sheet = apps.get_model('core', 'Sheet')
         
-        if not document_id:
-            return "Error: Document ID is required."
+        if not workbook_id:
+            return "Error: Workbook ID is required."
         
         # Validate max_rows
         max_rows = min(max(1, max_rows), 200)
         
-        # Get the document
-        document = Document.objects.get(uuid=document_id)
+        # Get the workbook
+        workbook = Workbook.objects.get(uuid=workbook_id)
         
         # Try to find sheet by UUID first, then by name
         try:
-            sheet = Sheet.objects.get(uuid=sheet_identifier, document=document)
+            sheet = Sheet.objects.get(uuid=sheet_identifier, workbook=workbook)
         except Sheet.DoesNotExist:
             # Try by name
-            sheet = Sheet.objects.filter(name=sheet_identifier, document=document).first()
+            sheet = Sheet.objects.filter(name=sheet_identifier, workbook=workbook).first()
             if not sheet:
-                return f"Error: Sheet '{sheet_identifier}' not found in this document. Use tool_get_document_structure to see available sheets."
+                return f"Error: Sheet '{sheet_identifier}' not found in this workbook. Use tool_get_workbook_structure to see available sheets."
         
         # Get sheet data
         sheet_data = sheet.data or {}
@@ -1348,15 +1348,15 @@ def tool_get_sheet_data(sheet_identifier, max_rows=50, document_id=None):
         
         return result.strip()
         
-    except Document.DoesNotExist:
-        return f"Error: Document with ID {document_id} not found."
+    except Workbook.DoesNotExist:
+        return f"Error: Workbook with ID {workbook_id} not found."
     except Exception as e:
         import traceback
         traceback.print_exc()
         return f"Error getting sheet data: {str(e)}"
 
 
-def tool_query_file_data(query, filename, max_results=5, search_type='query', document_id=None):
+def tool_query_file_data(query, filename, max_results=5, search_type='query', workbook_id=None):
     """
     Query data from uploaded files using RAG (Retrieval Augmented Generation).
     
@@ -1371,7 +1371,7 @@ def tool_query_file_data(query, filename, max_results=5, search_type='query', do
         filename (str): Name of the file to query
         max_results (int, optional): Maximum number of results (default: 5, max: 20)
         search_type (str): 'identifier' for exact matching, 'query' for semantic search (default: 'query')
-        document_id (str, optional): Document UUID for access validation
+        workbook_id (str, optional): Workbook UUID for access validation
     
     Returns:
         str: Formatted search results or error message
@@ -1437,8 +1437,8 @@ def tool_query_file_data(query, filename, max_results=5, search_type='query', do
         
         # Validate that this is for uploaded files, not sheets
         Sheet = apps.get_model('core', 'Sheet')
-        if document_id:
-            sheet_exists = Sheet.objects.filter(name=filename, document__uuid=document_id).exists()
+        if workbook_id:
+            sheet_exists = Sheet.objects.filter(name=filename, workbook__uuid=workbook_id).exists()
             if sheet_exists:
                 return f"Error: '{filename}' is a spreadsheet sheet, not an uploaded file. Use tool_get_sheet_data to view sheet data instead."
         
@@ -1446,17 +1446,17 @@ def tool_query_file_data(query, filename, max_results=5, search_type='query', do
         file_obj = File.objects.filter(filename=filename).first()
         
         if not file_obj:
-            return f"Error: File '{filename}' not found. Please check the filename and try again. Use tool_get_document_structure to see available files."
+            return f"Error: File '{filename}' not found. Please check the filename and try again. Use tool_get_workbook_structure to see available files."
         
-        # Security check: Verify file belongs to the document (if document_id provided)
-        if document_id and str(file_obj.document.uuid) != str(document_id):
-            return "Error: File does not belong to the current document."
+        # Security check: Verify file belongs to the workbook (if workbook_id provided)
+        if workbook_id and str(file_obj.workbook.uuid) != str(workbook_id):
+            return "Error: File does not belong to the current workbook."
         
         if not file_obj.use:
             return "Error: This file is not available for use."
         
         # Get user_id for data isolation
-        user_id = file_obj.document.user.id
+        user_id = file_obj.workbook.user.id
         
         # Query the RAG system
         results = query_rag(
@@ -1478,8 +1478,8 @@ def tool_query_file_data(query, filename, max_results=5, search_type='query', do
         search_type_label = "exact match" if search_type == 'identifier' else "semantic search"
         formatted_results = f"Found {len(results['documents'])} relevant record(s) from '{filename}' using {search_type_label}:\n\n"
         
-        for idx, (doc, metadata) in enumerate(zip(results['documents'], results['metadatas']), 1):
-            formatted_results += f"Result {idx}:\n{doc}\n"
+        for idx, (record, metadata) in enumerate(zip(results['documents'], results['metadatas']), 1):
+            formatted_results += f"Result {idx}:\n{record}\n"
             
             # Add metadata info if available
             if 'row_id' in metadata:

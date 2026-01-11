@@ -9,7 +9,7 @@ from django.utils import timezone
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.conf import settings
-from ..models import BackgroundJob, Document
+from ..models import BackgroundJob, Workbook
 from . import ai
 
 
@@ -26,31 +26,31 @@ class EnrichmentProcessor:
         self.max_concurrent = max_concurrent
         self.channel_layer = get_channel_layer()
     
-    def start_bulk_enrichment(self, cells_data, document_id, model=settings.DEFAULT_AI_MODEL):
+    def start_bulk_enrichment(self, cells_data, workbook_id, model=settings.DEFAULT_AI_MODEL):
         """
         Start bulk enrichment process for multiple cells
         
         Args:
             cells_data (list): List of cell data objects to enrich
-            document_id (str): UUID of the document
+            workbook_id (str): UUID of the workbook
             model (str): AI model to use for enrichment
         """
         print(f"Starting bulk enrichment for {len(cells_data)} cells")
         
         # Create background jobs for all cells
         try:
-            document = Document.objects.get(uuid=document_id)
-        except Document.DoesNotExist:
-            print(f"Document {document_id} not found")
+            workbook = Workbook.objects.get(uuid=workbook_id)
+        except Workbook.DoesNotExist:
+            print(f"Workbook {workbook_id} not found")
             return
-        
+
         # Clean up old completed jobs (older than 10 minutes)
-        self._cleanup_old_jobs(document)
-        
+        self._cleanup_old_jobs(workbook)
+
         jobs = []
         for cell_data in cells_data:
             job = BackgroundJob.objects.create(
-                document=document,
+                workbook=workbook,
                 job_type='data_enrichment',
                 status='queued',
                 cell_data=cell_data
@@ -59,7 +59,7 @@ class EnrichmentProcessor:
             
             # Send WebSocket notification that cell is queued
             self._send_websocket_update(
-                document_id,
+                workbook_id,
                 'enrichment_status',
                 {
                     'row': cell_data['position']['Row'],
@@ -72,18 +72,18 @@ class EnrichmentProcessor:
         # Start processing thread
         thread = threading.Thread(
             target=self._process_jobs,
-            args=(jobs, document_id, model),
+            args=(jobs, workbook_id, model),
             daemon=True
         )
         thread.start()
     
-    def _process_jobs(self, jobs, document_id, model=settings.DEFAULT_AI_MODEL):
+    def _process_jobs(self, jobs, workbook_id, model=settings.DEFAULT_AI_MODEL):
         """
         Process jobs with concurrent threading using a work queue
         
         Args:
             jobs (list): List of BackgroundJob objects
-            document_id (str): UUID of the document
+            workbook_id (str): UUID of the workbook
             model (str): AI model to use for enrichment
         """
         print(f"Processing {len(jobs)} jobs with max {self.max_concurrent} concurrent threads")
@@ -105,7 +105,7 @@ class EnrichmentProcessor:
                 
                 try:
                     # Process the job
-                    self._process_single_job(job, document_id, model)
+                    self._process_single_job(job, workbook_id, model)
                 finally:
                     # Mark the job as done in the queue
                     job_queue.task_done()
@@ -126,13 +126,13 @@ class EnrichmentProcessor:
         
         print(f"All {len(jobs)} jobs completed")
     
-    def _process_single_job(self, job, document_id, model=settings.DEFAULT_AI_MODEL):
+    def _process_single_job(self, job, workbook_id, model=settings.DEFAULT_AI_MODEL):
         """
         Process a single enrichment job
         
         Args:
             job (BackgroundJob): The job to process
-            document_id (str): UUID of the document
+            workbook_id (str): UUID of the workbook
             model (str): AI model to use for enrichment
         """
         cell_data = job.cell_data
@@ -146,7 +146,7 @@ class EnrichmentProcessor:
             
             # Send WebSocket update
             self._send_websocket_update(
-                document_id,
+                workbook_id,
                 'enrichment_status',
                 {
                     'row': position['Row'],
@@ -159,7 +159,7 @@ class EnrichmentProcessor:
             print(f"Processing enrichment for cell [{position['Row']}, {position['Column']}] with model {model}")
             
             # Call the enrichment AI function
-            result = ai.enrichment(cell_data, document_id=document_id, model=model)
+            result = ai.enrichment(cell_data, workbook_id=workbook_id, model=model)
             
             # Update job status to completed
             job.status = 'completed'
@@ -169,7 +169,7 @@ class EnrichmentProcessor:
             
             # Send WebSocket update with result
             self._send_websocket_update(
-                document_id,
+                workbook_id,
                 'enrichment_complete',
                 {
                     'row': position['Row'],
@@ -195,7 +195,7 @@ class EnrichmentProcessor:
             
             # Send WebSocket error update
             self._send_websocket_update(
-                document_id,
+                workbook_id,
                 'enrichment_error',
                 {
                     'row': position['Row'],
@@ -206,12 +206,12 @@ class EnrichmentProcessor:
                 }
             )
     
-    def _send_websocket_update(self, document_id, message_type, data):
+    def _send_websocket_update(self, workbook_id, message_type, data):
         """
         Send WebSocket update to frontend
         
         Args:
-            document_id (str): UUID of the document
+            workbook_id (str): UUID of the workbook
             message_type (str): Type of message
             data (dict): Message data
         """
@@ -219,7 +219,7 @@ class EnrichmentProcessor:
             print("Channel layer not available")
             return
         
-        group_id = f"g-{document_id}"
+        group_id = f"g-{workbook_id}"
         
         try:
             async_to_sync(self.channel_layer.group_send)(
@@ -233,30 +233,30 @@ class EnrichmentProcessor:
         except Exception as e:
             print(f"Error sending WebSocket update: {str(e)}")
     
-    def _cleanup_old_jobs(self, document):
+    def _cleanup_old_jobs(self, workbook):
         """
         Clean up completed/failed jobs older than 10 minutes
-        
+
         Args:
-            document (Document): The document to clean up jobs for
+            workbook (Workbook): The workbook to clean up jobs for
         """
         from datetime import timedelta
-        
+
         # Calculate cutoff time (10 minutes ago)
         cutoff_time = timezone.now() - timedelta(minutes=10)
-        
+
         # Delete completed or failed jobs older than 10 minutes
         old_jobs = BackgroundJob.objects.filter(
-            document=document,
+            workbook=workbook,
             job_type='data_enrichment',
             status__in=['completed', 'failed'],
             completed_at__lt=cutoff_time
         )
-        
+
         deleted_count = old_jobs.count()
         if deleted_count > 0:
             old_jobs.delete()
-            print(f"Cleaned up {deleted_count} old enrichment jobs for document {document.uuid}")
+            print(f"Cleaned up {deleted_count} old enrichment jobs for workbook {workbook.uuid}")
 
 
 # Global instance

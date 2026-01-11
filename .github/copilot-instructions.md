@@ -13,41 +13,60 @@
 
 ### Data Model Hierarchy
 ```
-Document (uuid-based)
-├── Sheets (spreadsheet data stored as JSONField)
-├── Files (uploaded CSV/XLSX with extracted markdown content)
-├── Folders (for organizing files)
+Workbook (uuid-based)
+├── Sheets (spreadsheet tabs - editable grids with columns/rows stored as JSONField)
+├── Resources (uploaded files - CSV/XLSX/PDF/DOCX/etc. with extracted markdown)
+│   ├── Files (individual uploaded documents)
+│   └── Folders (for organizing files)
 └── Conversations (chat history with AI assistant)
 ```
+
+**CRITICAL TERMINOLOGY:**
+- **Workbook** = Main container (backend model: `Workbook`, UI: "Workbook")
+- **Sheets** = Spreadsheet tabs in the workbook (editable grids, like Excel sheets)
+- **Resources** = Uploaded files section (CSV/XLSX/PDF/DOCX stored as files)
+- **Sheet files** = CSV/XLSX files uploaded to Resources (NOT the same as Sheets)
+
+**AI Tool Usage Guide:**
+- Use `get_sheet_tools()` for manipulating **Sheets** (spreadsheet tabs in workbook)
+- Use `get_file_tools()` for querying **Resources** (uploaded CSV/XLSX/PDF/DOCX files)
+- When user says "add data to sheet" → manipulate the Sheet (spreadsheet tab)
+- When user says "query the CSV file" → search Resources (uploaded files)
 
 ## Critical Patterns & Conventions
 
 ### 1. Model References Use UUIDs, Not PKs
 All model relationships use UUID fields for external references:
 ```python
-document = Document.objects.get(uuid=document_id)  # ✅ Correct
-document = Document.objects.get(id=document_id)    # ❌ Wrong
+workbook = Workbook.objects.get(uuid=workbook_id)  # ✅ Correct
+workbook = Workbook.objects.get(id=workbook_id)    # ❌ Wrong
 ```
-URLs and API responses use string UUIDs: `/api/documents/{uuid}/sheets/{uuid}`
+**Important**: Backend uses `workbook_id` for function parameters, `Workbook` model for database, and `/api/workbooks/` for API routes.
+URLs and API responses use string UUIDs: `/api/workbooks/{uuid}/sheets/{uuid}`
 
 ### 2. WebSocket Communication Pattern
-- **Group naming**: `g-{document_uuid}` (see [datafactory/consumers.py](backend/datafactory/consumers.py))
+- **Group naming**: `g-{workbook_uuid}` (see [datafactory/consumers.py](backend/datafactory/consumers.py))
 - **Message types**: Custom event types like `enrichment_update`, `new_message`
 - **Frontend listens**: Via `window.dispatchEvent(new CustomEvent('websocket-message', { detail: data }))`
-- **Singleton connections**: Frontend maintains one WebSocket per document in global `wsConnections` map (see [utils/websocket-context.jsx](frontend/src/utils/websocket-context.jsx))
+- **Singleton connections**: Frontend maintains one WebSocket per workbook in global `wsConnections` map (see [utils/websocket-context.jsx](frontend/src/utils/websocket-context.jsx))
+- **WebSocket URL**: `ws://localhost:50/ws/workbook/{uuid}/` (frontend uses `/ws/workbook/`, backend consumer is `WorkbookConsumer`)
 
 ### 3. AI Tool Execution Flow
 The assistant uses a **client-side tool execution** model (not server-side):
 
-1. Backend returns tool calls from LLM via `/api/documents/{uuid}/assistant/chat`
+1. Backend returns tool calls from LLM via `/api/workbooks/{uuid}/assistant/chat`
 2. Frontend ([assistant.jsx](frontend/src/components/assistant.jsx)) executes tools locally (spreadsheet ops, file queries)
-3. Frontend sends tool results back to `/api/documents/{uuid}/assistant/respond`
+3. Frontend sends tool results back to `/api/workbooks/{uuid}/assistant/respond`
 4. Backend continues conversation with tool results
 
 **Tool categories** (see [handlers/ai.py](backend/core/handlers/ai.py)):
 - `get_ai_tools()`: Web search, scraping
-- `get_file_tools()`: RAG-based file querying (replaced old direct read)
-- `get_sheet_tools()`: Spreadsheet manipulation (add/delete rows/columns, populate cells)
+- `get_file_tools()`: RAG-based querying of uploaded Resources (CSV/XLSX/PDF/DOCX files)
+- `get_sheet_tools()`: Spreadsheet tab manipulation (add/delete rows/columns, populate cells)
+
+**IMPORTANT DISTINCTION:**
+- **Sheet Tools** (`tool_add_rows`, `tool_populate_cells`, etc.) → Operate on workbook Sheets (spreadsheet tabs)
+- **File Tools** (`tool_query_file_data`) → Query uploaded Resources (CSV/XLSX/PDF files in Resources section)
 
 ### 4. File Processing Pipeline
 Files go through async processing (see [handlers/extraction.py](backend/core/handlers/extraction.py)):
@@ -69,7 +88,7 @@ Files go through async processing (see [handlers/extraction.py](backend/core/han
 ### 6. Frontend API Pattern
 All API calls use [utils/api.js](frontend/src/utils/api.js)'s `apiFetch()`:
 ```javascript
-apiFetch('/api/documents/list', { method: 'POST' })  // Auto-handles JSON, auth tokens
+apiFetch('/api/workbooks/list', { method: 'POST' })  // Auto-handles JSON, auth tokens
 ```
 **Note**: Vite proxy rewrites `/api` → `http://localhost:50` in dev.
 
@@ -118,14 +137,17 @@ Collections use OpenAI `text-embedding-3-small`. Key functions in [handlers/know
 3. **Authentication**: Currently disabled (`AllowAny` permission) with hardcoded user `rohanashik`
 4. **Sheet data structure**: Stored as `{'columns': [...], 'rows': [...]}` in JSONField
 5. **File paths**: Use `BASE_DIR / 'storage' / 'userdata'` pattern (see [settings.py](backend/datafactory/settings.py))
-6. **Model selection**: Stored per-document in `Document.selected_model`, defaults to `DEFAULT_AI_MODEL='gpt-5-nano'` from settings
+6. **Model selection**: Stored per-workbook in `Workbook.selected_model`, defaults to `DEFAULT_AI_MODEL='gpt-5-nano'` from settings
 
 ## File Organization
 
 - **Handlers**: Business logic in [backend/core/handlers/](backend/core/handlers/)—AI, extraction, knowledge, enrichment
 - **API Views**: All in [backend/core/views.py](backend/core/views.py) (single large file, ~900 lines)
-- **Models**: Single file [backend/core/models.py](backend/core/models.py)
-- **Frontend Components**: Feature-based in [frontend/src/components/](frontend/src/components/)—assistant, document-view, files-view, sheet-view
+- **Models**: Single file [backend/core/models.py](backend/core/models.py) (Workbook model for workbooks)
+- **Frontend Components**: Feature-based in [frontend/src/components/](frontend/src/components/)—assistant, workbook-view, files-view, sheet-view
+- **Frontend Pages**: [frontend/src/pages/](frontend/src/pages/)—workbook.jsx (main workbook page)
+
+**Important**: Backend uses `Workbook` model, `workbook_id` for function parameters, and `/api/workbooks/` for API routes. UI uses "Workbook" terminology throughout. WebSocket routes use `/ws/workbook/` for clarity.
 
 ## Dependencies
 

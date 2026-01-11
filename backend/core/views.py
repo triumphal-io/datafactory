@@ -18,78 +18,82 @@ from django.conf import settings
 from core.handlers import ai
 from core.handlers.extraction import start_background_processing
 from core.handlers import knowledge
-from core.models import Document, Sheet, File, Folder, Conversation
+from core.models import Workbook, Sheet, File, Folder, Conversation
 
 
 @api_view(['GET', 'POST', 'PATCH'])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def api_documents(request, action):
+def api_workbooks(request, action):
+    """
+    Handle workbook operations (list, create, get details).
+    A Workbook contains Sheets (spreadsheet tabs) and Resources (uploaded files/folders).
+    """
     response = {'status': 'error'}
 
     if action == "list":
-        documents = Document.objects.all()
-        response['documents'] = []
-        for doc in documents:
-            response['documents'].append({
-                'id': str(doc.uuid),
-                'name': doc.name,
-                'uuid': str(doc.uuid),
-                'selected_model': doc.selected_model,
-                'created_at': doc.created_at.isoformat(),
-                'last_modified': doc.last_modified.isoformat(),
-                'user': doc.user.username if doc.user else 'Anonymous'
+        workbooks = Workbook.objects.all()
+        response['workbooks'] = []
+        for workbook in workbooks:
+            response['workbooks'].append({
+                'id': str(workbook.uuid),
+                'name': workbook.name,
+                'uuid': str(workbook.uuid),
+                'selected_model': workbook.selected_model,
+                'created_at': workbook.created_at.isoformat(),
+                'last_modified': workbook.last_modified.isoformat(),
+                'user': workbook.user.username if workbook.user else 'Anonymous'
             })
         response['status'] = 'success'
     elif action == "create":
-        # Create a new document with a default sheet
+        # Create a new workbook with a default sheet (Sheet 1)
         from django.contrib.auth.models import User
         
         # Get or create a default user (you may want to use actual authenticated user)
         user = User.objects.get(username='rohanashik')
-        
-        # Create the document
-        document = Document.objects.create(
+
+        # Create the workbook
+        workbook = Workbook.objects.create(
             user=user,
-            name='Untitled Document',
+            name='Untitled Workbook',
             data={}
         )
-        
-        # Create a default sheet for the document
+
+        # Create a default sheet for the workbook
         sheet = Sheet.objects.create(
-            document=document,
+            workbook=workbook,
             name='Sheet 1',
             data={'columns': [], 'rows': []}
         )
-        
+
         response = {
             'status': 'success',
-            'document_id': str(document.uuid),
+            'workbook_id': str(workbook.uuid),
             'sheet_id': str(sheet.uuid),
-            'name': document.name
+            'name': workbook.name
         }
         return Response(response)
     elif action == "mentions":
-        # Get mention suggestions for a specific document
+        # Get mention suggestions for a specific workbook
         try:
-            document_id = request.GET.get('document_id')
-            if not document_id:
+            workbook_id = request.GET.get('workbook_id')
+            if not workbook_id:
                 return JsonResponse(
-                    {'status': 'error', 'message': 'document_id parameter required'},
+                    {'status': 'error', 'message': 'workbook_id parameter required'},
                     status=400
                 )
             
-            document = Document.objects.filter(uuid=document_id).first()
-            if not document:
+            workbook = Workbook.objects.filter(uuid=workbook_id).first()
+            if not workbook:
                 return JsonResponse(
-                    {'status': 'error', 'message': 'Document not found'},
+                    {'status': 'error', 'message': 'Workbook not found'},
                     status=404
                 )
-            
+
             suggestions = []
-            
+
             # Get files
-            files = File.objects.filter(document=document)
+            files = File.objects.filter(workbook=workbook)
             for file in files:
                 suggestions.append({
                     'id': f'file:{file.uuid}',
@@ -100,7 +104,7 @@ def api_documents(request, action):
                 })
             
             # Get folders
-            folders = Folder.objects.filter(document=document)
+            folders = Folder.objects.filter(workbook=workbook)
             for folder in folders:
                 suggestions.append({
                     'id': f'folder:{folder.uuid}',
@@ -111,7 +115,7 @@ def api_documents(request, action):
                 })
             
             # Get sheets and columns
-            sheets = Sheet.objects.filter(document=document)
+            sheets = Sheet.objects.filter(workbook=workbook)
             for sheet in sheets:
                 suggestions.append({
                     'id': f'sheet:{sheet.uuid}',
@@ -171,48 +175,48 @@ def api_documents(request, action):
                 status=500
             )
     else:
-        document = Document.objects.filter(uuid=action).first()
-        if not document:
+        workbook = Workbook.objects.filter(uuid=action).first()
+        if not workbook:
             return JsonResponse(
-                {'status': 'error', 'message': 'Document not found'},
+                {'status': 'error', 'message': 'Workbook not found'},
                 status=404
             )
-        
-        # Handle PATCH request to update document
+
+        # Handle PATCH request to update workbook
         if request.method == 'PATCH':
             try:
                 body = json.loads(request.body)
                 name = body.get('name')
                 selected_model = body.get('selected_model')
-                
+
                 if name is not None:
-                    document.name = name
+                    workbook.name = name
                 if selected_model is not None:
-                    document.selected_model = selected_model
-                document.save()
-                
+                    workbook.selected_model = selected_model
+                workbook.save()
+
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Document updated successfully',
-                    'last_modified': document.last_modified.isoformat()
+                    'message': 'Workbook updated successfully',
+                    'last_modified': workbook.last_modified.isoformat()
                 })
             except Exception as e:
                 return JsonResponse(
                     {'status': 'error', 'message': str(e)},
                     status=500
                 )
-        
-        # Handle GET request to retrieve document details
+
+        # Handle GET request to retrieve workbook details
         response = {
             'status': 'success',
-            'id': str(document.uuid),
-            'name': document.name,
-            'selected_model': document.selected_model,
-            'created_at': document.created_at.isoformat(),
-            'last_modified': document.last_modified.isoformat()
+            'id': str(workbook.uuid),
+            'name': workbook.name,
+            'selected_model': workbook.selected_model,
+            'created_at': workbook.created_at.isoformat(),
+            'last_modified': workbook.last_modified.isoformat()
         }
-        
-        sheets = Sheet.objects.filter(document=document)
+
+        sheets = Sheet.objects.filter(workbook=workbook)
         response['sheets'] = []
         for sheet in sheets:
             response['sheets'].append({
@@ -220,7 +224,7 @@ def api_documents(request, action):
                 'name': sheet.name,
                 'last_modified': sheet.last_modified.isoformat()
             })
-        files = File.objects.filter(document=document)
+        files = File.objects.filter(workbook=workbook)
         response['files'] = []
         for file in files:
             response['files'].append({
@@ -229,7 +233,7 @@ def api_documents(request, action):
                 'uploaded_at': file.uploaded_at.isoformat(),
                 'use': file.use
             })
-        conversations = Conversation.objects.filter(document=document)
+        conversations = Conversation.objects.filter(workbook=workbook)
         response['conversations'] = []
         for conv in conversations:
             response['conversations'].append({
@@ -244,27 +248,27 @@ def api_documents(request, action):
 @api_view(['PATCH'])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def api_update_document(request, did):
-    """Update document properties like name"""
+def api_update_workbook(request, did):
+    """Update workbook properties like name"""
     try:
-        document = Document.objects.filter(uuid=did).first()
-        if not document:
+        workbook = Workbook.objects.filter(uuid=did).first()
+        if not workbook:
             return JsonResponse(
-                {'status': 'error', 'message': 'Document not found'},
+                {'status': 'error', 'message': 'Workbook not found'},
                 status=404
             )
-        
+
         body = json.loads(request.body)
         name = body.get('name')
-        
+
         if name is not None:
-            document.name = name
-            document.save()
-        
+            workbook.name = name
+            workbook.save()
+
         return JsonResponse({
             'status': 'success',
-            'message': 'Document updated successfully',
-            'last_modified': document.last_modified.isoformat()
+            'message': 'Workbook updated successfully',
+            'last_modified': workbook.last_modified.isoformat()
         })
     except Exception as e:
         return JsonResponse(
@@ -277,14 +281,14 @@ def api_update_document(request, did):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_folders(request, did, action):
-    """Handle folder operations"""
+    """Handle folder operations within a workbook"""
     response = {'status': 'error'}
     
     # Handle folder-specific operations (DELETE/PATCH) when action is a UUID
     if request.method in ['DELETE', 'PATCH']:
         try:
             folder_id = action
-            folder = Folder.objects.filter(uuid=folder_id, document__uuid=did).first()
+            folder = Folder.objects.filter(uuid=folder_id, workbook__uuid=did).first()
             if not folder:
                 return JsonResponse(
                     {'status': 'error', 'message': 'Folder not found'},
@@ -309,7 +313,7 @@ def api_folders(request, did, action):
                 
                 # Delete folder chunks from ChromaDB
                 try:
-                    knowledge.delete_folder_chunks(folder.name, folder.document.user.id)
+                    knowledge.delete_folder_chunks(folder.name, folder.workbook.user.id)
                 except Exception as e:
                     print(f"Error deleting folder chunks: {e}")
                 
@@ -336,7 +340,7 @@ def api_folders(request, did, action):
                     # Update ChromaDB metadata if name changed
                     if old_name != new_name:
                         try:
-                            knowledge.update_folder_metadata(old_name, new_name, folder.document.user.id)
+                            knowledge.update_folder_metadata(old_name, new_name, folder.workbook.user.id)
                         except Exception as e:
                             print(f"Error updating folder metadata: {e}")
                     
@@ -357,14 +361,14 @@ def api_folders(request, did, action):
             )
     
     if action == "list":
-        document = Document.objects.filter(uuid=did).first()
-        if not document:
+        workbook = Workbook.objects.filter(uuid=did).first()
+        if not workbook:
             return JsonResponse(
-                {'status': 'error', 'message': 'Document not found'},
+                {'status': 'error', 'message': 'Workbook not found'},
                 status=404
             )
-        
-        folders = Folder.objects.filter(document=document)
+
+        folders = Folder.objects.filter(workbook=workbook)
         response['folders'] = []
         for folder in folders:
             file_count = folder.files.count()
@@ -387,16 +391,16 @@ def api_folders(request, did, action):
         try:
             body = json.loads(request.body)
             name = body.get('name', 'New Folder')
-            
-            document = Document.objects.filter(uuid=did).first()
-            if not document:
+
+            workbook = Workbook.objects.filter(uuid=did).first()
+            if not workbook:
                 return JsonResponse(
-                    {'status': 'error', 'message': 'Document not found'},
+                    {'status': 'error', 'message': 'Workbook not found'},
                     status=404
                 )
-            
+
             folder = Folder.objects.create(
-                document=document,
+                workbook=workbook,
                 name=name,
                 in_use=True
             )
@@ -425,16 +429,21 @@ def api_folders(request, did, action):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_files(request, did, action):
+    """
+    Handle workbook Resources (uploaded files like CSV, XLSX, PDF, DOCX, etc.).
+    Note: These are separate from Sheets (spreadsheet tabs in the workbook).
+    Resources = user-uploaded files stored in folders for reference/RAG.
+    """
     response = {'status': 'error'}
     
     # Handle file-specific operations (DELETE/PATCH) when action is a UUID
     if request.method in ['DELETE', 'PATCH']:
         try:
             file_id = action  # action is the file UUID in this case
-            print(f"File operation: method={request.method}, file_id={file_id}, document={did}")
-            file = File.objects.filter(uuid=file_id, document__uuid=did).first()
+            print(f"File operation: method={request.method}, file_id={file_id}, workbook={did}")
+            file = File.objects.filter(uuid=file_id, workbook__uuid=did).first()
             if not file:
-                print(f"File not found: file_id={file_id}, document={did}")
+                print(f"File not found: file_id={file_id}, workbook={did}")
                 return JsonResponse(
                     {'status': 'error', 'message': 'File not found'},
                     status=404
@@ -510,15 +519,15 @@ def api_files(request, did, action):
         show_all = request.GET.get('all', 'false').lower() == 'true'
         
         if show_all:
-            # Show all files for the document regardless of folder
-            files = File.objects.filter(document__uuid=did)
+            # Show all files for the workbook regardless of folder
+            files = File.objects.filter(workbook__uuid=did)
         elif folder_id:
             # Filter files by folder - only show files in this folder
-            files = File.objects.filter(document__uuid=did, folder__uuid=folder_id)
+            files = File.objects.filter(workbook__uuid=did, folder__uuid=folder_id)
             # print(f"📂 Loading files for folder {folder_id}: {files.count()} files")
         else:
             # Get files not in any folder - exclude files that are in folders
-            files = File.objects.filter(document__uuid=did, folder__isnull=True)
+            files = File.objects.filter(workbook__uuid=did, folder__isnull=True)
             # print(f"📁 Loading root files (no folder): {files.count()} files")
         
         response['files'] = []
@@ -543,16 +552,16 @@ def api_files(request, did, action):
         print( uploaded_files)
         if not uploaded_files:
             return JsonResponse({'status': 'error', 'message': 'No files uploaded'}, status=400)
-        
-        document = Document.objects.filter(uuid=did).first()
-        if not document:
-            return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
-        
+
+        workbook = Workbook.objects.filter(uuid=did).first()
+        if not workbook:
+            return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
+
         # Get folder if folder_id provided
         folder = None
         folder_name = None
         if folder_id:
-            folder = Folder.objects.filter(uuid=folder_id, document=document).first()
+            folder = Folder.objects.filter(uuid=folder_id, workbook=workbook).first()
             if folder:
                 folder_name = folder.name
         
@@ -585,7 +594,7 @@ def api_files(request, did, action):
             
             # Create file instance with folder assignment
             file_instance = File.objects.create(
-                document=document,
+                workbook=workbook,
                 folder=folder,
                 filename=original_name,
                 calculated_size=uploaded_file.size,
@@ -621,7 +630,12 @@ def api_files(request, did, action):
 @permission_classes([AllowAny])
 def api_assistant(request, did, action):
     """
-    Handle assistant messages with conversation persistence and sheet tool support.
+    Handle AI assistant messages with conversation persistence and tool support.
+    
+    Tools available:
+    - Sheet tools: Manipulate spreadsheet tabs (add/delete rows/columns, populate cells)
+    - File tools: Query uploaded Resources (RAG-based search in CSV/XLSX/PDF/DOCX files)
+    - Web tools: Search and scrape web content
     
     POST data:
         - message: User message text (for user_message type)
@@ -629,7 +643,7 @@ def api_assistant(request, did, action):
         - conversation_id: UUID of existing conversation (optional for first message)
         - tool_results: Array of {id, name, result} for tool_result type
         - attachment_*: File attachments (multiple files supported via FormData)
-        - sheet_data: Current sheet data (JSON string when sent via FormData)
+        - sheet_data: Current spreadsheet sheet data (JSON string when sent via FormData)
         - selected_range: Selected cell range
     """
     try:
@@ -664,9 +678,9 @@ def api_assistant(request, did, action):
         uploaded_file_ids = []
         attachment_info = []
         if is_form_data and request.FILES:
-            document = Document.objects.filter(uuid=did).first()
-            if not document:
-                return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
+            workbook = Workbook.objects.filter(uuid=did).first()
+            if not workbook:
+                return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
             
             # Process all attached files
             for field_name, uploaded_file in request.FILES.items():
@@ -688,7 +702,7 @@ def api_assistant(request, did, action):
                     
                     # Create file instance
                     file_instance = File.objects.create(
-                        document=document,
+                        workbook=workbook,
                         filename=original_name,
                         calculated_size=uploaded_file.size,
                         extracted_content="",  # Will be populated by background processing
@@ -752,13 +766,13 @@ def api_assistant(request, did, action):
             if not conversation:
                 return JsonResponse({'status': 'error', 'message': 'Conversation not found'}, status=404)
         else:
-            # Create new conversation for this document
-            document = Document.objects.filter(uuid=did).first()
-            if not document:
-                return JsonResponse({'status': 'error', 'message': 'Document not found'}, status=404)
-            
+            # Create new conversation for this workbook
+            workbook = Workbook.objects.filter(uuid=did).first()
+            if not workbook:
+                return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
+
             conversation = Conversation.objects.create(
-                document=document,
+                workbook=workbook,
                 title=message[:50] if message else 'New Conversation',
                 conversations=[]
             )
@@ -773,7 +787,7 @@ def api_assistant(request, did, action):
                 message=message,
                 conversation_obj=conversation,
                 include_sheet_tools=include_sheet_tools,
-                document_id=did,
+                workbook_id=did,
                 sheet_context=sheet_context,
                 model=model
             )
@@ -796,7 +810,7 @@ def api_assistant(request, did, action):
                 message=None,
                 conversation_obj=conversation,
                 include_sheet_tools=True,
-                document_id=did,
+                workbook_id=did,
                 sheet_context=sheet_context,
                 model=model
             )
@@ -834,10 +848,10 @@ def api_enrich(request, action):
     response = {'status': 'error'}
     body = json.loads(request.body)
     data = body.get('data', {})
-    document_id = body.get('documentId', None)
+    workbook_id = body.get('workbookId')
     model = body.get('model', settings.DEFAULT_AI_MODEL)
     print(data)
-    response['result'] = ai.enrichment(data, document_id=document_id, model=model)
+    response['result'] = ai.enrichment(data, workbook_id=workbook_id, model=model)
     response['status'] = 'success'
     return JsonResponse(response)
 
@@ -852,17 +866,17 @@ def api_bulk_enrich(request):
     try:
         body = json.loads(request.body)
         cells_data = body.get('cells', [])
-        document_id = body.get('documentId', None)
+        workbook_id = body.get('workbookId')
         model = body.get('model', settings.DEFAULT_AI_MODEL)
         
         if not cells_data:
             return JsonResponse({'status': 'error', 'message': 'No cells provided'}, status=400)
         
-        if not document_id:
-            return JsonResponse({'status': 'error', 'message': 'Document ID required'}, status=400)
+        if not workbook_id:
+            return JsonResponse({'status': 'error', 'message': 'Workbook ID required'}, status=400)
         
         # Start background enrichment processing
-        enricher.start_bulk_enrichment(cells_data, document_id, model)
+        enricher.start_bulk_enrichment(cells_data, workbook_id, model)
         
         return JsonResponse({
             'status': 'success',
@@ -882,12 +896,16 @@ def api_bulk_enrich(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def api_sheets(request, did, sheet_id):
-    """Handle sheet data GET (load), POST (save/create), DELETE, and PATCH (metadata update) operations"""
+    """
+    Handle workbook Sheets (spreadsheet tabs) operations.
+    Note: Sheets = spreadsheet tabs with columns/rows (like Excel sheets).
+    These are different from uploaded sheet files (CSV/XLSX) in Resources.
+    """
     
     if request.method == 'GET':
         if sheet_id == 'list':
-            # Return list of sheets for the document
-            sheets = Sheet.objects.filter(document__uuid=did)
+            # Return list of sheets for the workbook
+            sheets = Sheet.objects.filter(workbook__uuid=did)
             sheet_list = []
             for sheet in sheets:
                 sheet_list.append({
@@ -902,10 +920,10 @@ def api_sheets(request, did, sheet_id):
         else:
         # Load sheet data from database
             if sheet_id == 'default-sheet':
-                # Get the first sheet for the document
-                sheet = Sheet.objects.filter(document__uuid=did).first()
+                # Get the first sheet for the workbook
+                sheet = Sheet.objects.filter(workbook__uuid=did).first()
             else:
-                sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+                sheet = Sheet.objects.filter(workbook__uuid=did, uuid=sheet_id).first()
             if not sheet:
                 return JsonResponse(
                     {'status': 'error', 'message': 'Sheet not found'},
@@ -923,15 +941,15 @@ def api_sheets(request, did, sheet_id):
         
         if sheet_id == 'new':
             # Create a new sheet
-            document = Document.objects.filter(uuid=did).first()
-            if not document:
+            workbook = Workbook.objects.filter(uuid=did).first()
+            if not workbook:
                 return JsonResponse(
-                    {'status': 'error', 'message': 'Document not found'},
+                    {'status': 'error', 'message': 'Workbook not found'},
                     status=404
                 )
-            
+
             # Get existing sheets to determine the next sheet name
-            existing_sheets = Sheet.objects.filter(document=document)
+            existing_sheets = Sheet.objects.filter(workbook=workbook)
             sheet_numbers = []
             for s in existing_sheets:
                 # Extract number from "Sheet X" format
@@ -948,7 +966,7 @@ def api_sheets(request, did, sheet_id):
             
             # Create the new sheet
             new_sheet = Sheet.objects.create(
-                document=document,
+                workbook=workbook,
                 name=new_sheet_name,
                 data={'columns': [], 'rows': []}
             )
@@ -967,10 +985,10 @@ def api_sheets(request, did, sheet_id):
             sheet_data = body.get('sheet_data', {'columns': [], 'rows': []})
 
             if sheet_id == 'default-sheet':
-                # Get the first sheet for the document
-                sheet = Sheet.objects.filter(document__uuid=did).first()
+                # Get the first sheet for the workbook
+                sheet = Sheet.objects.filter(workbook__uuid=did).first()
             else:
-                sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+                sheet = Sheet.objects.filter(workbook__uuid=did, uuid=sheet_id).first()
             if sheet:
                 sheet.data = sheet_data
                 sheet.save()
@@ -994,18 +1012,18 @@ def api_sheets(request, did, sheet_id):
                 status=400
             )
         
-        sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+        sheet = Sheet.objects.filter(workbook__uuid=did, uuid=sheet_id).first()
         if not sheet:
             return JsonResponse(
                 {'status': 'error', 'message': 'Sheet not found'},
                 status=404
             )
         
-        # Check if this is the last sheet in the document
-        sheet_count = Sheet.objects.filter(document__uuid=did).count()
+        # Check if this is the last sheet in the workbook
+        sheet_count = Sheet.objects.filter(workbook__uuid=did).count()
         if sheet_count <= 1:
             return JsonResponse(
-                {'status': 'error', 'message': 'Cannot delete the last sheet in the document'},
+                {'status': 'error', 'message': 'Cannot delete the last sheet in the workbook'},
                 status=400
             )
         
@@ -1016,7 +1034,7 @@ def api_sheets(request, did, sheet_id):
         })
     elif request.method == 'PATCH':
         # Update sheet metadata (e.g., name)
-        sheet = Sheet.objects.filter(document__uuid=did, uuid=sheet_id).first()
+        sheet = Sheet.objects.filter(workbook__uuid=did, uuid=sheet_id).first()
         if not sheet:
             return JsonResponse(
                 {'status': 'error', 'message': 'Sheet not found'},

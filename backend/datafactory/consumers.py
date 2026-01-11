@@ -1,10 +1,10 @@
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
 
-class DocumentConsumer(AsyncWebsocketConsumer):
+class WorkbookConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         # Extract parameters from WebSocket URL and create a group ID
-        # Group id is nothing but the document's uuid as string
+        # Group id is the workbook's uuid as string
         self.group_id = f"g-{self.scope['url_route']['kwargs']['group']}"
         
         await self.channel_layer.group_add(self.group_id, self.channel_name)

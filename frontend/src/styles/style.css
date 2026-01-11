@@ -36,12 +36,12 @@ aside {
 
 /* NAVIGATION START */
 
-.document-history li, .drawer-item{
+.workbook-history li, .drawer-item{
     padding: 7px 15px;
     cursor: pointer;
 }
 
-.document-history li:hover, .drawer-item:hover{
+.workbook-history li:hover, .drawer-item:hover{
     background-color: #323232;
 }
 
