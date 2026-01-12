@@ -130,6 +130,14 @@ class BackgroundJob(models.Model):
     cell_data = models.JSONField(default=dict)  # Cell data for enrichment jobs
     result = models.TextField(blank=True, null=True)  # Enrichment result
     error_message = models.TextField(blank=True, null=True)
+    
+    # Process transparency fields for enrichment tracking
+    sheet_uuid = models.UUIDField(null=True, blank=True)  # Sheet where enrichment occurred
+    row = models.IntegerField(null=True, blank=True)  # Row index of enriched cell
+    column = models.IntegerField(null=True, blank=True)  # Column index of enriched cell
+    tool_calls_used = models.JSONField(default=list, blank=True)  # Array of {name, args_summary, result_summary, timestamp}
+    model_used = models.CharField(max_length=100, blank=True, null=True)  # AI model used for enrichment
+    source_files = models.JSONField(default=list, blank=True)  # List of filenames queried during enrichment
 
     def __str__(self):
         return f"{self.get_job_type_display()} - {self.get_status_display()}"

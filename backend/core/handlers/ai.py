@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 from crawl4ai import AsyncWebCrawler
+from crawl4ai.utils import configure_windows_event_loop
 import litellm
 from dotenv import load_dotenv
 from django.apps import apps
@@ -77,7 +78,7 @@ def get_ai_tools():
         "type": "function",
         "function": {
             "name": "tool_search",
-            "description": "Searches for information related to a specific keyword. This tool can get you relevant web results.",
+            "description": "Searches Google for information related to a specific keyword. Returns search result snippets and URLs. IMPORTANT: Search results are just previews - you MUST use tool_web_scraper to visit the actual websites and verify the information is correct. Never rely solely on search result snippets.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -94,7 +95,7 @@ def get_ai_tools():
         "type": "function",
         "function": {
             "name": "tool_web_scraper",
-            "description": "Scrapes a webpage for deeper insights and information.",
+            "description": "Scrapes a webpage to extract the full content and verify information. Use this tool to visit websites from search results and confirm data accuracy. This tool gives you the actual, complete content of the webpage, which is essential for verifying facts and details that appear in search snippets.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -487,7 +488,16 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     # Build STATIC system message for prompt caching
     # Only static instructions - no dynamic data that changes between requests
     static_system_message = None
-    
+
+    # Define research verification protocol once (used across all modes)
+    research_protocol = "RESEARCH AND VERIFICATION PROTOCOL:\n"
+    research_protocol += "When researching information online:\n"
+    research_protocol += "1. Use tool_search to find relevant sources\n"
+    research_protocol += "2. ALWAYS use tool_web_scraper to visit the actual websites from search results\n"
+    research_protocol += "3. Verify information by reading the full content from the scraped pages\n"
+    research_protocol += "4. NEVER rely solely on search result snippets - they may be incomplete or misleading\n"
+    research_protocol += "5. Cross-reference multiple sources when possible to ensure accuracy\n"
+
     if sheet_context and include_sheet_tools:
         # Build STATIC system message (instructions and constraints only - cacheable)
         static_system_message = "You are a spreadsheet assistant with access to tools for manipulating spreadsheet data.\n\n"
@@ -498,10 +508,16 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         static_system_message += "- For 'checkbox' type columns: Use ONLY 'true' or 'false'\n"
         static_system_message += "- For 'email' type columns: Provide valid email addresses only\n"
         static_system_message += "- For 'url' type columns: Provide valid URLs only (starting with http:// or https://)\n"
-        static_system_message += "- Respect the format specification if provided\n"
+        static_system_message += "- Respect the format specification if provided\n\n"
     elif workbook_id:
         # Workbook assistant mode
-        static_system_message = "You are a workbook assistant with access to uploaded files. Use the tool_query_file_data tool to search and retrieve relevant information from files when needed to answer questions.\n"
+        static_system_message = "You are a workbook assistant with access to uploaded files. Use the tool_query_file_data tool to search and retrieve relevant information from files when needed to answer questions.\n\n"
+    else:
+        # General assistant mode
+        static_system_message = "You are an AI assistant.\n\n"
+
+    # Append research protocol to all modes
+    static_system_message += research_protocol
     
     # Add sheet context - split into STATIC and DYNAMIC parts for better prompt caching
     # DYNAMIC parts go in user message (not cached, changes frequently)
@@ -907,7 +923,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
 
 
 
-def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL):
+def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_metadata=False):
     """
     Enrich a spreadsheet cell using AI based on context from other cells.
     
@@ -926,9 +942,12 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL):
             - 'options' (list, optional): Available options for select/multiselect types
         workbook_id (str, optional): Workbook UUID for file access
         model (str, optional): AI model to use. Defaults to settings.DEFAULT_AI_MODEL
+        return_metadata (bool, optional): If True, returns dict with value and metadata. Defaults to False.
     
     Returns:
-        str: AI-generated enrichment value (max 5 words)
+        str or dict: 
+            - If return_metadata=False: AI-generated enrichment value (max 5 words)
+            - If return_metadata=True: Dict with 'value', 'tools_used', 'source_files'
     
     Example data format:
         {
@@ -941,7 +960,13 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL):
             'options': ['Software', 'Hardware', 'Services']
         }
     """
+    from datetime import datetime
+    
     print(f">>>>>>>>>>>>>>>>>> AI model: {model} <<<<<<<<<<<<<<<<<<")
+    
+    # Initialize metadata tracking
+    tools_used = []
+    source_files = []
     
     # Build enrichment prompt with context
     prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}."
@@ -982,10 +1007,109 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL):
     # Enable file access if workbook is available
     if workbook_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
+
+    # Add verification instructions for web research
+    prompt += "\n\nIMPORTANT RESEARCH PROTOCOL: If you need to search the web for this information, you MUST follow these steps:"
+    prompt += "\n1. Use tool_search to find relevant sources"
+    prompt += "\n2. Use tool_web_scraper to visit and read the actual websites from search results"
+    prompt += "\n3. Verify the information from the full webpage content, not just search snippets"
+    prompt += "\n4. Only provide information that you have confirmed by reading the actual source pages"
+    
+    # Create a temporary conversation for enrichment tracking
+    Conversation = apps.get_model('core', 'Conversation')
+    Workbook = apps.get_model('core', 'Workbook')
+    
+    temp_conversation = None
+    if workbook_id and return_metadata:
+        try:
+            workbook = Workbook.objects.get(uuid=workbook_id)
+            # Create temporary conversation to capture tool usage
+            temp_conversation = Conversation.objects.create(
+                workbook=workbook,
+                title=f"Enrichment - {data.get('title', 'Unknown')}",
+                conversations=[]
+            )
+        except Exception as e:
+            print(f"Warning: Could not create temp conversation: {e}")
     
     # Use AI assistant to generate enrichment value
-    result = assistant(prompt, workbook_id=workbook_id, model=model)
+    result = assistant(prompt, conversation_obj=temp_conversation, workbook_id=workbook_id, model=model)
     print(f"Enrichment result: {result}")
+    
+    # Extract tool usage metadata from conversation if enabled
+    if return_metadata and temp_conversation:
+        try:
+            temp_conversation.refresh_from_db()
+            conversation_history = temp_conversation.conversations or []
+            
+            # Extract tool calls from conversation
+            for msg in conversation_history:
+                # Look for assistant messages with tool_calls
+                if msg.get('role') == 'assistant' and msg.get('tool_calls'):
+                    for tc in msg['tool_calls']:
+                        tool_name = tc.get('function', {}).get('name', '')
+                        tool_args = tc.get('function', {}).get('arguments', '{}')
+                        
+                        # Parse arguments
+                        try:
+                            import json
+                            args_dict = json.loads(tool_args) if isinstance(tool_args, str) else tool_args
+                        except:
+                            args_dict = {}
+                        
+                        # Find corresponding tool result
+                        tool_result = ""
+                        tool_call_id = tc.get('id', '')
+                        for result_msg in conversation_history:
+                            if result_msg.get('role') == 'tool' and result_msg.get('tool_call_id') == tool_call_id:
+                                tool_result = result_msg.get('content', '')
+                                break
+                        
+                        # Build human-readable summary
+                        args_summary = ""
+                        result_summary = tool_result[:200] + "..." if len(tool_result) > 200 else tool_result
+                        
+                        if tool_name == 'tool_query_file_data':
+                            query = args_dict.get('query', '')
+                            filename = args_dict.get('filename', '')
+                            search_type = args_dict.get('search_type', 'query')
+                            
+                            if search_type == 'identifier':
+                                args_summary = f"Searched for ID '{query}' in document {filename}"
+                            else:
+                                args_summary = f"Queried '{query}' in document {filename}"
+                            
+                            # Add to source files list
+                            if filename and filename not in source_files:
+                                source_files.append(filename)
+                        
+                        elif tool_name == 'tool_search':
+                            keyword = args_dict.get('keyword', '')
+                            args_summary = f"Searched web for '{keyword}'"
+                        
+                        elif tool_name == 'tool_web_scraper':
+                            url = args_dict.get('url', '')
+                            args_summary = f"Scraped content from {url}"
+                        
+                        elif tool_name == 'tool_get_sheet_data':
+                            sheet_id = args_dict.get('sheet_identifier', '')
+                            args_summary = f"Retrieved data from sheet {sheet_id}"
+                        
+                        else:
+                            args_summary = f"Called {tool_name}"
+                        
+                        # Add to tools_used list
+                        tools_used.append({
+                            "name": tool_name,
+                            "args_summary": args_summary,
+                            "result_summary": result_summary,
+                            "timestamp": datetime.now().isoformat()
+                        })
+            
+            # Clean up temporary conversation
+            temp_conversation.delete()
+        except Exception as e:
+            print(f"Warning: Could not extract tool metadata: {e}")
     
     # Post-process result to extract just the value if AI still includes explanation
     # This is a safety net in case the AI doesn't follow instructions perfectly
@@ -1012,6 +1136,14 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL):
         is_match = re.search(r'is\s+"?([^."]+)"?\.?$', result, re.IGNORECASE)
         if is_match:
             return is_match.group(1).strip()
+    
+    # Return result with metadata if requested
+    if return_metadata:
+        return {
+            'value': result,
+            'tools_used': tools_used,
+            'source_files': source_files
+        }
     
     return result
 
@@ -1093,17 +1225,49 @@ async def _async_crawler(url):
 def crawler(url):
     """
     Synchronous wrapper for async web crawler.
-    
+
     Scrapes a webpage and converts content to markdown format.
-    
+
     Args:
         url (str): URL to crawl
-    
+
     Returns:
         str: Raw markdown content from the webpage
     """
-    result = asyncio.run(_async_crawler(url))
-    return result.markdown.raw_markdown
+    # Configure Windows event loop to support subprocess operations
+    # This fixes NotImplementedError on Windows platforms
+    configure_windows_event_loop()
+
+    try:
+        # Try to use existing event loop if one is running
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop, create a new one
+        loop = None
+
+    try:
+        if loop is not None:
+            # If we're in an async context, we can't use asyncio.run()
+            # This shouldn't normally happen since crawler() is called synchronously
+            raise RuntimeError("Cannot use crawler in an async context")
+
+        result = asyncio.run(_async_crawler(url))
+        
+        # Validate result structure
+        if result is None:
+            raise Exception("Crawler returned None - possibly due to network issues or invalid URL")
+        
+        if not hasattr(result, 'markdown') or result.markdown is None:
+            raise Exception("Crawler result missing markdown content")
+        
+        if not hasattr(result.markdown, 'raw_markdown'):
+            raise Exception("Crawler markdown result missing raw_markdown property")
+        
+        return result.markdown.raw_markdown
+    except Exception as e:
+        # Provide clear error message for debugging
+        error_msg = str(e) if str(e) else f"{type(e).__name__}: Unable to crawl webpage"
+        raise Exception(f"Web crawler failed: {error_msg}")
 
 
 # COMMENTED OUT: Old direct file reading - kept for reference but not used

@@ -123,6 +123,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const [originalValues, setOriginalValues] = useState({});
     const [availableFiles, setAvailableFiles] = useState([]);
     const [blinkingCells, setBlinkingCells] = useState(new Set());
+    const [cellEnrichmentData, setCellEnrichmentData] = useState({}); // Store enrichment metadata per cell
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -570,9 +571,21 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 setCellStatus(row, column, status);
                 console.log(`Cell [${row}, ${column}] status: ${status}`);
             } else if (type === 'enrichment_complete') {
-                // Cell enrichment completed with value
-                const { row, column, value } = data;
+                // Cell enrichment completed with value and metadata
+                const { row, column, value, tools_used, source_files } = data;
                 handleCellEdit(row, column, value);
+                
+                // Store enrichment metadata
+                if (tools_used && tools_used.length > 0) {
+                    const cellKey = `${row}-${column}`;
+                    setCellEnrichmentData(prev => ({
+                        ...prev,
+                        [cellKey]: {
+                            tools_used,
+                            source_files: source_files || []
+                        }
+                    }));
+                }
 
                 // Trigger blink animation
                 const cellKey = `${row}-${column}`;
@@ -587,7 +600,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     });
                 }, 500);
 
-                console.log(`Cell [${row}, ${column}] enriched with: ${value}`);
+                console.log(`Cell [${row}, ${column}] enriched with: ${value}`, { tools_used, source_files });
             } else if (type === 'enrichment_error') {
                 // Cell enrichment failed
                 const { row, column, error } = data;
@@ -640,7 +653,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 title: column.title,
                 description: column.prompt || `Generate data for ${column.title} column`,
                 value: value,
-                type: column.type || 'text'
+                type: column.type || 'text',
+                sheet_uuid: sheetId  // Add sheet UUID for tracking
             };
 
             // Add format if available
@@ -2011,6 +2025,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                     const columnType = column?.type || 'text';
                                     const shouldUseCustomRenderer = ['select', 'multiselect', 'url', 'email', 'checkbox', 'file'].includes(columnType);
                                     const shouldBlockOverlayEditor = ['select', 'multiselect', 'checkbox', 'file'].includes(columnType);
+                                    const cellKey = `${rowIndex}-${colIndex}`;
+                                    const enrichmentData = cellEnrichmentData[cellKey];
                                     
                                     return (
                                         <div
@@ -2022,7 +2038,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                             } ${
                                                 blinkingCells.has(`${rowIndex}-${colIndex}`) ? 'enrichment-complete-blink' : ''
                                             }`}
-                                            style={{ width: `${columnWidths[colIndex] || 160}px` }}
+                                            style={{ width: `${columnWidths[colIndex] || 160}px`, position: 'relative' }}
                                             data-row={rowIndex}
                                             data-col={colIndex}
                                             onMouseDown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
@@ -2138,7 +2154,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     <div
                         style={{
                             position: 'fixed',
-                            top: overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height) + 5,
+                            top: overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height) + 3,
                             left: overlayEditor.rect.left,
                             width: overlayEditor.rect.width,
                             maxWidth: '400px',
@@ -2147,23 +2163,51 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                             overflowY: 'auto',
                             zIndex: 999,
                             backgroundColor: '#2a2a2a',
-                            // border: '1px solid #444',
-                            borderRadius: '4px',
-                            // padding: '12px',
                             boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
                         }}
                     >
                         <div style={{ fontSize: '11px', color: '#b0b0b0', lineHeight: '1.5', padding: '12px' }}>
-                            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#e0e0e0' }}>Information</p>
-                            <p style={{ margin: 0 }}>
-                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor 
-                                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
-                                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.Sed do eiusmod tempor 
-                                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
-                                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.Sed do eiusmod tempor 
-                                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
-                                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                            </p>
+                            {(() => {
+                                const cellKey = `${overlayEditor.row}-${overlayEditor.col}`;
+                                const enrichmentData = cellEnrichmentData[cellKey];
+                                
+                                if (enrichmentData && enrichmentData.tools_used && enrichmentData.tools_used.length > 0) {
+                                    return (
+                                        <>
+                                            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#e0e0e0' }}>Process</p>
+                                            {enrichmentData.tools_used.map((tool, idx) => (
+                                                <div key={idx} style={{ marginBottom: '12px' }}>
+                                                    <p style={{ margin: '0 0 4px 0', color: '#e0e0e0' }}>
+                                                        {idx + 1}. {tool.args_summary}
+                                                    </p>
+                                                    {tool.result_summary && (
+                                                        <p style={{ margin: '0 0 0 12px', fontSize: '10px', color: '#999' }}>
+                                                            → {tool.result_summary.substring(0, 150)}{tool.result_summary.length > 150 ? '...' : ''}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {enrichmentData.source_files && enrichmentData.source_files.length > 0 && (
+                                                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #444' }}>
+                                                    <p style={{ margin: '0 0 4px 0', fontWeight: '600', color: '#e0e0e0' }}>Source Files:</p>
+                                                    <p style={{ margin: 0, color: '#b0b0b0' }}>
+                                                        {enrichmentData.source_files.join(', ')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                }
+                                
+                                return (
+                                    <>
+                                        <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#e0e0e0' }}>Information</p>
+                                        <p style={{ margin: 0 }}>
+                                            No enrichment process information available for this cell.
+                                        </p>
+                                    </>
+                                );
+                            })()}
                         </div>
                     </div>
                 </>

@@ -53,7 +53,10 @@ class EnrichmentProcessor:
                 workbook=workbook,
                 job_type='data_enrichment',
                 status='queued',
-                cell_data=cell_data
+                cell_data=cell_data,
+                sheet_uuid=cell_data.get('sheet_uuid'),
+                row=cell_data.get('position', {}).get('Row'),
+                column=cell_data.get('position', {}).get('Column')
             )
             jobs.append(job)
             
@@ -158,16 +161,29 @@ class EnrichmentProcessor:
             
             print(f"Processing enrichment for cell [{position['Row']}, {position['Column']}] with model {model}")
             
-            # Call the enrichment AI function
-            result = ai.enrichment(cell_data, workbook_id=workbook_id, model=model)
+            # Call the enrichment AI function with metadata tracking
+            enrichment_result = ai.enrichment(cell_data, workbook_id=workbook_id, model=model, return_metadata=True)
             
-            # Update job status to completed
+            # Extract value and metadata
+            if isinstance(enrichment_result, dict):
+                result = enrichment_result.get('value', enrichment_result)
+                tools_used = enrichment_result.get('tools_used', [])
+                source_files = enrichment_result.get('source_files', [])
+            else:
+                result = enrichment_result
+                tools_used = []
+                source_files = []
+            
+            # Update job status to completed with metadata
             job.status = 'completed'
             job.completed_at = timezone.now()
             job.result = result
+            job.tool_calls_used = tools_used
+            job.source_files = source_files
+            job.model_used = model
             job.save()
             
-            # Send WebSocket update with result
+            # Send WebSocket update with result and metadata
             self._send_websocket_update(
                 workbook_id,
                 'enrichment_complete',
@@ -176,7 +192,9 @@ class EnrichmentProcessor:
                     'column': position['Column'],
                     'status': 'completed',
                     'value': result,
-                    'jobId': str(job.uuid)
+                    'jobId': str(job.uuid),
+                    'tools_used': tools_used,
+                    'source_files': source_files
                 }
             )
             
