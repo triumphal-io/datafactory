@@ -118,6 +118,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const [isResizing, setIsResizing] = useState(false);
     const [resizingColumn, setResizingColumn] = useState(null);
     const [overlayEditor, setOverlayEditor] = useState(null);
+    const [overlayEditorHeight, setOverlayEditorHeight] = useState(0);
     const [pendingAiChanges, setPendingAiChanges] = useState(new Set());
     const [originalValues, setOriginalValues] = useState({});
     const [availableFiles, setAvailableFiles] = useState([]);
@@ -2074,59 +2075,98 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
 
             {/* Overlay Editor */}
             {overlayEditor && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: overlayEditor.rect.top,
-                        left: overlayEditor.rect.left,
-                        width: overlayEditor.rect.width,
-                        display: 'flex',
-                        zIndex: 1000,
-                        border: '1.5px solid #0066cc',
-                        backgroundColor: '#1e1e1e',
-                        boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-                    }}
-                >
-                    <textarea
-                        key={`${overlayEditor.row}-${overlayEditor.col}`}
-                        autoFocus
-                        rows={1}
-                        data-overlay-editor
-                        ref={(el) => {
-                            if (el) {
-                                el.style.height = 'auto';
-                                el.style.height = Math.max(0, el.scrollHeight-18) + 'px';
-                            }
-                        }}
-                        defaultValue={overlayEditor.value}
+                <>
+                    <div
                         style={{
-                            width: '100%',
-                            padding: '8px 8px 8px 8px',
-                            fontSize: '12px',
-                            border: 'none',
-                            outline: 'none',
-                            resize: 'vertical',
+                            position: 'fixed',
+                            top: overlayEditor.rect.top,
+                            left: overlayEditor.rect.left,
+                            width: overlayEditor.rect.width - 2.5,
+                            display: 'flex',
+                            zIndex: 1000,
+                            border: '1.5px solid #0066cc',
                             backgroundColor: '#1e1e1e',
-                            color: '#e0e0e0',
-                            fontFamily: 'inherit',
-                            overflow: 'hidden'
+                            // boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
                         }}
-                        onInput={(e) => {
-                            e.target.style.height = 'auto';
-                            e.target.style.height = Math.max(0, e.target.scrollHeight-18) + 'px';
-                        }}
-                        onBlur={(e) => {
-                            handleCellEdit(overlayEditor.row, overlayEditor.col, e.target.value);
-                            setOverlayEditor(null);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                                e.preventDefault();
+                    >
+                        <textarea
+                            key={`${overlayEditor.row}-${overlayEditor.col}`}
+                            autoFocus
+                            rows={1}
+                            data-overlay-editor
+                            ref={(el) => {
+                                if (el) {
+                                    el.style.height = 'auto';
+                                    const newHeight = Math.max(0, el.scrollHeight-18);
+                                    el.style.height = newHeight + 'px';
+                                    setOverlayEditorHeight(el.offsetHeight);
+                                }
+                            }}
+                            defaultValue={overlayEditor.value}
+                            style={{
+                                width: '100%',
+                                padding: '8px 8px 8px 8px',
+                                fontSize: '12px',
+                                border: 'none',
+                                outline: 'none',
+                                resize: 'vertical',
+                                backgroundColor: '#1e1e1e',
+                                color: '#e0e0e0',
+                                fontFamily: 'inherit',
+                                overflow: 'hidden'
+                            }}
+                            onInput={(e) => {
+                                e.target.style.height = 'auto';
+                                const newHeight = Math.max(0, e.target.scrollHeight-18);
+                                e.target.style.height = newHeight + 'px';
+                                setOverlayEditorHeight(e.target.offsetHeight);
+                            }}
+                            onBlur={(e) => {
+                                handleCellEdit(overlayEditor.row, overlayEditor.col, e.target.value);
                                 setOverlayEditor(null);
-                            }
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    setOverlayEditor(null);
+                                }
+                            }}
+                        />
+                    </div>
+                    
+                    {/* Information Panel Below Editing Cell */}
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height) + 5,
+                            left: overlayEditor.rect.left,
+                            width: overlayEditor.rect.width,
+                            maxWidth: '400px',
+                            minHeight: '120px',
+                            maxHeight: '250px',
+                            overflowY: 'auto',
+                            zIndex: 999,
+                            backgroundColor: '#2a2a2a',
+                            // border: '1px solid #444',
+                            borderRadius: '4px',
+                            // padding: '12px',
+                            boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
                         }}
-                    />
-                </div>
+                    >
+                        <div style={{ fontSize: '11px', color: '#b0b0b0', lineHeight: '1.5', padding: '12px' }}>
+                            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#e0e0e0' }}>Information</p>
+                            <p style={{ margin: 0 }}>
+                                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor 
+                                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
+                                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.Sed do eiusmod tempor 
+                                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
+                                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.Sed do eiusmod tempor 
+                                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
+                                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                            </p>
+                        </div>
+                    </div>
+                </>
             )}
 
             {/* Column Add/Edit Popup */}

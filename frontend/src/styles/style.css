@@ -434,7 +434,7 @@ select.input-empty option {
 
 .sheet-row-item.selected {
     background-color: #0066cc40 !important;
-    outline: 1px solid #0066cc40 !important;
+    /* outline: 1px solid #0066cc40 !important; */
     /* box-sizing: border-box; */
 }
 
