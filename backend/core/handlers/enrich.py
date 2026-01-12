@@ -169,10 +169,12 @@ class EnrichmentProcessor:
                 result = enrichment_result.get('value', enrichment_result)
                 tools_used = enrichment_result.get('tools_used', [])
                 source_files = enrichment_result.get('source_files', [])
+                source_links = enrichment_result.get('source_links', [])
             else:
                 result = enrichment_result
                 tools_used = []
                 source_files = []
+                source_links = []
             
             # Update job status to completed with metadata
             job.status = 'completed'
@@ -180,6 +182,7 @@ class EnrichmentProcessor:
             job.result = result
             job.tool_calls_used = tools_used
             job.source_files = source_files
+            job.source_links = source_links
             job.model_used = model
             job.save()
             
@@ -194,7 +197,8 @@ class EnrichmentProcessor:
                     'value': result,
                     'jobId': str(job.uuid),
                     'tools_used': tools_used,
-                    'source_files': source_files
+                    'source_files': source_files,
+                    'source_links': source_links
                 }
             )
             

@@ -572,7 +572,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 console.log(`Cell [${row}, ${column}] status: ${status}`);
             } else if (type === 'enrichment_complete') {
                 // Cell enrichment completed with value and metadata
-                const { row, column, value, tools_used, source_files } = data;
+                const { row, column, value, tools_used, source_files, source_links } = data;
                 handleCellEdit(row, column, value);
                 
                 // Store enrichment metadata
@@ -582,7 +582,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                         ...prev,
                         [cellKey]: {
                             tools_used,
-                            source_files: source_files || []
+                            source_files: source_files || [],
+                            source_links: source_links || []
                         }
                     }));
                 }
@@ -2158,7 +2159,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                             left: overlayEditor.rect.left,
                             width: overlayEditor.rect.width,
                             maxWidth: '400px',
-                            minHeight: '120px',
+                            // minHeight: '120px',
                             maxHeight: '250px',
                             overflowY: 'auto',
                             zIndex: 999,
@@ -2172,27 +2173,87 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                 const enrichmentData = cellEnrichmentData[cellKey];
                                 
                                 if (enrichmentData && enrichmentData.tools_used && enrichmentData.tools_used.length > 0) {
+                                    const filteredTools = enrichmentData.tools_used.filter(tool =>
+                                        !tool.args_summary.includes('tool_get_workbook_structure')
+                                    );
+
                                     return (
                                         <>
-                                            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#e0e0e0' }}>Process</p>
-                                            {enrichmentData.tools_used.map((tool, idx) => (
-                                                <div key={idx} style={{ marginBottom: '12px' }}>
-                                                    <p style={{ margin: '0 0 4px 0', color: '#e0e0e0' }}>
-                                                        {idx + 1}. {tool.args_summary}
-                                                    </p>
-                                                    {tool.result_summary && (
-                                                        <p style={{ margin: '0 0 0 12px', fontSize: '10px', color: '#999' }}>
-                                                            → {tool.result_summary.substring(0, 150)}{tool.result_summary.length > 150 ? '...' : ''}
+                                            <p style={{ margin: '0 0 12px 0', fontWeight: '600', color: '#e0e0e0' }}>Process</p>
+
+                                            <div style={{ position: 'relative', paddingLeft: '8px' }}>
+                                                {/* Continuous vertical line for entire timeline */}
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    left: '3.5px',
+                                                    top: '10px',
+                                                    bottom: '10px',
+                                                    width: '1px',
+                                                    backgroundColor: '#5b5b5b'
+                                                }} />
+
+                                                {filteredTools.map((tool, idx) => (
+                                                    <div key={idx} style={{
+                                                        position: 'relative',
+                                                        marginBottom: idx === filteredTools.length - 1 ? '0' : '16px',
+                                                        paddingLeft: '7.5px'
+                                                    }}>
+                                                        {/* Timeline dot */}
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            left: '-7.5px',
+                                                            top: '4px',
+                                                            width: '6px',
+                                                            height: '6px',
+                                                            // borderRadius: '50%',
+                                                            backgroundColor: '#5b5b5b',
+                                                            boxSizing: 'border-box'
+                                                        }} />
+
+                                                        <p style={{
+                                                            margin: '0',
+                                                            color: '#d0d0d0',
+                                                            lineHeight: '1.6',
+                                                            fontSize: '10px',
+                                                            wordBreak: 'break-word'
+                                                        }}>
+                                                            {tool.args_summary}
                                                         </p>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                    </div>
+                                                ))}
+                                            </div> 
+
                                             {enrichmentData.source_files && enrichmentData.source_files.length > 0 && (
-                                                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #444' }}>
-                                                    <p style={{ margin: '0 0 4px 0', fontWeight: '600', color: '#e0e0e0' }}>Source Files:</p>
+                                                <div style={{ marginTop: '5px', paddingTop: '12px' }}>
+                                                    <p className='text--nano opacity-5 mrgnb-5'>Source Files:</p>
                                                     <p style={{ margin: 0, color: '#b0b0b0' }}>
                                                         {enrichmentData.source_files.join(', ')}
                                                     </p>
+                                                </div>
+                                            )}
+                                            {enrichmentData.source_links && enrichmentData.source_links.length > 0 && (
+                                                <div style={{ marginTop: '5px', paddingTop: '12px' }}>
+                                                    <p className='text--nano opacity-7 mrgnb-5'>Source Links:</p>
+                                                    <div style={{ margin: 0 }}>
+                                                        {enrichmentData.source_links.map((link, idx) => (
+                                                            <a 
+                                                                key={idx}
+                                                                href={link}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className='text--nano opacity-7 text--white mrgnt-10'
+                                                                style={{
+                                                                    display: 'block',
+                                                                    textDecoration: 'underline',
+                                                                    fontSize: '10px',
+                                                                    marginBottom: idx === enrichmentData.source_links.length - 1 ? 0 : '4px',
+                                                                    wordBreak: 'break-all'
+                                                                }}
+                                                            >
+                                                                {link}
+                                                            </a>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </>

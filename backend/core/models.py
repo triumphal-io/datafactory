@@ -138,6 +138,7 @@ class BackgroundJob(models.Model):
     tool_calls_used = models.JSONField(default=list, blank=True)  # Array of {name, args_summary, result_summary, timestamp}
     model_used = models.CharField(max_length=100, blank=True, null=True)  # AI model used for enrichment
     source_files = models.JSONField(default=list, blank=True)  # List of filenames queried during enrichment
+    source_links = models.JSONField(default=list, blank=True)  # List of URLs scraped during enrichment
 
     def __str__(self):
         return f"{self.get_job_type_display()} - {self.get_status_display()}"

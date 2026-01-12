@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.utils import configure_windows_event_loop
+from ddgs import DDGS
 import litellm
 from dotenv import load_dotenv
 from django.apps import apps
@@ -24,9 +25,9 @@ MAX_CONVERSATION_MESSAGES = 30  # Maximum messages to keep (excluding system mes
 # and keeping API costs reasonable
 
 # Tool calling limits to prevent runaway costs and infinite loops
-MAX_TOOL_ITERATIONS = 5  # Maximum number of tool calling cycles per request
+MAX_TOOL_ITERATIONS =  10 # Maximum number of tool calling cycles per request
 # Prevents AI from calling tools indefinitely (e.g., querying 1000 files in a loop)
-MAX_TOOLS_PER_TURN = 10  # Maximum number of tools that can be called in one iteration
+MAX_TOOLS_PER_TURN = 15  # Maximum number of tools that can be called in one iteration
 # Prevents excessive parallel tool calls that could cause rate limits or high costs
 
 AI_MAX_TOKENS = 2048  # Max tokens for AI responses (adjust based on model capabilities)
@@ -78,7 +79,7 @@ def get_ai_tools():
         "type": "function",
         "function": {
             "name": "tool_search",
-            "description": "Searches Google for information related to a specific keyword. Returns search result snippets and URLs. IMPORTANT: Search results are just previews - you MUST use tool_web_scraper to visit the actual websites and verify the information is correct. Never rely solely on search result snippets.",
+            "description": "Searches for information related to a specific keyword. This tool can get you relevant web results.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -967,6 +968,7 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
     # Initialize metadata tracking
     tools_used = []
     source_files = []
+    source_links = []
     
     # Build enrichment prompt with context
     prompt = f"Given the context: {data['context']}, what is the {data['title']}? The description is: {data['description']}."
@@ -1008,12 +1010,16 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
     if workbook_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
 
-    # Add verification instructions for web research
-    prompt += "\n\nIMPORTANT RESEARCH PROTOCOL: If you need to search the web for this information, you MUST follow these steps:"
-    prompt += "\n1. Use tool_search to find relevant sources"
-    prompt += "\n2. Use tool_web_scraper to visit and read the actual websites from search results"
-    prompt += "\n3. Verify the information from the full webpage content, not just search snippets"
-    prompt += "\n4. Only provide information that you have confirmed by reading the actual source pages"
+    # Add STRICT verification instructions for web research with MINIMAL tool usage
+    prompt += "\n\nCRITICAL RESEARCH PROTOCOL FOR ENRICHMENT:"
+    prompt += "\nWhen you need to search the web, follow this MANDATORY process:"
+    prompt += "\n1. Use tool_search ONCE with the BEST, most specific keyword based on the context"
+    prompt += "\n2. You MUST use tool_web_scraper to visit AT LEAST ONE result - NEVER rely on search snippets alone"
+    prompt += "\n3. Choose the most authoritative/reliable source from search results"
+    prompt += "\n4. If first website doesn't have the answer, you may scrape up to 3 more sources (maximum 4 scrapes total)"
+    prompt += "\n5. Extract ONLY the specific fact needed from the webpage - ignore unrelated content"
+    prompt += "\n6. ONLY say 'Not available' if you've scraped actual sources and confirmed the information is missing"
+    prompt += "\n\nWARNING: Do NOT scrape more than 4 websites - this causes context overflow. Be strategic, not exhaustive."
     
     # Create a temporary conversation for enrichment tracking
     Conversation = apps.get_model('core', 'Conversation')
@@ -1049,6 +1055,10 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
                     for tc in msg['tool_calls']:
                         tool_name = tc.get('function', {}).get('name', '')
                         tool_args = tc.get('function', {}).get('arguments', '{}')
+
+                        print(">>>>>>>>>>> Tool Calling <<<<<<<<<<<<")
+                        print(f"Tool Name: {tool_name}, Arguments: {tool_args}")
+                        print(">>>>>>>>>>> Tool Calling <<<<<<<<<<<<")
                         
                         # Parse arguments
                         try:
@@ -1090,6 +1100,10 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
                         elif tool_name == 'tool_web_scraper':
                             url = args_dict.get('url', '')
                             args_summary = f"Scraped content from {url}"
+                            
+                            # Add to source links list
+                            if url and url not in source_links:
+                                source_links.append(url)
                         
                         elif tool_name == 'tool_get_sheet_data':
                             sheet_id = args_dict.get('sheet_identifier', '')
@@ -1142,7 +1156,8 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
         return {
             'value': result,
             'tools_used': tools_used,
-            'source_files': source_files
+            'source_files': source_files,
+            'source_links': source_links
         }
     
     return result
@@ -1187,8 +1202,11 @@ def tool_search(keyword):
     Returns:
         str: Markdown content from search results
     """
-    search_url = f"https://www.google.com/search?q={keyword}"
-    return crawler(search_url)
+    # search_url = f"https://www.google.com/search?q={keyword}"
+    # return crawler(search_url)
+
+    results = DDGS().text(keyword, region='us-en', safesearch='off', timelimit='y', page=1, backend="google")
+    return results
 
 
 def tool_web_scraper(url):
