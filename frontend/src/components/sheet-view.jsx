@@ -86,6 +86,73 @@ const getColumnLetter = (index) => {
     return letter;
 };
 
+// Helper function to extract display value from cell (handles both simple values and metadata objects)
+const getCellValue = (cellData) => {
+    if (cellData === null || cellData === undefined) {
+        return '';
+    }
+    // If cell has metadata structure, extract the value
+    if (typeof cellData === 'object' && cellData.value !== undefined) {
+        return cellData.value;
+    }
+    // Otherwise return as-is (string, number, etc.)
+    return cellData;
+};
+
+// Helper function to get cell metadata
+const getCellMeta = (cellData) => {
+    if (typeof cellData === 'object' && cellData.meta !== undefined) {
+        return cellData.meta;
+    }
+    return null;
+};
+
+// Helper function to create cell value with metadata
+const createCellWithMeta = (value, meta = null) => {
+    return { value, meta };
+};
+
+// Helper function to humanize tool execution display
+const humanizeToolExecution = (tool) => {
+    const { tool: toolName, args } = tool;
+
+    switch (toolName) {
+        case 'tool_search':
+            return `Searched for "${args.keyword || ''}"`;
+
+        case 'tool_web_scraper':
+            return `Read ${args.url || ''}`;
+
+        case 'tool_query_file_data':
+            if (args.search_type === 'identifier') {
+                return `Searched for ID "${args.query || ''}" in ${args.filename || ''}`;
+            }
+            return `Queried "${args.query || ''}" in ${args.filename || ''}`;
+
+        case 'tool_get_sheet_data':
+            return `Retrieved data from sheet ${args.sheet_identifier || ''}`;
+
+        case 'tool_read_file':
+            return `Read file ${args.file_id || ''}`;
+
+        default:
+            // For unrecognized tools, show tool name and args as JSON
+            return (
+                <>
+                    <span style={{ fontWeight: '600', color: '#e0e0e0' }}>{toolName}</span>
+                    {args && Object.keys(args).length > 0 && (
+                        <>
+                            <br />
+                            <span style={{ opacity: 0.8 }}>
+                                {JSON.stringify(args, null, 2)}
+                            </span>
+                        </>
+                    )}
+                </>
+            );
+    }
+};
+
 const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
     // WebSocket connection
     const { isConnected } = useWebSocket();
@@ -123,7 +190,6 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const [originalValues, setOriginalValues] = useState({});
     const [availableFiles, setAvailableFiles] = useState([]);
     const [blinkingCells, setBlinkingCells] = useState(new Set());
-    const [cellEnrichmentData, setCellEnrichmentData] = useState({}); // Store enrichment metadata per cell
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -168,6 +234,9 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 if (response.ok) {
                     const data = await response.json();
                     if (data.sheet_data) {
+                        console.log('Loaded sheet data from backend:', data.sheet_data);
+                        console.log('Sample cell with metadata:', data.sheet_data.rows[0]?.[0]);
+                        
                         setSheetData(data.sheet_data);
                         loadedDataRef.current = JSON.stringify(data.sheet_data);
                         
@@ -505,7 +574,30 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
             ...prev,
             rows: prev.rows.map((row, rIdx) =>
                 rIdx === rowIndex
-                    ? row.map((cell, cIdx) => (cIdx === colIndex ? value : cell))
+                    ? row.map((cell, cIdx) => {
+                        if (cIdx === colIndex) {
+                            // Check if incoming value has metadata (from enrichment/AI)
+                            const incomingMeta = getCellMeta(value);
+                            if (incomingMeta) {
+                                // Value already has metadata (e.g., from enrichment), use it as-is
+                                return value;
+                            }
+                            
+                            // Manual edit: check if value changed
+                            const oldValue = getCellValue(cell);
+                            const newValueOnly = getCellValue(value);
+                            const existingMeta = getCellMeta(cell);
+                            
+                            // If value changed, clear metadata; if same, preserve it
+                            if (existingMeta && oldValue === newValueOnly) {
+                                // Value unchanged, preserve existing metadata
+                                return createCellWithMeta(newValueOnly, existingMeta);
+                            }
+                            // Value changed or no metadata, return new value without metadata
+                            return newValueOnly;
+                        }
+                        return cell;
+                    })
                     : row
             )
         }));
@@ -571,22 +663,14 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 setCellStatus(row, column, status);
                 console.log(`Cell [${row}, ${column}] status: ${status}`);
             } else if (type === 'enrichment_complete') {
-                // Cell enrichment completed with value and metadata
-                const { row, column, value, tools_used, source_files, source_links } = data;
-                handleCellEdit(row, column, value);
+                // Cell enrichment completed with cellValue containing value + metadata
+                const { row, column, cellValue } = data;
                 
-                // Store enrichment metadata
-                if (tools_used && tools_used.length > 0) {
-                    const cellKey = `${row}-${column}`;
-                    setCellEnrichmentData(prev => ({
-                        ...prev,
-                        [cellKey]: {
-                            tools_used,
-                            source_files: source_files || [],
-                            source_links: source_links || []
-                        }
-                    }));
-                }
+                console.log('Enrichment complete - received cellValue:', cellValue);
+                console.log('Cell metadata:', cellValue?.meta);
+                
+                // Store complete cell value with metadata in sheet data
+                handleCellEdit(row, column, cellValue);
 
                 // Trigger blink animation
                 const cellKey = `${row}-${column}`;
@@ -601,7 +685,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     });
                 }, 500);
 
-                console.log(`Cell [${row}, ${column}] enriched with: ${value}`, { tools_used, source_files });
+                console.log(`Cell [${row}, ${column}] enriched:`, cellValue);
             } else if (type === 'enrichment_error') {
                 // Cell enrichment failed
                 const { row, column, error } = data;
@@ -641,8 +725,9 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
             // Get row context (only non-empty values)
             const rowData = {};
             sheetData.columns.forEach((col, idx) => {
-                const cellValue = sheetData.rows[rowIndex][idx];
-                if (cellValue && !cellValue.startsWith('__STATUS__')) {
+                const cellData = sheetData.rows[rowIndex][idx];
+                const cellValue = getCellValue(cellData);
+                if (cellValue && typeof cellValue === 'string' && !cellValue.startsWith('__STATUS__')) {
                     rowData[col.title] = cellValue;
                 }
             });
@@ -1311,7 +1396,16 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     const rowData = [];
                     for (let col = minCol; col <= maxCol; col++) {
                         if (selectedCells.has(`${row}-${col}`)) {
-                            const cellValue = sheetData.rows[row]?.[col] || '';
+                            const cellData = sheetData.rows[row]?.[col];
+                            // Extract value from cell (handles both simple values and metadata objects)
+                            let cellValue = '';
+                            if (cellData !== null && cellData !== undefined) {
+                                if (typeof cellData === 'object' && cellData.value !== undefined) {
+                                    cellValue = cellData.value;
+                                } else {
+                                    cellValue = cellData;
+                                }
+                            }
                             // Remove status markers if present
                             const cleanValue = typeof cellValue === 'string' && cellValue.startsWith('__STATUS__') 
                                 ? '' 
@@ -2027,7 +2121,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                     const shouldUseCustomRenderer = ['select', 'multiselect', 'url', 'email', 'checkbox', 'file'].includes(columnType);
                                     const shouldBlockOverlayEditor = ['select', 'multiselect', 'checkbox', 'file'].includes(columnType);
                                     const cellKey = `${rowIndex}-${colIndex}`;
-                                    const enrichmentData = cellEnrichmentData[cellKey];
+                                    // Extract metadata from cell itself (not used in rendering, kept for future)
+                                    const cellMeta = getCellMeta(cell);
                                     
                                     return (
                                         <div
@@ -2056,7 +2151,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                                 if (shouldBlockOverlayEditor) return;
                                                 
                                                 const rect = e.currentTarget.getBoundingClientRect();
-                                                const cellValue = cell.startsWith('__STATUS__') ? '' : cell;
+                                                const displayValue = getCellValue(cell);
+                                                const cellValue = displayValue.startsWith('__STATUS__') ? '' : displayValue;
                                                 setOverlayEditor({
                                                     row: rowIndex,
                                                     col: colIndex,
@@ -2065,22 +2161,34 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                                 });
                                             }}
                                         >
-                                            {typeof cell === 'string' && cell.startsWith('__STATUS__') ? (
-                                                <div 
-                                                    className="enrichment-status"
-                                                    dangerouslySetInnerHTML={{ __html: cell.replace('__STATUS__', '') }}
-                                                />
-                                            ) : shouldUseCustomRenderer ? (
-                                                <CellRenderer
-                                                    value={cell}
-                                                    columnType={columnType}
-                                                    columnOptions={columnType === 'file' ? availableFiles : (column?.options || [])}
-                                                    isSelected={selectedCells.has(`${rowIndex}-${colIndex}`)}
-                                                    onEdit={(newValue) => handleCellEdit(rowIndex, colIndex, newValue)}
-                                                    rowIndex={rowIndex}
-                                                    colIndex={colIndex}
-                                                />
-                                            ) : cell}
+                                            {(() => {
+                                                const displayValue = getCellValue(cell);
+                                                
+                                                if (typeof displayValue === 'string' && displayValue.startsWith('__STATUS__')) {
+                                                    return (
+                                                        <div 
+                                                            className="enrichment-status"
+                                                            dangerouslySetInnerHTML={{ __html: displayValue.replace('__STATUS__', '') }}
+                                                        />
+                                                    );
+                                                }
+                                                
+                                                if (shouldUseCustomRenderer) {
+                                                    return (
+                                                        <CellRenderer
+                                                            value={cell}
+                                                            columnType={columnType}
+                                                            columnOptions={columnType === 'file' ? availableFiles : (column?.options || [])}
+                                                            isSelected={selectedCells.has(`${rowIndex}-${colIndex}`)}
+                                                            onEdit={(newValue) => handleCellEdit(rowIndex, colIndex, newValue)}
+                                                            rowIndex={rowIndex}
+                                                            colIndex={colIndex}
+                                                        />
+                                                    );
+                                                }
+                                                
+                                                return displayValue;
+                                            })()}
                                         </div>
                                     );
                                 })}
@@ -2139,7 +2247,18 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                 setOverlayEditorHeight(e.target.offsetHeight);
                             }}
                             onBlur={(e) => {
-                                handleCellEdit(overlayEditor.row, overlayEditor.col, e.target.value);
+                                // Clear metadata if value changed, preserve if same
+                                const currentCell = sheetData.rows[overlayEditor.row][overlayEditor.col];
+                                const oldValue = getCellValue(currentCell);
+                                const newValue = e.target.value;
+                                const currentMeta = getCellMeta(currentCell);
+                                
+                                // If value unchanged and has metadata, preserve it
+                                const finalValue = (currentMeta && oldValue === newValue)
+                                    ? createCellWithMeta(newValue, currentMeta)
+                                    : newValue;
+                                
+                                handleCellEdit(overlayEditor.row, overlayEditor.col, finalValue);
                                 setOverlayEditor(null);
                             }}
                             onKeyDown={(e) => {
@@ -2170,11 +2289,13 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                         <div style={{ fontSize: '11px', color: '#b0b0b0', lineHeight: '1.5', padding: '12px' }}>
                             {(() => {
                                 const cellKey = `${overlayEditor.row}-${overlayEditor.col}`;
-                                const enrichmentData = cellEnrichmentData[cellKey];
+                                // Get cell data and extract metadata
+                                const cellData = sheetData.rows[overlayEditor.row]?.[overlayEditor.col];
+                                const cellMeta = getCellMeta(cellData);
                                 
-                                if (enrichmentData && enrichmentData.tools_used && enrichmentData.tools_used.length > 0) {
-                                    const filteredTools = enrichmentData.tools_used.filter(tool =>
-                                        !tool.args_summary.includes('tool_get_workbook_structure')
+                                if (cellMeta && cellMeta.process && cellMeta.process.length > 0) {
+                                    const filteredTools = cellMeta.process.filter(tool =>
+                                        tool.tool !== 'tool_get_workbook_structure'
                                     );
 
                                     return (
@@ -2217,42 +2338,68 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                                             fontSize: '10px',
                                                             wordBreak: 'break-word'
                                                         }}>
-                                                            {tool.args_summary}
+                                                            {humanizeToolExecution(tool)}
                                                         </p>
                                                     </div>
                                                 ))}
                                             </div> 
 
-                                            {enrichmentData.source_files && enrichmentData.source_files.length > 0 && (
+                                            {cellMeta.sources?.files && cellMeta.sources.files.length > 0 && (
                                                 <div style={{ marginTop: '5px', paddingTop: '12px' }}>
                                                     <p className='text--nano opacity-5 mrgnb-5'>Source Files:</p>
                                                     <p style={{ margin: 0, color: '#b0b0b0' }}>
-                                                        {enrichmentData.source_files.join(', ')}
+                                                        {cellMeta.sources.files.join(', ')}
                                                     </p>
                                                 </div>
                                             )}
-                                            {enrichmentData.source_links && enrichmentData.source_links.length > 0 && (
+                                            {cellMeta.sources?.links && cellMeta.sources.links.length > 0 && (
                                                 <div style={{ marginTop: '5px', paddingTop: '12px' }}>
                                                     <p className='text--nano opacity-7 mrgnb-5'>Source Links:</p>
                                                     <div style={{ margin: 0 }}>
-                                                        {enrichmentData.source_links.map((link, idx) => (
-                                                            <a 
-                                                                key={idx}
-                                                                href={link}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className='text--nano opacity-7 text--white mrgnt-10'
-                                                                style={{
-                                                                    display: 'block',
-                                                                    textDecoration: 'underline',
-                                                                    fontSize: '10px',
-                                                                    marginBottom: idx === enrichmentData.source_links.length - 1 ? 0 : '4px',
-                                                                    wordBreak: 'break-all'
-                                                                }}
-                                                            >
-                                                                {link}
-                                                            </a>
-                                                        ))}
+                                                        {cellMeta.sources.links.map((link, idx) => {
+                                                            // Extract domain for favicon
+                                                            let faviconUrl = '';
+                                                            try {
+                                                                const url = new URL(link);
+                                                                faviconUrl = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=16`;
+                                                            } catch (e) {
+                                                                // Invalid URL, no favicon
+                                                            }
+
+                                                            return (
+                                                                <a
+                                                                    key={idx}
+                                                                    href={link}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className='text--nano opacity-7 text--white mrgnt-10'
+                                                                    style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'start',
+                                                                        gap: '6px',
+                                                                        textDecoration: 'underline',
+                                                                        fontSize: '10px',
+                                                                        marginBottom: idx === cellMeta.sources.links.length - 1 ? 0 : '4px',
+                                                                        wordBreak: 'break-all'
+                                                                    }}
+                                                                >
+                                                                    {faviconUrl && (
+                                                                        <img
+                                                                            src={faviconUrl}
+                                                                            alt=""
+                                                                            style={{
+                                                                                width: '15px',
+                                                                                height: '15px',
+                                                                                flexShrink: 0,
+                                                                                marginTop: '4px'
+                                                                            }}
+                                                                            onError={(e) => e.target.style.display = 'none'}
+                                                                        />
+                                                                    )}
+                                                                    <span>{link}</span>
+                                                                </a>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -2427,5 +2574,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
         </>
     );
 });
+
+// Export helper functions for use in other components
+export { getCellValue, getCellMeta, createCellWithMeta };
 
 export default SheetView;

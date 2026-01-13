@@ -164,29 +164,38 @@ class EnrichmentProcessor:
             # Call the enrichment AI function with metadata tracking
             enrichment_result = ai.enrichment(cell_data, workbook_id=workbook_id, model=model, return_metadata=True)
             
-            # Extract value and metadata
+            # Build cell value with metadata structure
             if isinstance(enrichment_result, dict):
-                result = enrichment_result.get('value', enrichment_result)
+                value = enrichment_result.get('value', '')
                 tools_used = enrichment_result.get('tools_used', [])
                 source_files = enrichment_result.get('source_files', [])
                 source_links = enrichment_result.get('source_links', [])
+                
+                # Create cell value with metadata using new format
+                cell_value = {
+                    "value": value,
+                    "meta": {
+                        "model_used": model,
+                        "process": tools_used,  # Already in correct format: [{"tool": "...", "args": {...}}]
+                        "sources": {
+                            "files": source_files,
+                            "links": source_links
+                        }
+                    }
+                }
             else:
-                result = enrichment_result
-                tools_used = []
-                source_files = []
-                source_links = []
+                # Fallback for simple string results
+                value = enrichment_result
+                cell_value = {"value": value, "meta": None}
             
-            # Update job status to completed with metadata
+            # Update job status to completed (no need to store metadata in job)
             job.status = 'completed'
             job.completed_at = timezone.now()
-            job.result = result
-            job.tool_calls_used = tools_used
-            job.source_files = source_files
-            job.source_links = source_links
+            job.result = value  # Store simple value for backward compatibility
             job.model_used = model
             job.save()
             
-            # Send WebSocket update with result and metadata
+            # Send WebSocket update with complete cell structure
             self._send_websocket_update(
                 workbook_id,
                 'enrichment_complete',
@@ -194,15 +203,12 @@ class EnrichmentProcessor:
                     'row': position['Row'],
                     'column': position['Column'],
                     'status': 'completed',
-                    'value': result,
-                    'jobId': str(job.uuid),
-                    'tools_used': tools_used,
-                    'source_files': source_files,
-                    'source_links': source_links
+                    'cellValue': cell_value,  # Send complete cell structure
+                    'jobId': str(job.uuid)
                 }
             )
             
-            print(f"Completed enrichment for cell [{position['Row']}, {position['Column']}]: {result}")
+            print(f"Completed enrichment for cell [{position['Row']}, {position['Column']}]: {value}")
             
         except Exception as e:
             print(f"Error processing enrichment job {job.uuid}: {str(e)}")

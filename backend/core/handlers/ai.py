@@ -490,15 +490,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     # Only static instructions - no dynamic data that changes between requests
     static_system_message = None
 
-    # Define research verification protocol once (used across all modes)
-    research_protocol = "RESEARCH AND VERIFICATION PROTOCOL:\n"
-    research_protocol += "When researching information online:\n"
-    research_protocol += "1. Use tool_search to find relevant sources\n"
-    research_protocol += "2. ALWAYS use tool_web_scraper to visit the actual websites from search results\n"
-    research_protocol += "3. Verify information by reading the full content from the scraped pages\n"
-    research_protocol += "4. NEVER rely solely on search result snippets - they may be incomplete or misleading\n"
-    research_protocol += "5. Cross-reference multiple sources when possible to ensure accuracy\n"
-
+    
     if sheet_context and include_sheet_tools:
         # Build STATIC system message (instructions and constraints only - cacheable)
         static_system_message = "You are a spreadsheet assistant with access to tools for manipulating spreadsheet data.\n\n"
@@ -518,7 +510,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         static_system_message = "You are an AI assistant.\n\n"
 
     # Append research protocol to all modes
-    static_system_message += research_protocol
+    # static_system_message += research_protocol
     
     # Add sheet context - split into STATIC and DYNAMIC parts for better prompt caching
     # DYNAMIC parts go in user message (not cached, changes frequently)
@@ -1011,15 +1003,15 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
 
     # Add STRICT verification instructions for web research with MINIMAL tool usage
-    prompt += "\n\nCRITICAL RESEARCH PROTOCOL FOR ENRICHMENT:"
-    prompt += "\nWhen you need to search the web, follow this MANDATORY process:"
-    prompt += "\n1. Use tool_search ONCE with the BEST, most specific keyword based on the context"
-    prompt += "\n2. You MUST use tool_web_scraper to visit AT LEAST ONE result - NEVER rely on search snippets alone"
-    prompt += "\n3. Choose the most authoritative/reliable source from search results"
-    prompt += "\n4. If first website doesn't have the answer, you may scrape up to 3 more sources (maximum 4 scrapes total)"
-    prompt += "\n5. Extract ONLY the specific fact needed from the webpage - ignore unrelated content"
-    prompt += "\n6. ONLY say 'Not available' if you've scraped actual sources and confirmed the information is missing"
-    prompt += "\n\nWARNING: Do NOT scrape more than 4 websites - this causes context overflow. Be strategic, not exhaustive."
+    # prompt += "\n\nCRITICAL RESEARCH PROTOCOL FOR ENRICHMENT:"
+    # prompt += "\nWhen you need to search the web, follow this MANDATORY process:"
+    # prompt += "\n1. Use tool_search ONCE with the BEST, most specific keyword based on the context"
+    # prompt += "\n2. You MUST use tool_web_scraper to visit AT LEAST ONE result - NEVER rely on search snippets alone"
+    # prompt += "\n3. Choose the most authoritative/reliable source from search results"
+    # prompt += "\n4. If first website doesn't have the answer, you may scrape up to 2 more sources (maximum 3 scrapes total)"
+    # prompt += "\n5. Extract ONLY the specific fact needed from the webpage - ignore unrelated content"
+    # prompt += "\n6. ONLY say 'Not available' if you've scraped actual sources and confirmed the information is missing"
+    # prompt += "\n\nWARNING: Do NOT scrape more than 3 websites - this causes context overflow. Be strategic, not exhaustive."
     
     # Create a temporary conversation for enrichment tracking
     Conversation = apps.get_model('core', 'Conversation')
@@ -1067,57 +1059,23 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
                         except:
                             args_dict = {}
                         
-                        # Find corresponding tool result
-                        tool_result = ""
-                        tool_call_id = tc.get('id', '')
-                        for result_msg in conversation_history:
-                            if result_msg.get('role') == 'tool' and result_msg.get('tool_call_id') == tool_call_id:
-                                tool_result = result_msg.get('content', '')
-                                break
-                        
-                        # Build human-readable summary
-                        args_summary = ""
-                        result_summary = tool_result[:200] + "..." if len(tool_result) > 200 else tool_result
-                        
+                        # Track source files and links
                         if tool_name == 'tool_query_file_data':
-                            query = args_dict.get('query', '')
                             filename = args_dict.get('filename', '')
-                            search_type = args_dict.get('search_type', 'query')
-                            
-                            if search_type == 'identifier':
-                                args_summary = f"Searched for ID '{query}' in document {filename}"
-                            else:
-                                args_summary = f"Queried '{query}' in document {filename}"
-                            
                             # Add to source files list
                             if filename and filename not in source_files:
                                 source_files.append(filename)
-                        
-                        elif tool_name == 'tool_search':
-                            keyword = args_dict.get('keyword', '')
-                            args_summary = f"Searched web for '{keyword}'"
-                        
+
                         elif tool_name == 'tool_web_scraper':
                             url = args_dict.get('url', '')
-                            args_summary = f"Scraped content from {url}"
-                            
                             # Add to source links list
                             if url and url not in source_links:
                                 source_links.append(url)
-                        
-                        elif tool_name == 'tool_get_sheet_data':
-                            sheet_id = args_dict.get('sheet_identifier', '')
-                            args_summary = f"Retrieved data from sheet {sheet_id}"
-                        
-                        else:
-                            args_summary = f"Called {tool_name}"
-                        
-                        # Add to tools_used list
+
+                        # Add to tools_used list with new format
                         tools_used.append({
-                            "name": tool_name,
-                            "args_summary": args_summary,
-                            "result_summary": result_summary,
-                            "timestamp": datetime.now().isoformat()
+                            "tool": tool_name,
+                            "args": args_dict
                         })
             
             # Clean up temporary conversation
@@ -1205,7 +1163,7 @@ def tool_search(keyword):
     # search_url = f"https://www.google.com/search?q={keyword}"
     # return crawler(search_url)
 
-    results = DDGS().text(keyword, region='us-en', safesearch='off', timelimit='y', page=1, backend="google")
+    results = DDGS().text(keyword, region='in-en', safesearch='off', backend="auto")
     return results
 
 

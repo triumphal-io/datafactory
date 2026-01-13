@@ -2,6 +2,27 @@ import { useState, useRef, useEffect } from 'react';
 import IconSheet from '../assets/sheet.svg';
 import IconDocument from '../assets/document-black.svg';
 
+// Helper function to extract display value from cell (handles both simple values and metadata objects)
+const getCellValue = (cellData) => {
+    if (cellData === null || cellData === undefined) {
+        return '';
+    }
+    // If cell has metadata structure, extract the value
+    if (typeof cellData === 'object' && cellData.value !== undefined) {
+        return cellData.value;
+    }
+    // Otherwise return as-is (string, number, etc.)
+    return cellData;
+};
+
+// Helper function to get cell metadata
+const getCellMeta = (cellData) => {
+    if (typeof cellData === 'object' && cellData.meta !== undefined) {
+        return cellData.meta;
+    }
+    return null;
+};
+
 const CellRenderer = ({ 
     value, 
     columnType, 
@@ -16,6 +37,10 @@ const CellRenderer = ({
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
     const dropdownRef = useRef(null);
     const triggerRef = useRef(null);
+    
+    // Extract actual value and metadata from cell data
+    const displayValue = getCellValue(value);
+    const cellMeta = getCellMeta(value);
 
     // Handle clicking outside dropdown to close it
     useEffect(() => {
@@ -47,7 +72,7 @@ const CellRenderer = ({
     // Render Select field
     const renderSelect = () => {
         const options = columnOptions || [];
-        const currentValue = value || '';
+        const currentValue = displayValue || '';
 
         if (isEditing || dropdownOpen) {
             return (
@@ -191,7 +216,7 @@ const CellRenderer = ({
     // Render Multi-select field
     const renderMultiSelect = () => {
         const options = columnOptions || [];
-        const selectedValues = value ? value.split(',').map(v => v.trim()).filter(v => v) : [];
+        const selectedValues = displayValue ? displayValue.split(',').map(v => v.trim()).filter(v => v) : [];
 
         if (isEditing || dropdownOpen) {
             return (
@@ -347,7 +372,7 @@ const CellRenderer = ({
 
     // Render URL field
     const renderUrl = () => {
-        const url = value || '';
+        const url = displayValue || '';
 
         if (!url) {
             return <span style={{ color: '#888' }}></span>;
@@ -375,7 +400,7 @@ const CellRenderer = ({
 
     // Render Email field
     const renderEmail = () => {
-        const email = value || '';
+        const email = displayValue || '';
 
         if (!email) {
             return <span style={{ color: '#888' }}></span>;
@@ -398,7 +423,7 @@ const CellRenderer = ({
 
     // Render Checkbox field
     const renderCheckbox = () => {
-        const isChecked = value === true || value === 'true' || value === 'TRUE' || value === 1 || value === '1';
+        const isChecked = displayValue === true || displayValue === 'true' || displayValue === 'TRUE' || displayValue === 1 || displayValue === '1';
         const checkboxId = `cell-cbx-${rowIndex}-${colIndex}`;
 
         return (
@@ -439,7 +464,7 @@ const CellRenderer = ({
     // Render File field
     const renderFile = () => {
         const options = columnOptions || [];
-        const selectedValues = value ? value.split(',').map(v => v.trim()).filter(v => v) : [];
+        const selectedValues = displayValue ? displayValue.split(',').map(v => v.trim()).filter(v => v) : [];
 
         if (isEditing || dropdownOpen) {
             return (
@@ -614,7 +639,7 @@ const CellRenderer = ({
         case 'file':
             return renderFile();
         default:
-            return value || '';
+            return displayValue || '';
     }
 };
 
