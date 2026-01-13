@@ -492,6 +492,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
 
     
     if sheet_context and include_sheet_tools:
+        # THIS IS ONLY WHEN USING CHAT ASSISTANT
         # Build STATIC system message (instructions and constraints only - cacheable)
         static_system_message = "You are a spreadsheet assistant with access to tools for manipulating spreadsheet data.\n\n"
         static_system_message += "IMPORTANT CONSTRAINTS when populating cells:\n"
@@ -517,6 +518,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     dynamic_context_parts = []
     
     if sheet_context and include_sheet_tools:
+        # THIS IS ONLY WHEN USING CHAT ASSISTANT
         # Build DYNAMIC spreadsheet context (metadata only - actual data fetched via tool)
         if sheet_context.get('data'):
             sheet_data = sheet_context['data']
@@ -698,7 +700,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
             
             print(f"Generating AI response... (iteration {tool_iteration_count + 1}/{MAX_TOOL_ITERATIONS})")
             print("Current conversation:")
-            print(conversation)
+            # print(conversation)
             # Call LiteLLM with full conversation history and available tools
             # Model decides whether to respond directly or call tools
             response = litellm.completion(**completion_params)
@@ -721,6 +723,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                     "role": "assistant",
                     "content": response_message.content
                 }
+
                 
                 # Serialize tool calls to conversation format
                 # This is required for OpenAI-compatible message format
@@ -736,6 +739,9 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                         } for tc in tool_calls
                     ]
                 
+                print("#################AI requested tool calls:#################")
+                print(assistant_msg)
+
                 conversation.append(assistant_msg)
                 
                 # Separate tools by execution location
@@ -1048,17 +1054,16 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
                         tool_name = tc.get('function', {}).get('name', '')
                         tool_args = tc.get('function', {}).get('arguments', '{}')
 
-                        print(">>>>>>>>>>> Tool Calling <<<<<<<<<<<<")
-                        print(f"Tool Name: {tool_name}, Arguments: {tool_args}")
-                        print(">>>>>>>>>>> Tool Calling <<<<<<<<<<<<")
-                        
                         # Parse arguments
                         try:
                             import json
                             args_dict = json.loads(tool_args) if isinstance(tool_args, str) else tool_args
                         except:
                             args_dict = {}
-                        
+
+                        # Add dummy summary for testing frontend UI
+                        tool_summary = "Found relevant data with key information extracted from the source"
+
                         # Track source files and links
                         if tool_name == 'tool_query_file_data':
                             filename = args_dict.get('filename', '')
@@ -1072,10 +1077,11 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
                             if url and url not in source_links:
                                 source_links.append(url)
 
-                        # Add to tools_used list with new format
+                        # Add to tools_used list with new format (including summary)
                         tools_used.append({
                             "tool": tool_name,
-                            "args": args_dict
+                            "args": args_dict,
+                            "summary": tool_summary  # NEW: Add summary field
                         })
             
             # Clean up temporary conversation

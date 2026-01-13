@@ -11,8 +11,7 @@ import { useWebSocket } from '../utils/websocket-context';
 import { DEFAULT_AI_MODEL } from '../utils/utils';
 import IconCheck from '../assets/checkmark.svg';
 import IconDismiss from '../assets/dismiss.svg';
-import IconChevron from '../assets/chevron-left.svg';
-import IconChevronRight from '../assets/chevron-right-black.svg';
+import IconChevronDown from '../assets/chevron-down.svg';
 import IconText from '../assets/text.svg';
 import IconNumber from '../assets/number.svg';
 import IconSelect from '../assets/select.svg';
@@ -71,6 +70,22 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
         .enrichment-complete-blink {
             animation: enrichment-complete-blink 500ms ease-out forwards;
         }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+                margin-top: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 200px;
+                margin-top: 6px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+            }
+        }
     `;
     document.head.appendChild(style);
 }
@@ -114,30 +129,37 @@ const createCellWithMeta = (value, meta = null) => {
 
 // Helper function to humanize tool execution display
 const humanizeToolExecution = (tool) => {
-    const { tool: toolName, args } = tool;
+    const { tool: toolName, args, summary } = tool;
 
+    let mainText = '';
     switch (toolName) {
         case 'tool_search':
-            return `Searched for "${args.keyword || ''}"`;
+            mainText = `Searched for "${args.keyword || ''}"`;
+            break;
 
         case 'tool_web_scraper':
-            return `Read ${args.url || ''}`;
+            mainText = `Read ${args.url || ''}`;
+            break;
 
         case 'tool_query_file_data':
             if (args.search_type === 'identifier') {
-                return `Searched for ID "${args.query || ''}" in ${args.filename || ''}`;
+                mainText = `Searched for ID "${args.query || ''}" in ${args.filename || ''}`;
+            } else {
+                mainText = `Queried "${args.query || ''}" in ${args.filename || ''}`;
             }
-            return `Queried "${args.query || ''}" in ${args.filename || ''}`;
+            break;
 
         case 'tool_get_sheet_data':
-            return `Retrieved data from sheet ${args.sheet_identifier || ''}`;
+            mainText = `Retrieved data from sheet ${args.sheet_identifier || ''}`;
+            break;
 
         case 'tool_read_file':
-            return `Read file ${args.file_id || ''}`;
+            mainText = `Read file ${args.file_id || ''}`;
+            break;
 
         default:
             // For unrecognized tools, show tool name and args as JSON
-            return (
+            mainText = (
                 <>
                     <span style={{ fontWeight: '600', color: '#e0e0e0' }}>{toolName}</span>
                     {args && Object.keys(args).length > 0 && (
@@ -151,6 +173,8 @@ const humanizeToolExecution = (tool) => {
                 </>
             );
     }
+
+    return { mainText, summary: summary || '' };
 };
 
 const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
@@ -190,6 +214,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const [originalValues, setOriginalValues] = useState({});
     const [availableFiles, setAvailableFiles] = useState([]);
     const [blinkingCells, setBlinkingCells] = useState(new Set());
+    const [expandedToolSteps, setExpandedToolSteps] = useState(new Set());
 
     const sheetContentRef = useRef(null);
     const lastClickedCellRef = useRef(null);
@@ -1111,7 +1136,10 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
             // Close overlay editor if clicking outside of it
             if (overlayEditor) {
                 const textarea = event.target.closest('textarea[data-overlay-editor]');
-                if (!textarea) {
+                const infoPanel = event.target.closest('.cell-info-panel');
+
+                // Don't close if clicking on textarea or info panel
+                if (!textarea && !infoPanel) {
                     // Save and close the overlay editor
                     const editorTextarea = document.querySelector('textarea[data-overlay-editor]');
                     if (editorTextarea) {
@@ -1120,7 +1148,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     setOverlayEditor(null);
                     return;
                 }
-                return; // If clicking inside the textarea, do nothing
+                return; // If clicking inside the textarea or info panel, do nothing
             }
             
             // Don't deselect if currently editing a cell
@@ -2247,19 +2275,36 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                 setOverlayEditorHeight(e.target.offsetHeight);
                             }}
                             onBlur={(e) => {
-                                // Clear metadata if value changed, preserve if same
-                                const currentCell = sheetData.rows[overlayEditor.row][overlayEditor.col];
-                                const oldValue = getCellValue(currentCell);
-                                const newValue = e.target.value;
-                                const currentMeta = getCellMeta(currentCell);
-                                
-                                // If value unchanged and has metadata, preserve it
-                                const finalValue = (currentMeta && oldValue === newValue)
-                                    ? createCellWithMeta(newValue, currentMeta)
-                                    : newValue;
-                                
-                                handleCellEdit(overlayEditor.row, overlayEditor.col, finalValue);
-                                setOverlayEditor(null);
+                                // Check if the blur is because user clicked on the info panel
+                                const relatedTarget = e.relatedTarget;
+                                const clickedInfoPanel = relatedTarget?.closest?.('.cell-info-panel');
+
+                                if (clickedInfoPanel) {
+                                    // Don't close - user is interacting with info panel
+                                    return;
+                                }
+
+                                // Use setTimeout to delay closure, allowing click events on info panel to register
+                                setTimeout(() => {
+                                    // Double-check if info panel was clicked
+                                    if (document.activeElement?.closest('.cell-info-panel')) {
+                                        return;
+                                    }
+
+                                    // Otherwise, save and close as normal
+                                    const currentCell = sheetData.rows[overlayEditor.row][overlayEditor.col];
+                                    const oldValue = getCellValue(currentCell);
+                                    const newValue = e.target.value;
+                                    const currentMeta = getCellMeta(currentCell);
+
+                                    // If value unchanged and has metadata, preserve it
+                                    const finalValue = (currentMeta && oldValue === newValue)
+                                        ? createCellWithMeta(newValue, currentMeta)
+                                        : newValue;
+
+                                    handleCellEdit(overlayEditor.row, overlayEditor.col, finalValue);
+                                    setOverlayEditor(null);
+                                }, 100);
                             }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Escape') {
@@ -2272,11 +2317,16 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     
                     {/* Information Panel Below Editing Cell */}
                     <div
+                        className="cell-info-panel"
+                        onMouseDown={(e) => {
+                            // Prevent the textarea from losing focus when clicking on info panel
+                            e.preventDefault();
+                        }}
                         style={{
                             position: 'fixed',
                             top: overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height) + 3,
                             left: overlayEditor.rect.left,
-                            width: overlayEditor.rect.width,
+                            width: overlayEditor.rect.width + 0,
                             maxWidth: '400px',
                             // minHeight: '120px',
                             maxHeight: '250px',
@@ -2313,35 +2363,90 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                                     backgroundColor: '#5b5b5b'
                                                 }} />
 
-                                                {filteredTools.map((tool, idx) => (
-                                                    <div key={idx} style={{
-                                                        position: 'relative',
-                                                        marginBottom: idx === filteredTools.length - 1 ? '0' : '16px',
-                                                        paddingLeft: '7.5px'
-                                                    }}>
-                                                        {/* Timeline dot */}
-                                                        <div style={{
-                                                            position: 'absolute',
-                                                            left: '-7.5px',
-                                                            top: '4px',
-                                                            width: '6px',
-                                                            height: '6px',
-                                                            // borderRadius: '50%',
-                                                            backgroundColor: '#5b5b5b',
-                                                            boxSizing: 'border-box'
-                                                        }} />
+                                                {filteredTools.map((tool, idx) => {
+                                                    const { mainText, summary } = humanizeToolExecution(tool);
+                                                    const isExpanded = expandedToolSteps.has(idx);
 
-                                                        <p style={{
-                                                            margin: '0',
-                                                            color: '#d0d0d0',
-                                                            lineHeight: '1.6',
-                                                            fontSize: '10px',
-                                                            wordBreak: 'break-word'
+                                                    return (
+                                                        <div key={idx} style={{
+                                                            position: 'relative',
+                                                            marginBottom: idx === filteredTools.length - 1 ? '0' : '16px',
+                                                            paddingLeft: '7.5px'
                                                         }}>
-                                                            {humanizeToolExecution(tool)}
-                                                        </p>
-                                                    </div>
-                                                ))}
+                                                            {/* Timeline dot */}
+                                                            <div style={{
+                                                                position: 'absolute',
+                                                                left: '-7.5px',
+                                                                top: '4px',
+                                                                width: '6px',
+                                                                height: '6px',
+                                                                backgroundColor: '#5b5b5b',
+                                                                boxSizing: 'border-box'
+                                                            }} />
+
+                                                            {/* Main tool description with expand/collapse functionality */}
+                                                            <div
+                                                                onClick={() => {
+                                                                    if (summary) {
+                                                                        setExpandedToolSteps(prev => {
+                                                                            const newSet = new Set(prev);
+                                                                            if (isExpanded) {
+                                                                                newSet.delete(idx);
+                                                                            } else {
+                                                                                newSet.add(idx);
+                                                                            }
+                                                                            return newSet;
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                style={{
+                                                                    cursor: summary ? 'pointer' : 'default',
+                                                                    display: 'flex',
+                                                                    alignItems: 'start',
+                                                                    gap: '6px'
+                                                                }}
+                                                            >
+                                                                <p style={{
+                                                                    margin: '0',
+                                                                    color: '#d0d0d0',
+                                                                    lineHeight: '1.6',
+                                                                    fontSize: '10px',
+                                                                    wordBreak: 'break-word',
+                                                                    flex: 1
+                                                                }}>
+                                                                    {mainText}
+                                                                </p>
+                                                                {summary && (
+                                                                    <img
+                                                                        src={IconChevronDown}
+                                                                        alt="Toggle"
+                                                                        height="10"
+                                                                        style={{
+                                                                            marginTop: '2px',
+                                                                            opacity: 0.6,
+                                                                            transition: 'transform 0.2s',
+                                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                                                        }}
+                                                                    />
+                                                                )}
+                                                                
+                                                            </div>
+
+                                                            {/* Collapsible summary section */}
+                                                            {summary && isExpanded && (
+                                                                <div style={{
+                                                                    paddingTop: '6px',
+                                                                    fontSize: '10px',
+                                                                    color: '#b8b8b8',
+                                                                    fontStyle: 'italic',
+                                                                    lineHeight: '1.5',
+                                                                }}>
+                                                                    {summary}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div> 
 
                                             {cellMeta.sources?.files && cellMeta.sources.files.length > 0 && (
