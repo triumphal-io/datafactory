@@ -196,39 +196,25 @@ def get_ai_tools():
 
 def get_workbook_tools():
     """
-    Get tools for viewing workbook structure and sheet data.
+    Get tools for viewing sheet data.
     
-    These tools allow the AI to:
-    - Get complete workbook structure (sheets + files tree)
-    - View data from any specific sheet
+    Note: Workbook structure (sheets + files tree) is now pre-loaded in the initial
+    message instead of being a tool, which reduces latency.
     
     Returns:
         list: List of tool definitions for workbook operations
     """
-    get_structure_tool = {
-        "type": "function",
-        "function": {
-            "name": "tool_get_workbook_structure",
-            "description": "Get complete workbook structure including all sheets and files. Returns a JSON overview showing: 1) All available sheets with their names and IDs, 2) All uploaded files organized in a tree structure with folders. Use this to understand what data is available in the workbook before querying specific sheets or files.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        }
-    }
-    
     get_sheet_data_tool = {
         "type": "function",
         "function": {
             "name": "tool_get_sheet_data",
-            "description": "View data from a specific sheet by name or UUID. Returns the sheet's column structure and row data. Use this when you need to see what data is in a particular sheet. You can get the list of available sheets using tool_get_workbook_structure.",
+            "description": "View data from a specific sheet by name or UUID. Returns the sheet's column structure and row data. Use this when you need to see what data is in a particular sheet. The list of available sheets is provided in the workbook structure context.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "sheet_identifier": {
                         "type": "string",
-                        "description": "The sheet name (e.g., 'Sheet1', 'Sales Data') or UUID to view. Get available sheets using tool_get_workbook_structure."
+                        "description": "The sheet UUID to view. Check the workbook structure context for available sheets."
                     },
                     "max_rows": {
                         "type": "integer",
@@ -241,7 +227,7 @@ def get_workbook_tools():
         }
     }
     
-    return [get_structure_tool, get_sheet_data_tool]
+    return [get_sheet_data_tool]
 
 
 def get_file_tools():
@@ -650,8 +636,15 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
             
             dynamic_context_parts.append(sheet_context_msg)
     
-    # Add file context if working with workbooks
+    # Add workbook structure and file context if working with workbooks
     if workbook_id:
+        # Pre-load workbook structure (sheets + files) to avoid tool call latency
+        workbook_structure = tool_get_workbook_structure(workbook_id=workbook_id)
+        if workbook_structure and not workbook_structure.startswith('Error:'):
+            structure_context = "WORKBOOK STRUCTURE:\n" + workbook_structure + "\n"
+            dynamic_context_parts.append(structure_context)
+        
+        # Add file context (legacy, but kept for compatibility)
         files_context = get_available_files_context(workbook_id)
         if files_context:
             dynamic_context_parts.append(files_context)
@@ -704,7 +697,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     # Sheet tools modify spreadsheet UI (handled by frontend)
     sheet_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     # File and workbook tools read content (handled by backend)
-    file_tool_names = {'tool_query_file_data', 'tool_get_workbook_structure', 'tool_get_sheet_data'}  # Updated to include workbook tools
+    file_tool_names = {'tool_query_file_data', 'tool_get_sheet_data'}  # Workbook structure is pre-loaded, not a tool
     # Frontend tools require UI updates (sent back to client)
     frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
     
@@ -1094,38 +1087,32 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
 
     prompt += """
-    RESEARCH PROTOCOL - When to Search:
+    RESEARCH PROTOCOL - When to Use Tools:
 
-    ALWAYS SEARCH when:
-    - Asked about current/recent information (positions, prices, news, events)
-    - Information that changes frequently (stock prices, weather, sports results)
-    - Verifying current status (who holds a role NOW, current policies)
-    - Unknown entities or terms you don't recognize
+    QUERY FILES FIRST (tool_query_file_data) when:
+    - Files are available in the workbook (listed above)
+    - The context contains identifiers, codes, names, or keys that may be in the files
+    - You need additional details beyond what's in the row context
+    - The enrichment requires information that typically comes from documents
+    - Use search_type='identifier' for exact ID/code lookups, 'query' for semantic searches
 
-    NEVER SEARCH when:
-    - You have reliable knowledge from training (historical facts, definitions, established concepts)
-    - Simple calculations or logic based on provided context
-    - Information already present in the spreadsheet context
-    - The answer is directly derivable from given data
+    WEB SEARCH (tool_search + tool_web_scraper) when:
+    - Information about current/recent events, prices, news, or people
+    - Verifying facts that change over time (positions, policies, status)
+    - Looking up entities or terms not in your training data
+    - No relevant files exist OR file search returned nothing useful
 
-    SEARCH STRATEGY:
-    1. Start with ONE targeted search using 1-5 keywords (not full sentences)
-    2. Examine search results - if they look promising, use tool_web_scraper on the best result
-    3. Only do additional searches if first search was clearly off-target
-    4. Limit: 3-4 searches maximum per enrichment request
+    SKIP ALL SEARCHES when:
+    - The answer is explicitly stated in the row context
+    - Simple logic or calculation is sufficient
+    - You have reliable training knowledge (historical facts, definitions)
 
-    VERIFICATION RULES:
-    - For factual claims: ALWAYS scrape at least ONE authoritative source to verify
-    - Prioritize: Official websites > Major news > Industry publications > General sources
-    - If scraped content doesn't have the answer, it will tell you what it DOES contain
-    - Maximum 3 web scrapes per request
-    - If info isn't found after proper research, respond: "Not found"
-
-    EFFICIENCY TIPS:
-    - Use specific, targeted searches (e.g., "Zendesk CEO" not "who is the CEO of Zendesk company")
-    - Scrape the most authoritative result first (official sites, Wikipedia, major news)
-    - Don't scrape multiple pages for the same fact
-    - If first 2 searches don't yield results, the information may not be publicly available
+    SEARCH GUIDELINES:
+    1. Prioritize file queries over web searches when files are available
+    2. For files: Search relevant file UUIDs if known, or omit file_ids to search all
+    3. For web: Use 1-5 targeted keywords, scrape authoritative sources first
+    4. Limits: Max 3-4 web searches and 3 scrapes per enrichment
+    5. If nothing found after proper research, respond: "Not found"
     """
     
     # Create a temporary conversation for enrichment tracking
@@ -1296,22 +1283,21 @@ def tool_search(keyword):
         keyword (str): Search term
     
     Returns:
-        str: Markdown content from search results
+        str: JSON string containing list of search results with title, href, and body
     """
-    # search_url = f"https://www.google.com/search?q={keyword}"
-    # return crawler(search_url)
-
     results = DDGS().text(keyword, region='in-en', safesearch='off', backend="auto")
     
-    # Filter results to only include title and href, remove body
-    # filtered_results = []
-    # for result in results:
-    #     filtered_results.append({
-    #         # 'title': result.get('title', ''),
-    #         'href': result.get('href', '')
-    #     })
+    # Filter results to only include title, href, and body (snippet)
+    filtered_results = []
+    for result in results:
+        filtered_results.append({
+            'title': result.get('title', ''),
+            'href': result.get('href', ''),
+            'body': result.get('body', '')
+        })
     
-    return results
+    # Return as JSON string so frontend can parse and display as chips
+    return json.dumps(filtered_results)
 
 
 def tool_web_scraper(url, prompt):
@@ -1616,7 +1602,7 @@ def tool_get_sheet_data(sheet_identifier, max_rows=50, workbook_id=None):
             # Try by name
             sheet = Sheet.objects.filter(name=sheet_identifier, workbook=workbook).first()
             if not sheet:
-                return f"Error: Sheet '{sheet_identifier}' not found in this workbook. Use tool_get_workbook_structure to see available sheets."
+                return f"Error: Sheet '{sheet_identifier}' not found in this workbook. Check the workbook structure context for available sheets."
         
         # Get sheet data
         sheet_data = sheet.data or {}
@@ -1766,7 +1752,7 @@ def tool_query_file_data(query, filename, prompt, max_results=5, search_type='qu
         file_obj = File.objects.filter(filename=filename).first()
         
         if not file_obj:
-            return f"Error: File '{filename}' not found. Please check the filename and try again. Use tool_get_workbook_structure to see available files."
+            return f"Error: File '{filename}' not found. Please check the filename and try again. Check the workbook structure context for available files."
         
         # Security check: Verify file belongs to the workbook (if workbook_id provided)
         if workbook_id and str(file_obj.workbook.uuid) != str(workbook_id):

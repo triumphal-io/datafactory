@@ -22,6 +22,7 @@ import IconUrl from '../assets/url.svg';
 import IconFile from '../assets/file.svg';
 import IconChevronRight from '../assets/chevron-right-black.svg';
 import CellRenderer from './cell-renderer.jsx';
+import IconDocument from '../assets/document.svg';
 
 // Helper function to get icon based on column type
 const getColumnTypeIcon = (type) => {
@@ -137,9 +138,113 @@ const humanizeToolExecution = (tool) => {
     switch (toolName) {
         case 'tool_search':
             mainText = `Searched for "${args.keyword || ''}"`;
-            // count number "href" occurrences in summary
-            const results = (summary.match(/href/g) || []).length;
-            summaryText = `Found ${results || 0} results`;
+            // Parse JSON results and display as chips
+            let searchResults = [];
+            try {
+                searchResults = JSON.parse(summary);
+            } catch (e) {
+                // Fallback to old counting method if parsing fails
+                const results = (summary.match(/href/g) || []).length;
+                summaryText = `Found ${results || 0} results`;
+                break;
+            }
+            
+            if (searchResults && searchResults.length > 0) {
+                summaryText = (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                        {searchResults.map((result, idx) => {
+                            // Extract domain for favicon
+                            let faviconUrl = '';
+                            let domain = '';
+                            try {
+                                const url = new URL(result.href);
+                                domain = url.hostname.replace('www.', '');
+                                faviconUrl = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=16`;
+                            } catch (e) {
+                                // Invalid URL, no favicon
+                            }
+
+                            return (
+                                <a
+                                    key={idx}
+                                    href={result.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title={result.body || result.title || result.href}
+                                    style={{
+                                        display: 'flex',
+                                        // alignItems: 'start',
+                                        gap: '8px',
+                                        padding: '4px 6px',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        borderRadius: '4px',
+                                        textDecoration: 'none',
+                                        color: '#e0e0e0',
+                                        transition: 'background-color 0.2s',
+                                        fontSize: '10px',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+                                >
+                                    {faviconUrl && (
+                                        <img
+                                            src={faviconUrl}
+                                            alt=""
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                flexShrink: 0,
+                                                marginTop: '2px',
+                                                borderRadius: '2px'
+                                            }}
+                                            onError={(e) => e.target.style.display = 'none'}
+                                        />
+                                    )}
+                                    <div>
+                                        <div style={{
+                                            fontSize: '10px',
+                                            color: '#e0e0e0',
+                                            marginBottom: '2px',
+                                            // fontStyle: 'normal',
+                                            // overflow: 'hidden',
+                                            // textOverflow: 'ellipsis',
+                                            // whiteSpace: 'nowrap'
+                                        }}>
+                                            {result.title}
+                                        </div>
+                                        {/* {result.body && (
+                                            <div style={{
+                                                color: '#b0b0b0',
+                                                fontSize: '9px',
+                                                lineHeight: '1.4',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden'
+                                            }}>
+                                                {result.body}
+                                            </div>
+                                        )} */}
+                                        {/* <div style={{
+                                            color: '#808080',
+                                            fontSize: '8px',
+                                            marginTop: '2px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap'
+                                        }}>
+                                            {domain}
+                                        </div> */}
+                                    </div>
+                                </a>
+                            );
+                        })}
+                    </div>
+                );
+            } else {
+                summaryText = 'No results found';
+            }
             break;
 
         case 'tool_web_scraper':
@@ -187,6 +292,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const { isConnected } = useWebSocket();
     
     // State management
+    const [actualSheetId, setActualSheetId] = useState(null); // Store actual UUID from backend
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [selectedRows, setSelectedRows] = useState(new Set());
     const [selectedColumns, setSelectedColumns] = useState(new Set());
@@ -220,8 +326,10 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const [availableFiles, setAvailableFiles] = useState([]);
     const [blinkingCells, setBlinkingCells] = useState(new Set());
     const [expandedToolSteps, setExpandedToolSteps] = useState(new Set());
+    const [infoBoxPosition, setInfoBoxPosition] = useState('below'); // 'above' or 'below'
 
     const sheetContentRef = useRef(null);
+    const infoBoxRef = useRef(null);
     const lastClickedCellRef = useRef(null);
     const isSelectionModeRef = useRef(false);
     const clickTimerRef = useRef(null);
@@ -266,6 +374,11 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     if (data.sheet_data) {
                         console.log('Loaded sheet data from backend:', data.sheet_data);
                         console.log('Sample cell with metadata:', data.sheet_data.rows[0]?.[0]);
+                        
+                        // Store the actual sheet UUID from backend
+                        if (data.sheet_id) {
+                            setActualSheetId(data.sheet_id);
+                        }
                         
                         setSheetData(data.sheet_data);
                         loadedDataRef.current = JSON.stringify(data.sheet_data);
@@ -770,7 +883,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 description: column.prompt || `Generate data for ${column.title} column`,
                 value: value,
                 type: column.type || 'text',
-                sheet_uuid: sheetId  // Add sheet UUID for tracking
+                sheet_uuid: actualSheetId  // Use actual UUID from backend, not the prop which could be 'default-sheet'
             };
 
             // Add format if available
@@ -831,7 +944,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 setCellStatus(cellData.position.Row, cellData.position.Column, null);
             });
         }
-    }, [selectedCells, sheetData, setCellStatus, clearSelection, workbookId, selectedModel]);
+    }, [selectedCells, sheetData, setCellStatus, clearSelection, workbookId, selectedModel, actualSheetId]);
 
     // Popup handlers
     const openPopupForNewColumn = useCallback(() => {
@@ -1505,6 +1618,24 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
             document.removeEventListener('paste', handlePaste);
         };
     }, [clearSelection, currentEditingCell, overlayEditor, handleMultiLinePaste, selectedCells, sheetData]);
+
+    // Calculate info box position based on available space
+    useEffect(() => {
+        if (overlayEditor && infoBoxRef.current) {
+            const infoBoxHeight = infoBoxRef.current.offsetHeight;
+            const cellBottom = overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height);
+            const spaceBelow = window.innerHeight - cellBottom;
+            const spaceAbove = overlayEditor.rect.top;
+            
+            // Position above if there's not enough space below but enough space above
+            // Add some buffer (20px) for better UX
+            if (spaceBelow < infoBoxHeight + 20 && spaceAbove > infoBoxHeight + 20) {
+                setInfoBoxPosition('above');
+            } else {
+                setInfoBoxPosition('below');
+            }
+        }
+    }, [overlayEditor, overlayEditorHeight, expandedToolSteps, sheetData]);
 
     // Update parent component with navigation menu whenever it changes
     useEffect(() => {
@@ -2320,8 +2451,9 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                         />
                     </div>
                     
-                    {/* Information Panel Below Editing Cell */}
+                    {/* Information Panel - Positioned Above or Below Editing Cell */}
                     <div
+                        ref={infoBoxRef}
                         className="cell-info-panel"
                         onMouseDown={(e) => {
                             // Prevent the textarea from losing focus when clicking on info panel
@@ -2329,7 +2461,12 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                         }}
                         style={{
                             position: 'fixed',
-                            top: overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height) + 3,
+                            top: infoBoxPosition === 'below' 
+                                ? overlayEditor.rect.top + (overlayEditorHeight || overlayEditor.rect.height) + 3
+                                : undefined,
+                            bottom: infoBoxPosition === 'above'
+                                ? window.innerHeight - overlayEditor.rect.top + 3
+                                : undefined,
                             left: overlayEditor.rect.left,
                             width: overlayEditor.rect.width + 0,
                             maxWidth: '400px',
@@ -2457,20 +2594,54 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                             {cellMeta.sources?.files && cellMeta.sources.files.length > 0 && (
                                                 <div style={{ marginTop: '5px', paddingTop: '12px' }}>
                                                     <p className='text--nano opacity-5 mrgnb-5'>Source Files:</p>
-                                                    <p style={{ margin: 0, color: '#b0b0b0' }}>
-                                                        {cellMeta.sources.files.join(', ')}
-                                                    </p>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+                                                        {cellMeta.sources.files.map((file, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                title={file}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '6px',
+                                                                    padding: '4px 8px',
+                                                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '10px',
+                                                                    color: '#e0e0e0',
+                                                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                                    maxWidth: '200px',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis',
+                                                                    whiteSpace: 'nowrap'
+                                                                }}
+                                                            >
+                                                                <img
+                                                                    src={IconDocument}
+                                                                    alt=""
+                                                                    style={{
+                                                                        width: '14px',
+                                                                        height: '14px',
+                                                                        flexShrink: 0,
+                                                                        opacity: 0.7
+                                                                    }}
+                                                                />
+                                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{file}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                             {cellMeta.sources?.links && cellMeta.sources.links.length > 0 && (
                                                 <div style={{ marginTop: '5px', paddingTop: '12px' }}>
                                                     <p className='text--nano opacity-7 mrgnb-5'>Source Links:</p>
-                                                    <div style={{ margin: 0 }}>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
                                                         {cellMeta.sources.links.map((link, idx) => {
                                                             // Extract domain for favicon
                                                             let faviconUrl = '';
+                                                            let domain = '';
                                                             try {
                                                                 const url = new URL(link);
+                                                                domain = url.hostname.replace('www.', '');
                                                                 faviconUrl = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=16`;
                                                             } catch (e) {
                                                                 // Invalid URL, no favicon
@@ -2482,31 +2653,41 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                                                                     href={link}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    className='text--nano opacity-7 text--white mrgnt-10'
+                                                                    title={link}
                                                                     style={{
                                                                         display: 'flex',
-                                                                        alignItems: 'start',
+                                                                        alignItems: 'center',
                                                                         gap: '6px',
-                                                                        textDecoration: 'underline',
+                                                                        padding: '4px 8px',
+                                                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                                        borderRadius: '4px',
+                                                                        textDecoration: 'none',
+                                                                        color: '#e0e0e0',
+                                                                        transition: 'background-color 0.2s',
                                                                         fontSize: '10px',
-                                                                        marginBottom: idx === cellMeta.sources.links.length - 1 ? 0 : '4px',
-                                                                        wordBreak: 'break-all'
+                                                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                                        maxWidth: '250px',
+                                                                        overflow: 'hidden',
+                                                                        textOverflow: 'ellipsis',
+                                                                        whiteSpace: 'nowrap'
                                                                     }}
+                                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+                                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
                                                                 >
                                                                     {faviconUrl && (
                                                                         <img
                                                                             src={faviconUrl}
                                                                             alt=""
                                                                             style={{
-                                                                                width: '15px',
-                                                                                height: '15px',
+                                                                                width: '14px',
+                                                                                height: '14px',
                                                                                 flexShrink: 0,
-                                                                                marginTop: '4px'
+                                                                                borderRadius: '2px'
                                                                             }}
                                                                             onError={(e) => e.target.style.display = 'none'}
                                                                         />
                                                                     )}
-                                                                    <span>{link}</span>
+                                                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{domain || link}</span>
                                                                 </a>
                                                             );
                                                         })}
