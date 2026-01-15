@@ -240,18 +240,19 @@ def get_file_tools():
     Returns:
         list: List of tool definitions for file operations
     """
-    # COMMENTED OUT: Old direct file reading tool - replaced with RAG-based querying
+    # Direct file reading tool - reads full extracted content by UUID
+    # Note: For searching/querying files, use tool_query_file_data instead (more efficient)
     read_file_tool = {
         "type": "function",
         "function": {
             "name": "tool_read_file",
-            "description": "Read the extracted markdown content of a specific file by its UUID. Use this to access information from uploaded documents. The available files will be listed in the conversation context.",
+            "description": "Read the complete extracted markdown content of a specific uploaded file. IMPORTANT: You MUST pass the file's UUID (unique identifier), NOT the filename. The file UUID will be provided in the workbook structure context at the start of the conversation. Example UUID: '3fa85f64-5717-4562-b3fc-2c963f66afa6'. This tool is useful for accessing the entire contents of a file.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "file_id": {
                         "type": "string",
-                        "description": "The UUID of the file to read."
+                        "description": "The UUID of the file to read. This is a unique identifier in format like '3fa85f64-5717-4562-b3fc-2c963f66afa6'. Do NOT use the filename - use the UUID from the workbook structure context."
                     },
                 },
                 "required": ["file_id"],
@@ -1086,34 +1087,34 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
     if workbook_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
 
-    prompt += """
-    RESEARCH PROTOCOL - When to Use Tools:
+    # prompt += """
+    # RESEARCH PROTOCOL - When to Use Tools:
 
-    QUERY FILES FIRST (tool_query_file_data) when:
-    - Files are available in the workbook (listed above)
-    - The context contains identifiers, codes, names, or keys that may be in the files
-    - You need additional details beyond what's in the row context
-    - The enrichment requires information that typically comes from documents
-    - Use search_type='identifier' for exact ID/code lookups, 'query' for semantic searches
+    # QUERY FILES FIRST (tool_query_file_data) when:
+    # - Files are available in the workbook (listed above)
+    # - The context contains identifiers, codes, names, or keys that may be in the files
+    # - You need additional details beyond what's in the row context
+    # - The enrichment requires information that typically comes from documents
+    # - Use search_type='identifier' for exact ID/code lookups, 'query' for semantic searches
 
-    WEB SEARCH (tool_search + tool_web_scraper) when:
-    - Information about current/recent events, prices, news, or people
-    - Verifying facts that change over time (positions, policies, status)
-    - Looking up entities or terms not in your training data
-    - No relevant files exist OR file search returned nothing useful
+    # WEB SEARCH (tool_search + tool_web_scraper) when:
+    # - Information about current/recent events, prices, news, or people
+    # - Verifying facts that change over time (positions, policies, status)
+    # - Looking up entities or terms not in your training data
+    # - No relevant files exist OR file search returned nothing useful
 
-    SKIP ALL SEARCHES when:
-    - The answer is explicitly stated in the row context
-    - Simple logic or calculation is sufficient
-    - You have reliable training knowledge (historical facts, definitions)
+    # SKIP ALL SEARCHES when:
+    # - The answer is explicitly stated in the row context
+    # - Simple logic or calculation is sufficient
+    # - You have reliable training knowledge (historical facts, definitions)
 
-    SEARCH GUIDELINES:
-    1. Prioritize file queries over web searches when files are available
-    2. For files: Search relevant file UUIDs if known, or omit file_ids to search all
-    3. For web: Use 1-5 targeted keywords, scrape authoritative sources first
-    4. Limits: Max 3-4 web searches and 3 scrapes per enrichment
-    5. If nothing found after proper research, respond: "Not found"
-    """
+    # SEARCH GUIDELINES:
+    # 1. Prioritize file queries over web searches when files are available
+    # 2. For files: Search relevant file UUIDs if known, or omit file_ids to search all
+    # 3. For web: Use 1-5 targeted keywords, scrape authoritative sources first
+    # 4. Limits: Max 3-4 web searches and 3 scrapes per enrichment
+    # 5. If nothing found after proper research, respond: "Not found"
+    # """
     
     # Create a temporary conversation for enrichment tracking
     Conversation = apps.get_model('core', 'Conversation')
@@ -1480,7 +1481,7 @@ def tool_read_file(file_id, workbook_id=None):
         return f"Error reading file: {str(e)}"
 
 
-def tool_get_workbook_structure(workbook_id=None):
+def tool_get_workbook_structure(workbook_id=None, format='md'):
     """
     Get complete workbook structure including all sheets and files.
     
@@ -1490,9 +1491,10 @@ def tool_get_workbook_structure(workbook_id=None):
     
     Args:
         workbook_id (str, optional): Workbook UUID for access
+        format (str, optional): Output format - 'md' for markdown (default) or 'json' for JSON
     
     Returns:
-        str: JSON-formatted workbook structure
+        str: Workbook structure in requested format (markdown or JSON)
     """
     try:
         Workbook = apps.get_model('core', 'Workbook')
@@ -1506,59 +1508,90 @@ def tool_get_workbook_structure(workbook_id=None):
         # Get the workbook
         workbook = Workbook.objects.get(uuid=workbook_id)
         
-        # Build structure
-        structure = {
-            "workbook_name": workbook.name,
-            "sheets": [],
-            "files": {
-                "root": [],
-                "folders": {}
-            }
-        }
-        
-        # Get all sheets
+        # Get data
         sheets = Sheet.objects.filter(workbook=workbook).order_by('created_at')
-        for sheet in sheets:
-            row_count = len(sheet.data.get('rows', [])) if sheet.data else 0
-            col_count = len(sheet.data.get('columns', [])) if sheet.data else 0
-            
-            structure["sheets"].append({
-                "name": sheet.name,
-                "uuid": str(sheet.uuid),
-                "rows": row_count,
-                "columns": col_count
-            })
-        
-        # Get all folders
-        folders = Folder.objects.filter(workbook=workbook)
-        for folder in folders:
-            structure["files"]["folders"][folder.name] = {
-                "uuid": str(folder.uuid),
-                "files": []
-            }
-        
-        # Get all files
         files = File.objects.filter(workbook=workbook, use=True)
-        for file in files:
-            file_info = {
-                "name": file.filename,
-                "uuid": str(file.uuid),
-                "size": file.calculated_size,
-                "processing": file.is_processing
+        folders = Folder.objects.filter(workbook=workbook)
+        
+        if format.lower() == 'json':
+            # Return JSON format
+            structure = {
+                "workbook_name": workbook.name,
+                "sheets": [],
+                "files": {
+                    "root": [],
+                    "folders": {}
+                }
             }
             
-            if file.folder:
-                # Add to folder
-                folder_name = file.folder.name
-                if folder_name in structure["files"]["folders"]:
-                    structure["files"]["folders"][folder_name]["files"].append(file_info)
-            else:
-                # Add to root
-                structure["files"]["root"].append(file_info)
-        
-        # Format as readable JSON
-        import json
-        return json.dumps(structure, indent=2)
+            for sheet in sheets:
+                row_count = len(sheet.data.get('rows', [])) if sheet.data else 0
+                col_count = len(sheet.data.get('columns', [])) if sheet.data else 0
+                
+                structure["sheets"].append({
+                    "name": sheet.name,
+                    "uuid": str(sheet.uuid),
+                    "rows": row_count,
+                    "columns": col_count
+                })
+            
+            for folder in folders:
+                structure["files"]["folders"][folder.name] = {
+                    "uuid": str(folder.uuid),
+                    "files": []
+                }
+            
+            for file in files:
+                file_info = {
+                    "name": file.filename,
+                    "uuid": str(file.uuid),
+                    "size": file.calculated_size,
+                    "processing": file.is_processing
+                }
+                
+                if file.folder:
+                    folder_name = file.folder.name
+                    if folder_name in structure["files"]["folders"]:
+                        structure["files"]["folders"][folder_name]["files"].append(file_info)
+                else:
+                    structure["files"]["root"].append(file_info)
+            
+            return json.dumps(structure, indent=2)
+        else:
+            # Return markdown format (default)
+            md = f"# {workbook.name}\n\n"
+            
+            # Add sheets section
+            if sheets.exists():
+                md += "## Sheets\n\n"
+                for sheet in sheets:
+                    row_count = len(sheet.data.get('rows', [])) if sheet.data else 0
+                    col_count = len(sheet.data.get('columns', [])) if sheet.data else 0
+                    md += f"- **{sheet.name}** ({col_count} columns × {row_count} rows)\n"
+                md += "\n"
+            
+            # Add files section
+            if files.exists() or folders.exists():
+                md += "## Files\n\n"
+                
+                # Add folders
+                for folder in folders.order_by('name'):
+                    folder_files = files.filter(folder=folder)
+                    if folder_files.exists():
+                        md += f"### {folder.name}/\n\n"
+                        for file in folder_files.order_by('filename'):
+                            status = "⏳ processing" if file.is_processing else "✓"
+                            md += f"- {file.filename} (UUID: `{file.uuid}`, {file.calculated_size} KB) {status}\n"
+                        md += "\n"
+                
+                # Add root files
+                root_files = files.filter(folder__isnull=True)
+                if root_files.exists():
+                    for file in root_files.order_by('filename'):
+                        status = "⏳ processing" if file.is_processing else "✓"
+                        md += f"- {file.filename} (UUID: `{file.uuid}`, {file.calculated_size} KB) {status}\n"
+            
+            return md.rstrip()
         
     except Workbook.DoesNotExist:
         return f"Error: Workbook with ID {workbook_id} not found."
