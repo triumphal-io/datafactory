@@ -1150,6 +1150,12 @@ def api_test(request, action):
                 'message': "pinggginggg"
             }
         )
+    elif action == "test-ai":
+        # Simple AI test
+        result = ai.test_ai()
+        print(result)
+        response['status'] = 'success'
+        # response['message'] = result
         
                
     else:

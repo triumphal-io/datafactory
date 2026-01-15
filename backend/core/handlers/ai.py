@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
-from crawl4ai import AsyncWebCrawler
+from crawl4ai import AsyncWebCrawler, BM25ContentFilter, DefaultMarkdownGenerator, PruningContentFilter, CrawlerRunConfig
 from crawl4ai.utils import configure_windows_event_loop
 from ddgs import DDGS
 import litellm
@@ -68,6 +68,64 @@ def trim_conversation(conversation, max_messages=MAX_CONVERSATION_MESSAGES):
     return system_messages + other_messages
 
 
+def ai_filter_result(raw_result, prompt, source_type="data", model='gpt-5-nano', return_full_context=False):
+    """
+    Filter raw tool results using a secondary AI call based on the main AI's objective.
+    
+    This is a reusable function for all tools that need AI-based result filtering.
+    It takes raw data and extracts only the information relevant to the prompt.
+    
+    Args:
+        raw_result (str): Raw data from the tool (file results, webpage content, etc.)
+        prompt (str): Main AI's objective - what specific information to extract
+        source_type (str, optional): Description of data source (e.g., "file query results", "webpage content")
+        model (str, optional): AI model to use for filtering. Defaults to 'gpt-5-nano' for speed/cost
+        return_full_context (bool, optional): If True, returns explanation of page content when info not found. Defaults to False.
+    
+    Returns:
+        str: AI-filtered summary (~25 words, focused on the prompt objective)
+    """
+    if return_full_context:
+        # For web scraping, provide explanatory context about what the page contains
+        filter_prompt = f"""You are a webpage analysis assistant. The main AI scraped a webpage and received:
+
+{raw_result}
+
+The main AI's objective was: {prompt}
+
+Your task: 
+1. FIRST, try to extract the specific information requested. If found, provide it clearly (max 25 words).
+2. IF the information is NOT on this page, provide an EXPLANATORY response about what this page actually contains/discusses instead. Describe the page's main topics and content in 1-2 sentences.
+
+Format your response as:
+- If found: "[The answer]: [extracted value]"
+- If not found: "Page does not contain this info. This page discusses: [what it actually covers]"
+
+Your response:"""  
+    else:
+        # Original behavior for file queries
+        filter_prompt = f"""You are a data extraction assistant. The main AI retrieved {source_type} and received:
+
+{raw_result}
+
+The main AI's objective was: {prompt}
+
+Your task: Extract ONLY the specific information the main AI needs. Remove irrelevant data and present the answer in a clear, concise sentence (around 25 words max). If the data doesn't contain what was requested, say "Information not found."
+
+Your response:"""
+    
+    # Call secondary AI (no conversation persistence, no recursive tools)
+    filtered_result = assistant(
+        message=filter_prompt,
+        conversation_obj=None,
+        include_sheet_tools=False,
+        workbook_id=None,
+        model=model
+    )
+    
+    return filtered_result.strip()
+
+
 def get_ai_tools():
     """
     Get standard AI tools for web search and scraping.
@@ -79,33 +137,56 @@ def get_ai_tools():
         "type": "function",
         "function": {
             "name": "tool_search",
-            "description": "Searches for information related to a specific keyword. This tool can get you relevant web results.",
+            "description": (
+                "Search the web for current information using keywords. "
+                "Returns top search results with titles, URLs, and brief snippets. "
+                "Use this FIRST to find relevant sources, then use tool_web_scraper to verify. "
+                "Best for: current events, recent data, finding authoritative sources. "
+                "Keep queries short: 1-5 keywords (e.g., 'Zendesk CEO' not full sentences)."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "keyword": {
                         "type": "string",
-                        "description": "The keyword to search for."
+                        "description": "Concise search keywords (1-5 words). Examples: 'Tesla stock price', 'France president', 'Notion founder'"
                     },
                 },
                 "required": ["keyword"],
             },
         }
     }
+
     web_scraper_tool = {
         "type": "function",
         "function": {
             "name": "tool_web_scraper",
-            "description": "Scrapes a webpage to extract the full content and verify information. Use this tool to visit websites from search results and confirm data accuracy. This tool gives you the actual, complete content of the webpage, which is essential for verifying facts and details that appear in search snippets.",
+            "description": (
+                "Fetch and extract complete content from a specific webpage URL. "
+                "Use this AFTER tool_search to verify information from promising results. "
+                "This tool returns the full page content, allowing you to confirm facts "
+                "that appeared in search snippets. Always scrape at least one authoritative "
+                "source before finalizing factual answers. "
+                "Prioritize official websites, major news outlets, and reputable sources."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "The URL of the website to scrape."
+                        "description": "The exact URL to scrape (must be from search results or known source)"
                     },
+                    "prompt": {
+                        "type": "string",
+                        "description": (
+                            "Specific information to extract from the page. "
+                            "Be precise about what you're looking for. "
+                            "Examples: 'Find the CEO name', 'Extract the product price', "
+                            "'Get the company founding date', 'Find contact email'"
+                        )
+                    }
                 },
-                "required": ["url"],
+                "required": ["url", "prompt"],
             },
         }
     }
@@ -217,9 +298,13 @@ def get_file_tools():
                         "type": "string",
                         "enum": ["identifier", "query"],
                         "description": "CRITICAL: Use 'identifier' for IDs/codes/SKUs (returns 1 exact match). Use 'query' for natural language questions (returns multiple matches). When in doubt about an alphanumeric code, use 'identifier'."
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Your objective: what specific information you want to extract from the query results. This helps filter out noise and return only relevant data. Example: 'I need the customer's email address' or 'I want to know the product price'."
                     }
                 },
-                "required": ["query", "filename"],
+                "required": ["query", "filename", "prompt"],
             },
         }
     }
@@ -699,7 +784,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                     return error_message
             
             print(f"Generating AI response... (iteration {tool_iteration_count + 1}/{MAX_TOOL_ITERATIONS})")
-            print("Current conversation:")
+            # print("Current conversation:")
             # print(conversation)
             # Call LiteLLM with full conversation history and available tools
             # Model decides whether to respond directly or call tools
@@ -739,8 +824,6 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                         } for tc in tool_calls
                     ]
                 
-                print("#################AI requested tool calls:#################")
-                print(assistant_msg)
 
                 conversation.append(assistant_msg)
                 
@@ -756,7 +839,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                     function_args = json.loads(tool_call.function.arguments)
                     
                     # Debug output for tool call tracking
-                    print(f"DEBUG: Tool call - {function_name} Raw arguments: {tool_call.function.arguments} Parsed arguments: {function_args}")
+                    print(f">>>>>>>>>>>>>>>>>>>: Tool call - {function_name} arguments: {function_args}")
                     
                     # Validate tool arguments before processing
                     # This prevents errors from malformed AI responses
@@ -831,7 +914,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                 
                 # Execute backend tools (file reading, web scraping, etc.)
                 for tool_info in backend_tools:
-                    print(f"Executing backend tool: {tool_info['name']} with arguments: {tool_info['arguments']}")
+                    # print(f"Executing backend tool: {tool_info['name']} with arguments: {tool_info['arguments']}")
                     
                     try:
                         # Inject workbook_id for file tools that need context
@@ -841,6 +924,8 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                         
                         # Execute tool function by name lookup
                         tool_result = globals()[tool_info['name']](**tool_info['arguments'])
+
+                        print(f"Tool result for {tool_info['name']}: {tool_result}")
                         
                         # Add tool result to conversation for AI to process
                         conversation.append({
@@ -1008,16 +1093,40 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
     if workbook_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
 
-    # Add STRICT verification instructions for web research with MINIMAL tool usage
-    # prompt += "\n\nCRITICAL RESEARCH PROTOCOL FOR ENRICHMENT:"
-    # prompt += "\nWhen you need to search the web, follow this MANDATORY process:"
-    # prompt += "\n1. Use tool_search ONCE with the BEST, most specific keyword based on the context"
-    # prompt += "\n2. You MUST use tool_web_scraper to visit AT LEAST ONE result - NEVER rely on search snippets alone"
-    # prompt += "\n3. Choose the most authoritative/reliable source from search results"
-    # prompt += "\n4. If first website doesn't have the answer, you may scrape up to 2 more sources (maximum 3 scrapes total)"
-    # prompt += "\n5. Extract ONLY the specific fact needed from the webpage - ignore unrelated content"
-    # prompt += "\n6. ONLY say 'Not available' if you've scraped actual sources and confirmed the information is missing"
-    # prompt += "\n\nWARNING: Do NOT scrape more than 3 websites - this causes context overflow. Be strategic, not exhaustive."
+    prompt += """
+    RESEARCH PROTOCOL - When to Search:
+
+    ALWAYS SEARCH when:
+    - Asked about current/recent information (positions, prices, news, events)
+    - Information that changes frequently (stock prices, weather, sports results)
+    - Verifying current status (who holds a role NOW, current policies)
+    - Unknown entities or terms you don't recognize
+
+    NEVER SEARCH when:
+    - You have reliable knowledge from training (historical facts, definitions, established concepts)
+    - Simple calculations or logic based on provided context
+    - Information already present in the spreadsheet context
+    - The answer is directly derivable from given data
+
+    SEARCH STRATEGY:
+    1. Start with ONE targeted search using 1-5 keywords (not full sentences)
+    2. Examine search results - if they look promising, use tool_web_scraper on the best result
+    3. Only do additional searches if first search was clearly off-target
+    4. Limit: 3-4 searches maximum per enrichment request
+
+    VERIFICATION RULES:
+    - For factual claims: ALWAYS scrape at least ONE authoritative source to verify
+    - Prioritize: Official websites > Major news > Industry publications > General sources
+    - If scraped content doesn't have the answer, it will tell you what it DOES contain
+    - Maximum 3 web scrapes per request
+    - If info isn't found after proper research, respond: "Not found"
+
+    EFFICIENCY TIPS:
+    - Use specific, targeted searches (e.g., "Zendesk CEO" not "who is the CEO of Zendesk company")
+    - Scrape the most authoritative result first (official sites, Wikipedia, major news)
+    - Don't scrape multiple pages for the same fact
+    - If first 2 searches don't yield results, the information may not be publicly available
+    """
     
     # Create a temporary conversation for enrichment tracking
     Conversation = apps.get_model('core', 'Conversation')
@@ -1046,11 +1155,14 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
             temp_conversation.refresh_from_db()
             conversation_history = temp_conversation.conversations or []
             
-            # Extract tool calls from conversation
+            # Extract tool calls and their results from conversation
+            tool_call_map = {}  # Map tool_call_id to tool info
+            
             for msg in conversation_history:
                 # Look for assistant messages with tool_calls
                 if msg.get('role') == 'assistant' and msg.get('tool_calls'):
                     for tc in msg['tool_calls']:
+                        tool_call_id = tc.get('id', '')
                         tool_name = tc.get('function', {}).get('name', '')
                         tool_args = tc.get('function', {}).get('arguments', '{}')
 
@@ -1060,29 +1172,49 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
                             args_dict = json.loads(tool_args) if isinstance(tool_args, str) else tool_args
                         except:
                             args_dict = {}
+                        
+                        # Store tool call info
+                        tool_call_map[tool_call_id] = {
+                            'name': tool_name,
+                            'args': args_dict,
+                            'summary': None  # Will be filled from tool response
+                        }
+                
+                # Look for tool messages with results
+                elif msg.get('role') == 'tool':
+                    tool_call_id = msg.get('tool_call_id', '')
+                    tool_content = msg.get('content', '')
+                    
+                    # Map the result to the tool call
+                    if tool_call_id in tool_call_map:
+                        # For tool_query_file_data, the content IS the filtered summary
+                        tool_call_map[tool_call_id]['summary'] = tool_content
+            
+            # Build tools_used list with summaries
+            for tool_call_id, tool_info in tool_call_map.items():
+                tool_name = tool_info['name']
+                args_dict = tool_info['args']
+                tool_summary = tool_info['summary'] or "No summary available"
+                
+                # Track source files and links
+                if tool_name == 'tool_query_file_data':
+                    filename = args_dict.get('filename', '')
+                    # Add to source files list
+                    if filename and filename not in source_files:
+                        source_files.append(filename)
 
-                        # Add dummy summary for testing frontend UI
-                        tool_summary = "Found relevant data with key information extracted from the source"
+                elif tool_name == 'tool_web_scraper':
+                    url = args_dict.get('url', '')
+                    # Add to source links list
+                    if url and url not in source_links:
+                        source_links.append(url)
 
-                        # Track source files and links
-                        if tool_name == 'tool_query_file_data':
-                            filename = args_dict.get('filename', '')
-                            # Add to source files list
-                            if filename and filename not in source_files:
-                                source_files.append(filename)
-
-                        elif tool_name == 'tool_web_scraper':
-                            url = args_dict.get('url', '')
-                            # Add to source links list
-                            if url and url not in source_links:
-                                source_links.append(url)
-
-                        # Add to tools_used list with new format (including summary)
-                        tools_used.append({
-                            "tool": tool_name,
-                            "args": args_dict,
-                            "summary": tool_summary  # NEW: Add summary field
-                        })
+                # Add to tools_used list with summary from actual tool result
+                tools_used.append({
+                    "tool": tool_name,
+                    "args": args_dict,
+                    "summary": tool_summary
+                })
             
             # Clean up temporary conversation
             temp_conversation.delete()
@@ -1170,22 +1302,50 @@ def tool_search(keyword):
     # return crawler(search_url)
 
     results = DDGS().text(keyword, region='in-en', safesearch='off', backend="auto")
+    
+    # Filter results to only include title and href, remove body
+    # filtered_results = []
+    # for result in results:
+    #     filtered_results.append({
+    #         # 'title': result.get('title', ''),
+    #         'href': result.get('href', '')
+    #     })
+    
     return results
 
 
-def tool_web_scraper(url):
+def tool_web_scraper(url, prompt):
     """
-    Scrape a webpage and return its content as markdown.
+    Scrape a webpage with AI-filtered results.
+    
+    This tool performs a two-step process:
+    1. Crawls the webpage and extracts markdown content
+    2. Uses a secondary AI call to filter content based on the main AI's objective (prompt)
+    
+    When the target information is not found on the page, it returns an explanatory description
+    of what the page actually discusses, helping the AI understand why this source wasn't useful.
     
     Args:
         url (str): Website URL to scrape
+        prompt (str): Main AI's objective - what specific information to extract from webpage
     
     Returns:
-        str: Markdown content from the webpage
+        str: AI-filtered result with either:
+          - The extracted answer if found, or
+          - An explanation of what the page discusses if the target info is missing
     """
-    return crawler(url)
+    try:
+        # Get raw markdown content from crawler
+        raw_content = crawler(url, prompt)
+        
+        # Use reusable AI filter with explanatory context enabled
+        # This provides details about page content when target info isn't found
+        return ai_filter_result(raw_content, prompt, source_type="webpage content", return_full_context=True)
+        
+    except Exception as e:
+        return f"Error scraping webpage: {str(e)}"
 
-async def _async_crawler(url):
+async def _async_crawler(url, prompt):
     """
     Internal async function to crawl a webpage using crawl4ai.
     
@@ -1196,15 +1356,30 @@ async def _async_crawler(url):
         CrawlResult: Result object with markdown content
     """
     async with AsyncWebCrawler() as crawler:
+ 
+        if prompt is None or prompt.strip() == "":
+            md_generator = DefaultMarkdownGenerator(
+                content_filter=PruningContentFilter()
+            )
+        else:    
+            md_generator = DefaultMarkdownGenerator(
+                content_filter=BM25ContentFilter(
+                    user_query=prompt,
+                    bm25_threshold=1.2,
+                    language="english"
+                ),
+                options={"ignore_links": True}
+            )
+        
+        config = CrawlerRunConfig(markdown_generator=md_generator)
+
         return await crawler.arun(
-            url=url
-            # Example URLs for reference:
-            # url="https://www.bing.com/search?q=Rohan%20Ashik"
-            # url="https://www.google.com/search?q=Rohan%20Ashik"
+            url=url,
+            config=config
         )
 
 
-def crawler(url):
+def crawler(url, prompt):
     """
     Synchronous wrapper for async web crawler.
 
@@ -1233,7 +1408,7 @@ def crawler(url):
             # This shouldn't normally happen since crawler() is called synchronously
             raise RuntimeError("Cannot use crawler in an async context")
 
-        result = asyncio.run(_async_crawler(url))
+        result = asyncio.run(_async_crawler(url, prompt))
         
         # Validate result structure
         if result is None:
@@ -1245,7 +1420,7 @@ def crawler(url):
         if not hasattr(result.markdown, 'raw_markdown'):
             raise Exception("Crawler markdown result missing raw_markdown property")
         
-        return result.markdown.raw_markdown
+        return result.markdown.fit_markdown
     except Exception as e:
         # Provide clear error message for debugging
         error_msg = str(e) if str(e) else f"{type(e).__name__}: Unable to crawl webpage"
@@ -1502,25 +1677,24 @@ def tool_get_sheet_data(sheet_identifier, max_rows=50, workbook_id=None):
         return f"Error getting sheet data: {str(e)}"
 
 
-def tool_query_file_data(query, filename, max_results=5, search_type='query', workbook_id=None):
+def tool_query_file_data(query, filename, prompt, max_results=5, search_type='query', workbook_id=None):
     """
-    Query data from uploaded files using RAG (Retrieval Augmented Generation).
+    Query data from uploaded files using RAG with AI-filtered results.
     
-    This tool searches through indexed file chunks and returns relevant records.
-    Only works with CSV and XLSX files that have been indexed.
-    DOES NOT work with spreadsheet sheets - use tool_get_sheet_data for that.
-    
-    Automatically detects if query looks like an identifier and switches to identifier search.
+    This tool performs a two-step process:
+    1. Retrieves raw results from ChromaDB vector search
+    2. Uses a secondary AI call to filter results based on the main AI's objective (prompt)
     
     Args:
         query (str): Search query to find relevant data
         filename (str): Name of the file to query
+        prompt (str): Main AI's objective - what specific information to extract from results
         max_results (int, optional): Maximum number of results (default: 5, max: 20)
         search_type (str): 'identifier' for exact matching, 'query' for semantic search (default: 'query')
         workbook_id (str, optional): Workbook UUID for access validation
     
     Returns:
-        str: Formatted search results or error message
+        str: AI-filtered summary of search results (~25 words, focused on the prompt objective)
     """
     try:
         from core.handlers.knowledge import query_rag
@@ -1617,28 +1791,60 @@ def tool_query_file_data(query, filename, max_results=5, search_type='query', wo
         if 'error' in results:
             return f"Error querying file: {results['error']}"
         
-        # Format results
+        # Format raw results
         if not results['documents']:
-            return f"No results found for query '{query}' in file '{filename}' (search type: {search_type})."
-        
-        search_type_label = "exact match" if search_type == 'identifier' else "semantic search"
-        formatted_results = f"Found {len(results['documents'])} relevant record(s) from '{filename}' using {search_type_label}:\n\n"
-        
-        for idx, (record, metadata) in enumerate(zip(results['documents'], results['metadatas']), 1):
-            formatted_results += f"Result {idx}:\n{record}\n"
+            raw_result = f"No results found for query '{query}' in file '{filename}' (search type: {search_type})."
+        else:
+            search_type_label = "exact match" if search_type == 'identifier' else "semantic search"
+            raw_result = f"Found {len(results['documents'])} relevant record(s) from '{filename}' using {search_type_label}:\n\n"
             
-            # Add metadata info if available
-            if 'row_id' in metadata:
-                formatted_results += f"(Row: {metadata['row_id'] + 1}"
-                if 'sheet_name' in metadata:
-                    formatted_results += f", Sheet: {metadata['sheet_name']}"
-                formatted_results += ")\n"
+            for idx, (record, metadata) in enumerate(zip(results['documents'], results['metadatas']), 1):
+                raw_result += f"Result {idx}:\n{record}\n"
+                
+                # Add metadata info if available
+                if 'row_id' in metadata:
+                    raw_result += f"(Row: {metadata['row_id'] + 1}"
+                    if 'sheet_name' in metadata:
+                        raw_result += f", Sheet: {metadata['sheet_name']}"
+                    raw_result += ")\n"
+                
+                raw_result += "\n"
             
-            formatted_results += "\n"
+            raw_result = raw_result.strip()
         
-        return formatted_results.strip()
+        # Use reusable AI filter to extract relevant information
+        return ai_filter_result(raw_result, prompt, source_type="file query results")
         
     except Exception as e:
         import traceback
         traceback.print_exc()
         return f"Error querying file data: {str(e)}"
+
+
+
+
+def test_ai():
+    completion_params = {
+        "model": "openai/gpt-5-nano",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Tell me a joke about programmers."}
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "joke_response",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "setup": {"type": "string"},
+                        "punchline": {"type": "string"},
+                        "category": {"type": "string"}
+                    },
+                    "required": ["setup", "punchline", "category"]
+                }
+            }
+        }
+    }
+    response = litellm.completion(**completion_params)
+    return response.choices[0].message['content']

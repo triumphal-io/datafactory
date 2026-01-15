@@ -20,6 +20,7 @@ import IconMail from '../assets/mail.svg';
 import IconCheckbox from '../assets/checkbox.svg';
 import IconUrl from '../assets/url.svg';
 import IconFile from '../assets/file.svg';
+import IconChevronRight from '../assets/chevron-right-black.svg';
 import CellRenderer from './cell-renderer.jsx';
 
 // Helper function to get icon based on column type
@@ -132,9 +133,13 @@ const humanizeToolExecution = (tool) => {
     const { tool: toolName, args, summary } = tool;
 
     let mainText = '';
+    let summaryText = summary;
     switch (toolName) {
         case 'tool_search':
             mainText = `Searched for "${args.keyword || ''}"`;
+            // count number "href" occurrences in summary
+            const results = (summary.match(/href/g) || []).length;
+            summaryText = `Found ${results || 0} results`;
             break;
 
         case 'tool_web_scraper':
@@ -174,7 +179,7 @@ const humanizeToolExecution = (tool) => {
             );
     }
 
-    return { mainText, summary: summary || '' };
+    return { mainText, summary: summaryText || '' };
 };
 
 const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
