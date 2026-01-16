@@ -5,10 +5,21 @@ import os
 from pathlib import Path
 from django.conf import settings
 
-# Initialize ChromaDB client with persistent storage
+# ChromaDB client configuration
 CHROMA_DB_PATH = os.path.join(settings.BASE_DIR, 'storage', 'chromadb')
-Path(CHROMA_DB_PATH).mkdir(parents=True, exist_ok=True)
-chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+_chroma_client = None  # Lazy-loaded singleton
+
+
+def get_chroma_client():
+    """
+    Get or create ChromaDB client (lazy initialization).
+    Only creates the connection when first needed.
+    """
+    global _chroma_client
+    if _chroma_client is None:
+        Path(CHROMA_DB_PATH).mkdir(parents=True, exist_ok=True)
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+    return _chroma_client
 
 
 def get_embedding_function():
@@ -54,7 +65,7 @@ def get_or_create_collection(collection_name="file_chunks"):
     embedding_model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'default')
     
     try:
-        collection = chroma_client.get_collection(
+        collection = get_chroma_client().get_collection(
             name=collection_name,
             embedding_function=embedding_func
         )
@@ -63,10 +74,10 @@ def get_or_create_collection(collection_name="file_chunks"):
         if "already exists" in str(e).lower():
             print(f"⚠ Collection exists with different embedding function. Recreating with {embedding_type} embeddings...")
             try:
-                chroma_client.delete_collection(name=collection_name)
+                get_chroma_client().delete_collection(name=collection_name)
             except:
                 pass
-            collection = chroma_client.create_collection(
+            collection = get_chroma_client().create_collection(
                 name=collection_name,
                 embedding_function=embedding_func,
                 metadata={
@@ -79,7 +90,7 @@ def get_or_create_collection(collection_name="file_chunks"):
             raise
     except Exception:
         # Collection doesn't exist, create it
-        collection = chroma_client.create_collection(
+        collection = get_chroma_client().create_collection(
             name=collection_name,
             embedding_function=embedding_func,
             metadata={
