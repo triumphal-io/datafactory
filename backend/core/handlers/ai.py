@@ -208,13 +208,13 @@ def get_workbook_tools():
         "type": "function",
         "function": {
             "name": "tool_get_sheet_data",
-            "description": "View data from a specific sheet by name or UUID. Returns the sheet's column structure and row data. Use this when you need to see what data is in a particular sheet. The list of available sheets is provided in the workbook structure context.",
+            "description": "View data from a specific sheet using its UUID. Returns the sheet's column structure and row data.\n\nIMPORTANT: You MUST use the sheet's UUID, NOT the sheet name. The workbook structure context lists all available sheets with their UUIDs. Always check the workbook structure and use the UUID value.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "sheet_identifier": {
                         "type": "string",
-                        "description": "The sheet UUID to view. Check the workbook structure context for available sheets."
+                        "description": "The sheet UUID (NOT the sheet name). Example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab'. Check the workbook structure context for the exact UUID of each sheet."
                     },
                     "max_rows": {
                         "type": "integer",
@@ -230,12 +230,15 @@ def get_workbook_tools():
     return [get_sheet_data_tool]
 
 
-def get_file_tools():
+def get_file_tools(include_read_file_tool=True):
     """
     Get static tool definitions for accessing files from the database.
     
     This returns STATIC tool definitions only (no dynamic file lists)
     to enable prompt caching. File lists should be added to user messages instead.
+    
+    Args:
+        include_read_file_tool (bool): If True, includes tool_read_file. Defaults to True. Set to False for enrichment mode.
     
     Returns:
         list: List of tool definitions for file operations
@@ -246,7 +249,7 @@ def get_file_tools():
         "type": "function",
         "function": {
             "name": "tool_read_file",
-            "description": "Read the complete extracted markdown content of a specific uploaded file. IMPORTANT: You MUST pass the file's UUID (unique identifier), NOT the filename. The file UUID will be provided in the workbook structure context at the start of the conversation. Example UUID: '3fa85f64-5717-4562-b3fc-2c963f66afa6'. This tool is useful for accessing the entire contents of a file.",
+            "description": "Read the complete extracted markdown content of a specific uploaded file.\n\nIMPORTANT: Before using this tool, ALWAYS check the workbook structure context (provided at the start of the conversation) to verify the file exists and get its UUID.\n\nYou MUST pass the file's UUID (unique identifier), NOT the filename. The file UUID is shown in the workbook structure context. Example UUID: '3fa85f64-5717-4562-b3fc-2c963f66afa6'.\n\nThis tool is useful for accessing the entire contents of a file. For more efficient searches within files, use tool_query_file_data instead.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -265,7 +268,7 @@ def get_file_tools():
         "type": "function",
         "function": {
             "name": "tool_query_file_data",
-            "description": "Query data from UPLOADED CSV/XLSX files using semantic search. This tool searches through file contents and returns relevant records. You must specify the filename to search within. The available files will be listed in the conversation context.\n\nIMPORTANT: This tool is ONLY for uploaded files (CSV/XLSX). DO NOT use this for spreadsheet sheets - use tool_get_sheet_data instead to view sheet data.\n\nIMPORTANT - Use 'identifier' search type when:\n- Looking up specific IDs, codes, SKUs, product numbers, customer IDs, order numbers\n- Query is a short alphanumeric string (e.g., 'AB1234', 'CUST-001', 'SKU123')\n- Need exact match for a unique identifier\n- Examples: 'AB1234', 'ORDER-12345', 'CUST001', 'INV-2024-001'\n\nUse 'query' search type when:\n- Natural language questions (e.g., 'customers in New York')\n- Descriptive searches (e.g., 'products with high ratings')\n- Date-based queries (e.g., 'orders from January 2024')\n- Multi-criteria searches",
+            "description": "Query data from UPLOADED CSV/XLSX files using semantic search. This tool searches through file contents and returns relevant records.\n\n🚨 CRITICAL WARNING: This tool will FAIL if you provide a filename that doesn't exist. DO NOT GUESS FILENAMES.\n\nBEFORE calling this tool:\n1. Look at the 'WORKBOOK STRUCTURE' section in the conversation context\n2. Find the '## Files' section\n3. Use the EXACT filename shown there (e.g., 'customers.csv', not 'customer.csv' or 'companies.csv')\n4. If NO files are listed, DO NOT call this tool - there are no files to query\n\nThe filename parameter must EXACTLY match the filename shown in the workbook structure. If you cannot find a matching file, DO NOT make up a filename.\n\nThis tool is ONLY for uploaded files (CSV/XLSX). DO NOT use this for spreadsheet sheets - use tool_get_sheet_data instead to view sheet data.\n\nUse 'identifier' search type when:\n- Looking up specific IDs, codes, SKUs, product numbers, customer IDs, order numbers\n- Query is a short alphanumeric string (e.g., 'AB1234', 'CUST-001', 'SKU123')\n- Need exact match for a unique identifier\n- Examples: 'AB1234', 'ORDER-12345', 'CUST001', 'INV-2024-001'\n\nUse 'query' search type when:\n- Natural language questions (e.g., 'customers in New York')\n- Descriptive searches (e.g., 'products with high ratings')\n- Date-based queries (e.g., 'orders from January 2024')\n- Multi-criteria searches",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -275,7 +278,7 @@ def get_file_tools():
                     },
                     "filename": {
                         "type": "string",
-                        "description": "The name of the file to query (must match exactly, e.g., 'customers.csv', 'ice-cream.xlsx')"
+                        "description": "The EXACT name of the file to query as shown in the workbook structure (e.g., 'customers.csv', 'ice-cream.xlsx'). Must match exactly - check the workbook structure context first to verify the file exists."
                     },
                     "max_results": {
                         "type": "integer",
@@ -296,7 +299,11 @@ def get_file_tools():
         }
     }
     
-    return [query_file_tool, read_file_tool]
+    # Only include read_file_tool if explicitly requested (True by default for chat, False for enrichment)
+    if include_read_file_tool:
+        return [query_file_tool, read_file_tool]
+    else:
+        return [query_file_tool]
 
 
 def get_available_files_context(workbook_id):
@@ -525,7 +532,7 @@ If you need to populate cells, you must specify which cells and what values. If 
     return [add_rows_tool, delete_rows_tool, add_column_tool, delete_column_tool, populate_cells_tool]
 
 
-def assistant(message, conversation_obj=None, include_sheet_tools=False, workbook_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL):
+def assistant(message, conversation_obj=None, include_sheet_tools=False, workbook_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL, include_read_file_tool=True):
     """
     AI assistant with optional conversation persistence, sheet tool support, and file access.
     
@@ -541,6 +548,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         workbook_id (str, optional): Workbook UUID to enable file access tools
         sheet_context (dict, optional): Dict with 'data' (sheet structure) and 'selection' (selected cells info)
         model (str, optional): AI model to use (e.g., 'gpt-5-nano', 'gpt-5', 'gemini-3-flash'). Defaults to settings.DEFAULT_AI_MODEL
+        include_read_file_tool (bool): If True, includes tool_read_file tool. Defaults to True. Set to False for enrichment to restrict access.
     
     Returns:
         str or dict:
@@ -567,6 +575,10 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         # THIS IS ONLY WHEN USING CHAT ASSISTANT
         # Build STATIC system message (instructions and constraints only - cacheable)
         static_system_message = "You are a spreadsheet assistant with access to tools for manipulating spreadsheet data.\n\n"
+        static_system_message += "IMPORTANT TERMINOLOGY:\n"
+        static_system_message += "- WORKBOOK: The main container/project (shown at the top of the UI). This is NOT a file you can query.\n"
+        static_system_message += "- FILES: Uploaded documents (CSV, XLSX, PDF, etc.) in the Resources section. These ARE queryable using tool_query_file_data.\n"
+        static_system_message += "- SHEETS: Spreadsheet tabs within the workbook. These are NOT files - use tool_get_sheet_data to view sheets.\n\n"
         static_system_message += "IMPORTANT CONSTRAINTS when populating cells:\n"
         static_system_message += "- For 'number' type columns: Provide ONLY numeric values (no text, no units)\n"
         static_system_message += "- For 'select' type columns: Choose EXACTLY ONE value from the specified options\n"
@@ -577,7 +589,19 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         static_system_message += "- Respect the format specification if provided\n\n"
     elif workbook_id:
         # Workbook assistant mode
-        static_system_message = "You are a workbook assistant with access to uploaded files. Use the tool_query_file_data tool to search and retrieve relevant information from files when needed to answer questions.\n\n"
+        static_system_message = "You are a workbook assistant with access to uploaded files.\n\n"
+        static_system_message += "CRITICAL - UNDERSTAND THE TERMINOLOGY:\n"
+        static_system_message += "- WORKBOOK: The main container/project that holds sheets and files. The workbook name is shown at the top of the UI.\n"
+        static_system_message += "  → The workbook name is NOT a file. You CANNOT query the workbook name using tool_query_file_data.\n"
+        static_system_message += "  → Example: If the workbook is named 'Experiment Book', this is the project name, NOT a file.\n\n"
+        static_system_message += "- FILES: Uploaded documents (CSV, XLSX, PDF, DOCX, etc.) stored in the Resources section.\n"
+        static_system_message += "  → These are listed in the 'WORKBOOK STRUCTURE' context under the '## Files' section.\n"
+        static_system_message += "  → ONLY these files can be queried using tool_query_file_data.\n"
+        static_system_message += "  → Example file names: 'companies.csv', 'customers.xlsx', 'report.pdf'\n\n"
+        static_system_message += "- SHEETS: Spreadsheet tabs within the workbook (like Excel sheets).\n"
+        static_system_message += "  → Listed under '## Sheets' in the workbook structure.\n"
+        static_system_message += "  → Use tool_get_sheet_data to view sheet data, NOT tool_query_file_data.\n\n"
+        static_system_message += "BEFORE querying a file, ALWAYS check the 'WORKBOOK STRUCTURE' context to verify the file exists and get its exact name.\n\n"
     else:
         # General assistant mode
         static_system_message = "You are an AI assistant.\n\n"
@@ -691,8 +715,10 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         tools = get_workbook_tools() + tools
     
     # Add file reading tools if working with workbooks (STATIC - no dynamic file list in tools)
+    # Note: read_file_tool is only available in chat mode (include_read_file_tool=True)
     if workbook_id:
-        tools = get_file_tools() + tools
+        file_tools = get_file_tools(include_read_file_tool=include_read_file_tool)
+        tools = file_tools + tools
     
     # Define tool categories for routing execution
     # Sheet tools modify spreadsheet UI (handled by frontend)
@@ -1086,6 +1112,7 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
     # Enable file access if workbook is available
     if workbook_id:
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
+        prompt += "\n\n🚨 CRITICAL: Before calling tool_query_file_data, you MUST check the 'WORKBOOK STRUCTURE' context to verify which files exist. Look for the '## Files' section. If no files are listed, DO NOT call the tool. If files exist, use the EXACT filename shown (e.g., 'customers.csv'). DO NOT guess or make up filenames like 'companies.csv' if they don't appear in the structure. Guessing will cause errors."
 
     # prompt += """
     # RESEARCH PROTOCOL - When to Use Tools:
@@ -1134,7 +1161,8 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
             print(f"Warning: Could not create temp conversation: {e}")
     
     # Use AI assistant to generate enrichment value
-    result = assistant(prompt, conversation_obj=temp_conversation, workbook_id=workbook_id, model=model)
+    # include_read_file_tool=False restricts enrichment from accessing tool_read_file
+    result = assistant(prompt, conversation_obj=temp_conversation, workbook_id=workbook_id, model=model, include_read_file_tool=False)
     print(f"Enrichment result: {result}")
     
     # Extract tool usage metadata from conversation if enabled
@@ -1414,7 +1442,6 @@ def crawler(url, prompt):
         raise Exception(f"Web crawler failed: {error_msg}")
 
 
-# COMMENTED OUT: Old direct file reading - kept for reference but not used
 def tool_read_file(file_id, workbook_id=None):
     """
     Read the extracted markdown content of a specific file from the database.
