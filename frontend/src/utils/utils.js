@@ -2,7 +2,7 @@ import Showdown from 'showdown';
 import { toast } from 'react-toastify';
 
 // Constants
-export const DEFAULT_AI_MODEL = 'gpt-5-nano';
+export const DEFAULT_AI_MODEL = 'gemini/gemini-2.5-flash';
 
 /**
  * Convert a date to a relative time string (e.g., "2 hours ago", "just now")

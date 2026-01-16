@@ -1018,6 +1018,8 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
                                 <option value="openai/gpt-5-nano">GPT-5 Nano</option>
                                 <option value="gemini/gemini-3-pro-preview">Gemini 3 Pro Preview</option>
                                 <option value="gemini/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                <option value="gemini/gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                                <option value="gemini/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
                                 {/* <option value="lm_studio/lmstudio-community/functiongemma-270m-it-GGUF">Local FunctionGemma 270M</option> */}
                                 {/* <option value="lm_studio/openai/gpt-oss-20b">Local GPT-OSS 20B</option> */}
                                 {/* <option value="lm_studio/mradermacher/Hammer2.1-3b-GGUF">Local Hammer2.1-3B</option> */}

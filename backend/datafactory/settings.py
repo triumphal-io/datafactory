@@ -22,7 +22,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STAGE = 'local'
 
 # AI Model Configuration
-DEFAULT_AI_MODEL = 'gpt-5-nano'
+# DEFAULT_AI_MODEL = 'gpt-5-nano'
+# DEFAULT_AI_MODEL = 'gemini/gemini-2.5-flash'
+DEFAULT_AI_MODEL = 'gemini/gemini-2.5-flash-lite'
 
 # Embedding Model Configuration
 # Options: 'openai', 'default', 'sentence-transformers'

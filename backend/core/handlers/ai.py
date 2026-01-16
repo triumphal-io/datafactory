@@ -68,7 +68,7 @@ def trim_conversation(conversation, max_messages=MAX_CONVERSATION_MESSAGES):
     return system_messages + other_messages
 
 
-def ai_filter_result(raw_result, prompt, source_type="data", model='gpt-5-nano', return_full_context=False):
+def ai_filter_result(raw_result, prompt, source_type="data", model=settings.DEFAULT_AI_MODEL, return_full_context=False):
     """
     Filter raw tool results using a secondary AI call based on the main AI's objective.
     
@@ -79,7 +79,7 @@ def ai_filter_result(raw_result, prompt, source_type="data", model='gpt-5-nano',
         raw_result (str): Raw data from the tool (file results, webpage content, etc.)
         prompt (str): Main AI's objective - what specific information to extract
         source_type (str, optional): Description of data source (e.g., "file query results", "webpage content")
-        model (str, optional): AI model to use for filtering. Defaults to 'gpt-5-nano' for speed/cost
+        model (str, optional): AI model to use for filtering. Defaults to settings.DEFAULT_AI_MODEL for speed/cost
         return_full_context (bool, optional): If True, returns explanation of page content when info not found. Defaults to False.
     
     Returns:
