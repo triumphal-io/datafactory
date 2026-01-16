@@ -1,6 +1,13 @@
 # DataFactory
 
-DataFactory is a Django + React application that provides AI-powered spreadsheet manipulation with file processing, RAG-based querying, and real-time collaboration via WebSockets.
+DataFactory is an AI-powered spreadsheet platform that combines the flexibility of traditional spreadsheets with advanced AI capabilities for data enrichment, analysis, and knowledge extraction. Built on Django and React, it enables users to work with tabular data alongside uploaded documents (CSV, XLSX, PDF, DOCX, PPTX, TXT, MD) in a unified workspace, leveraging large language models for intelligent automation.
+
+The core idea is to create **workbooks** that contain:
+- **Sheets**: Editable spreadsheet tabs for structured data manipulation
+- **Resources**: A document library where you can upload and organize files for AI-powered querying
+- **AI Assistant**: A conversational interface that can manipulate sheets, query documents, search the web, and enrich data using RAG (Retrieval-Augmented Generation)
+
+Unlike traditional spreadsheets, DataFactory allows you to ask natural language questions about your uploaded documents, automatically populate spreadsheet cells using AI, link spreadsheet rows to relevant files, and perform bulk enrichment operations across thousands of rows—all while maintaining real-time collaboration through WebSockets.
 
 ## Setup
 
