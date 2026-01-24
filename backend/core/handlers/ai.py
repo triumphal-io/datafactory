@@ -8,10 +8,11 @@ from PIL import Image
 from crawl4ai import AsyncWebCrawler, BM25ContentFilter, DefaultMarkdownGenerator, PruningContentFilter, CrawlerRunConfig
 from crawl4ai.utils import configure_windows_event_loop
 from ddgs import DDGS
-import litellm
+# import litellm
 from dotenv import load_dotenv
 from django.apps import apps
 from django.conf import settings
+from .mcp import get_mcp_tools, execute_mcp_tool
 
 # Load environment variables from root folder
 env_path = Path(__file__).resolve().parents[3] / '.env'
@@ -706,6 +707,12 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     # Base tools (search, web scraping) are always available
     tools = get_ai_tools()
     
+    # Add MCP tools (Model Context Protocol integrations)
+    mcp_tools = get_mcp_tools()
+    if mcp_tools:
+        tools = mcp_tools + tools
+        print(f"MCP: Loaded {len(mcp_tools)} MCP tool(s)")
+    
     # Add sheet manipulation tools if working with spreadsheets
     if include_sheet_tools:
         tools = get_sheet_tools() + tools
@@ -727,6 +734,8 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     file_tool_names = {'tool_query_file_data', 'tool_get_sheet_data'}  # Workbook structure is pre-loaded, not a tool
     # Frontend tools require UI updates (sent back to client)
     frontend_tool_names = {'tool_add_rows', 'tool_delete_rows', 'tool_add_column', 'tool_delete_column', 'tool_populate_cells'}
+    # MCP tools are handled by backend (async execution)
+    mcp_tool_names = {tool['function']['name'] for tool in mcp_tools if tool['function']['name'].startswith('mcp_')}
     
     # Debug logging
     print(conversation)
@@ -772,7 +781,10 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         "tool_choice": "auto",  # Let model decide when to use tools
         # "max_tokens": AI_MAX_TOKENS,
     }
-    
+    # For Gemini models, add reasoning_effort parameter
+    if 'gemini' in model.lower():
+        completion_params['reasoning_effort'] = 'low'  # low or 'medium', 'high
+    # completion_params['temperature'] = 1.0  # REQUIRED for Gemini 3
     # Main conversation loop - continues until AI decides no more tool calls needed
     # Safety: Limit iterations to prevent infinite tool calling loops
     tool_iteration_count = 0
@@ -808,6 +820,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
             # print(conversation)
             # Call LiteLLM with full conversation history and available tools
             # Model decides whether to respond directly or call tools
+            import litellm
             response = litellm.completion(**completion_params)
             
             response_message = response.choices[0].message
@@ -824,28 +837,8 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                 tool_iteration_count += 1
                 # Add assistant's response to conversation history
                 # This preserves the tool calling decision for context
-                assistant_msg = {
-                    "role": "assistant",
-                    "content": response_message.content
-                }
-
-                
-                # Serialize tool calls to conversation format
-                # This is required for OpenAI-compatible message format
-                if tool_calls:
-                    assistant_msg["tool_calls"] = [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments
-                            }
-                        } for tc in tool_calls
-                    ]
-                
-
-                conversation.append(assistant_msg)
+               
+                conversation.append(response_message.model_dump())
                 
                 # Separate tools by execution location
                 # Frontend tools: UI manipulation (executed by React)
@@ -932,7 +925,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                     else:
                         backend_tools.append(tool_info)
                 
-                # Execute backend tools (file reading, web scraping, etc.)
+                # Execute backend tools (file reading, web scraping, MCP tools, etc.)
                 for tool_info in backend_tools:
                     # print(f"Executing backend tool: {tool_info['name']} with arguments: {tool_info['arguments']}")
                     
@@ -942,10 +935,15 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                         if tool_info['name'] in file_tool_names and workbook_id:
                             tool_info['arguments']['workbook_id'] = workbook_id
                         
-                        # Execute tool function by name lookup
-                        tool_result = globals()[tool_info['name']](**tool_info['arguments'])
+                        # Execute MCP tools (async execution required)
+                        if tool_info['name'] in mcp_tool_names:
+                            print(f"Executing MCP tool: {tool_info['name']}")
+                            tool_result = asyncio.run(execute_mcp_tool(tool_info['name'], tool_info['arguments']))
+                        else:
+                            # Execute standard tool function by name lookup
+                            tool_result = globals()[tool_info['name']](**tool_info['arguments'])
 
-                        print(f"Tool result for {tool_info['name']}: {tool_result}")
+                        # print(f"Tool result for {tool_info['name']}: {tool_result}")
                         
                         # Add tool result to conversation for AI to process
                         conversation.append({
@@ -1892,5 +1890,6 @@ def test_ai():
             }
         }
     }
+    import litellm
     response = litellm.completion(**completion_params)
     return response.choices[0].message['content']

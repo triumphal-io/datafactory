@@ -99,8 +99,48 @@ class Conversation(models.Model):
     def __str__(self):
         return self.title
 
+
+class MCPServer(models.Model):
+    """
+    MCP (Model Context Protocol) server configuration.
+    Users can add/remove/enable/disable MCP servers (both HTTP API and stdio types).
+    """
+    SERVER_TYPES = [
+        ('http', 'HTTP API'),
+        ('stdio', 'Stdio (subprocess)'),
+    ]
+    
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='mcp_servers')
+    
+    name = models.CharField(max_length=100)  # Identifier (e.g., 'github', 'slack') - unique per user
+    display_name = models.CharField(max_length=255)  # Human-readable name
+    server_type = models.CharField(max_length=10, choices=SERVER_TYPES, default='http')  # Server type (http or stdio)
+    url = models.URLField(max_length=500, blank=True)  # API endpoint URL (for HTTP servers)
+    description = models.TextField(blank=True)
+    enabled = models.BooleanField(default=True)
+    
+    # Configuration for server (stored as JSON)
+    # For HTTP servers: API keys, custom headers, etc.
+    # For stdio servers: {"command": "npx", "args": ["-y", "@deepwiki/mcp-server"], "env": {...}}
+    config = models.JSONField(default=dict, blank=True)
+    
+    # Cached tools list to avoid fetching on every load
+    tools = models.JSONField(default=list, blank=True)
+    
+    created_at = models.DateTimeField('Created at', auto_now_add=True)
+    last_modified = models.DateTimeField('Last modified', auto_now=True)
+
+    def __str__(self):
+        return self.display_name
+
     class Meta:
-        verbose_name_plural = "Conversations"
+        verbose_name = "MCP Server"
+        verbose_name_plural = "MCP Servers"
+        ordering = ['display_name']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_mcp_server_per_user')
+        ]
 
 
 class BackgroundJob(models.Model):

@@ -31,6 +31,10 @@ DEFAULT_AI_MODEL = 'gemini/gemini-2.5-flash-lite'
 EMBEDDING_MODEL_TYPE = 'openai'  # 'openai' | 'default' | 'sentence-transformers'
 EMBEDDING_MODEL_NAME = 'text-embedding-3-small'  # Used for OpenAI and sentence-transformers
 
+# MCP Servers Configuration
+MCP_CONFIG_PATH = None  # None = default to backend/mcp_servers.json
+# ============================================================================
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-$r2m6fgm%6+z)5q(w#r1oyo)d9*q3&i94v#rc22b1i(v%(y34l'
 

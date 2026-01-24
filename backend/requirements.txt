@@ -14,3 +14,6 @@ litellm==1.80.15
 crawl4ai==0.7.8
 pillow==12.1.0
 python-dotenv==1.2.1
+httpx==0.28.1
+httpx-sse==0.4.3
+mcp==1.25.0

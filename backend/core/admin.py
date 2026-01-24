@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Workbook, Sheet, File, Folder, Conversation, BackgroundJob
+from .models import Workbook, Sheet, File, Folder, Conversation, BackgroundJob, MCPServer
 
 
 @admin.register(Workbook)
@@ -53,3 +53,6 @@ class BackgroundJobAdmin(admin.ModelAdmin):
     search_fields = ('uuid', 'workbook__name', 'cell_data')
     readonly_fields = ('uuid', 'created_at')
     date_hierarchy = 'created_at'
+
+
+admin.site.register(MCPServer)
