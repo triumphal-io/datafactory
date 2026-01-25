@@ -30,6 +30,7 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
     const [mentionStartPos, setMentionStartPos] = useState(null);
     const [mentionEndPos, setMentionEndPos] = useState(null);
     const [mentions, setMentions] = useState([]);
+    const [availableModels, setAvailableModels] = useState([]);
     const bodyRef = useRef(null);
     const editableRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -39,6 +40,22 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
 
     // Update ref synchronously during render to avoid being one step behind
     selectedCellsRef.current = selectedCells;
+
+    // Fetch available models
+    useEffect(() => {
+        const fetchModels = async () => {
+            try {
+                const response = await apiFetch('/api/provider-credentials/models', { method: 'GET' });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    setAvailableModels(data.models || []);
+                }
+            } catch (error) {
+                console.error('Error fetching models:', error);
+            }
+        };
+        fetchModels();
+    }, []);
 
     // Fetch mention suggestions when document loads or sheet data changes
     useEffect(() => {
@@ -1013,16 +1030,9 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
                                 className='input-empty text--white text--micro pointer'
                                 value={selectedModel}
                                 onChange={(e) => onModelChange && onModelChange(e.target.value)}>
-                                <option value="openai/gpt-5">GPT-5</option>
-                                <option value="openai/gpt-5-mini">GPT-5 Mini</option>
-                                <option value="openai/gpt-5-nano">GPT-5 Nano</option>
-                                <option value="gemini/gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                                <option value="gemini/gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                <option value="gemini/gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-                                <option value="gemini/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-                                {/* <option value="lm_studio/lmstudio-community/functiongemma-270m-it-GGUF">Local FunctionGemma 270M</option> */}
-                                {/* <option value="lm_studio/openai/gpt-oss-20b">Local GPT-OSS 20B</option> */}
-                                {/* <option value="lm_studio/mradermacher/Hammer2.1-3b-GGUF">Local Hammer2.1-3B</option> */}
+                                {availableModels.map((model) => (
+                                    <option key={model.id} value={model.id}>{model.name}</option>
+                                ))}
                             </select>
                         </div>
                         <img 

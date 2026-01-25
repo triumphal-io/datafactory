@@ -4,6 +4,32 @@ import pandas as pd
 import os
 from pathlib import Path
 from django.conf import settings
+from django.apps import apps
+
+
+def _get_openai_api_key_from_db() -> str | None:
+    """Best-effort lookup for OpenAI API key in DB.
+
+    Note: auth is currently hardcoded elsewhere; we mirror that behavior here.
+    """
+    try:
+        ProviderCredential = apps.get_model('core', 'ProviderCredential')
+        from django.contrib.auth.models import User
+
+        user = User.objects.filter(username='rohanashik').first()
+        if not user:
+            return None
+
+        cred = ProviderCredential.objects.filter(user=user, provider='openai').first()
+        key = (cred.api_key or '').strip() if cred else ''
+        return key or None
+    except Exception:
+        return None
+
+
+def _get_openai_api_key() -> str | None:
+    # Credentials must come from DB.
+    return _get_openai_api_key_from_db()
 
 # ChromaDB client configuration
 CHROMA_DB_PATH = os.path.join(settings.BASE_DIR, 'storage', 'chromadb')
@@ -34,7 +60,7 @@ def get_embedding_function():
     if embedding_type == 'openai':
         model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
         return embedding_functions.OpenAIEmbeddingFunction(
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=_get_openai_api_key(),
             model_name=model_name
         )
     elif embedding_type == 'sentence-transformers':

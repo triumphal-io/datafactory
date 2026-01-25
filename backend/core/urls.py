@@ -14,5 +14,6 @@ urlpatterns = [
     path('enrich/<str:action>', views.api_enrich, name='api_enrich'),
     path('enrich-bulk', views.api_bulk_enrich, name='api_bulk_enrich'),
     path('mcp-servers/<str:action>', views.api_mcp_servers, name='api_mcp_servers'),
+    path('provider-credentials/<str:action>', views.api_provider_credentials, name='api_provider_credentials'),
     path('admin/<str:action>', views.api_test),
 ]

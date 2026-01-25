@@ -125,8 +125,8 @@ export default function Drawer({ isOpen, onClose }) {
         </div>
         <div className='spacer'></div>
         <div className='flex flex-column gap-5 mrgnt-15 mrgnb-10'>
-            <Link to="/settings" style={{ textDecoration: 'none', color: 'inherit' }} className='drawer-item flex flex-row-center gap-12'>
-                <img src={IconSettings} alt="New Workbook" height="16" />
+            <Link to="/settings/general" style={{ textDecoration: 'none', color: 'inherit' }} className='drawer-item flex flex-row-center gap-12'>
+                <img src={IconSettings} alt="Settings" height="16" />
                 <p className='text--micro text__medium'>Settings</p>
             </Link>
             <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}  className='drawer-item flex flex-row-center gap-12'>

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Workbook, Sheet, File, Folder, Conversation, BackgroundJob, MCPServer
+from .models import Workbook, Sheet, File, Folder, Conversation, BackgroundJob, MCPServer, ProviderCredential
 
 
 @admin.register(Workbook)
@@ -56,3 +56,4 @@ class BackgroundJobAdmin(admin.ModelAdmin):
 
 
 admin.site.register(MCPServer)
+admin.site.register(ProviderCredential)

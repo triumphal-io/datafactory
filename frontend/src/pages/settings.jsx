@@ -1,10 +1,20 @@
 import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import Drawer from '../components/drawer.jsx';
 import MCPSettings from '../components/mcp-settings.jsx';
-import IconAdd from '../assets/add.svg';
+import ProviderSettings from '../components/provider-settings.jsx';
 
 export default function SettingsPage() {
-    const [activeTab, setActiveTab] = useState('general');
+    const { tab } = useParams();
+    const navigate = useNavigate();
+    
+    // Define valid tabs
+    const validTabs = ['general', 'tools-mcp', 'models'];
+    const activeTab = validTabs.includes(tab) ? tab : 'general';
+
+    const setActiveTab = (newTab) => {
+        navigate(`/settings/${newTab}`);
+    };
 
     return (
         <div className="sheet-container">
@@ -27,10 +37,10 @@ export default function SettingsPage() {
                                 Tools & MCP
                             </p>
                             <p 
-                                className={`pointer text--normal text__semibold cursor-pointer ${activeTab === 'credentials' ? '' : 'opacity-5'}`}
-                                onClick={() => setActiveTab('credentials')}
+                                className={`pointer text--normal text__semibold cursor-pointer ${activeTab === 'models' ? '' : 'opacity-5'}`}
+                                onClick={() => setActiveTab('models')}
                             >
-                                Credentials
+                                Model Providers
                             </p>
                         </div>
 
@@ -52,7 +62,7 @@ export default function SettingsPage() {
                                             <p className="text--small text__medium marb-15">Check for Updates</p>
                                             <p className="text--micro opacity-7">Check if there are any new updates available for DataFactory.</p>
                                         </div>
-                                        <button className="button button--small">Check Now</button>
+                                        <button className="button button-dark mini-button">Check Now</button>
                                     </div>
 
                                     {/* Resources */}
@@ -63,14 +73,14 @@ export default function SettingsPage() {
                                                 <p className="text--small text__medium marb-15">Documentation</p>
                                                 <p className="text--micro opacity-7">Access our comprehensive guides and documentation for DataFactory.</p>
                                             </div>
-                                            <a href="https://github.com/your-repo/docs" target="_blank" rel="noopener noreferrer" className="button button--small">View Docs</a>
+                                            <a href="https://github.com/your-repo/docs" target="_blank" rel="noopener noreferrer" className="button button-dark mini-button">View Docs</a>
                                         </div>
                                         <div className="flex flex-row-center flex-space-between">
                                             <div className="flex flex-column gap-5">
                                                 <p className="text--small text__medium marb-15">Release Notes</p>
                                                 <p className="text--micro opacity-7">View detailed release notes for each version update.</p>
                                             </div>
-                                            <a href="https://github.com/your-repo/releases" target="_blank" rel="noopener noreferrer" className="button button--small">View Releases</a>
+                                            <a href="https://github.com/your-repo/releases" target="_blank" rel="noopener noreferrer" className="button button-dark mini-button">View Releases</a>
                                         </div>
                                     </div>
 
@@ -82,14 +92,14 @@ export default function SettingsPage() {
                                                 <p className="text--small text__medium marb-15">Github</p>
                                                 <p className="text--micro opacity-7">Join the discussion and contribute to DataFactory on Github.</p>
                                             </div>
-                                            <a href="https://github.com/your-repo" target="_blank" rel="noopener noreferrer" className="button button--small">Visit Github</a>
+                                            <a href="https://github.com/your-repo" target="_blank" rel="noopener noreferrer" className="button button-dark mini-button">Visit Github</a>
                                         </div>
                                         <div className="flex flex-row-center flex-space-between">
                                             <div className="flex flex-column gap-5">
                                                 <p className="text--small text__medium marb-15">Discord</p>
                                                 <p className="text--micro opacity-7">Connect with the community and get real-time support on Discord.</p>
                                             </div>
-                                            <a href="https://discord.gg/your-invite" target="_blank" rel="noopener noreferrer" className="button button--small">Join Discord</a>
+                                            <a href="https://discord.gg/your-invite" target="_blank" rel="noopener noreferrer" className="button button-dark mini-button">Join Discord</a>
                                         </div>
                                     </div>
 
@@ -101,7 +111,7 @@ export default function SettingsPage() {
                                                 <p className="text--small text__medium marb-15">Report Issues</p>
                                                 <p className="text--micro opacity-7">Found a bug or have a feature request? Report it on Github Issues.</p>
                                             </div>
-                                            <a href="https://github.com/your-repo/issues" target="_blank" rel="noopener noreferrer" className="button button--small">Report Issue</a>
+                                            <a href="https://github.com/your-repo/issues" target="_blank" rel="noopener noreferrer" className="button button-dark mini-button">Report Issue</a>
                                         </div>
                                     </div>
 
@@ -123,16 +133,8 @@ export default function SettingsPage() {
                                 <MCPSettings />
                             )}
 
-                            {activeTab === 'credentials' && (
-                                <div className="credentials-settings  flex flex-column gap-15">
-                                    
-                                    <div className="tile pointer flex flex-row-center flex-horizontal-center pad-15 padl-20 padr-20">
-                                        <div className="flex flex-row-center gap-5">
-                                            <img src={IconAdd} alt="Add Credential" height="16" />
-                                            <p className="text--small text__medium marb-15">Add New Credential</p>
-                                        </div>
-                                    </div>
-                                </div>
+                            {activeTab === 'models' && (
+                                <ProviderSettings />
                             )}
                         </div>
                     </div>

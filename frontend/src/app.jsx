@@ -1,4 +1,4 @@
-import { Route, Routes, Link, useNavigate } from "react-router-dom";
+import { Route, Routes, Link, useNavigate, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { TokenContext } from "./utils/token-context.jsx";
 import { WebSocketProvider } from "./utils/websocket-context.jsx";
@@ -73,7 +73,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/workbook/:workbookId/sheet/:sheetId" element={<WebSocketProvider><WorkbookPage /></WebSocketProvider>} />
         <Route path="/workbook/:workbookId/files" element={<WebSocketProvider><WorkbookPage /></WebSocketProvider>} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+        <Route path="/settings/:tab" element={<SettingsPage />} />
         {/*<Route path="/connectors" element={<Connectors />} />
         <Route path="/connectors/:connectorId" element={<ConnectorDetail />} />
         <Route path="/workflows" element={<Workflows />} />

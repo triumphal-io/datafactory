@@ -1,6 +1,7 @@
 import asyncio
 import time
 import json
+import os
 from io import BytesIO
 from pathlib import Path
 
@@ -32,6 +33,59 @@ MAX_TOOLS_PER_TURN = 15  # Maximum number of tools that can be called in one ite
 # Prevents excessive parallel tool calls that could cause rate limits or high costs
 
 AI_MAX_TOKENS = 2048  # Max tokens for AI responses (adjust based on model capabilities)
+
+
+def _get_provider_from_model(model: str | None) -> str | None:
+    if not model:
+        return None
+    model_lower = model.lower().strip()
+    if '/' in model_lower:
+        return model_lower.split('/', 1)[0]
+    if 'claude' in model_lower or 'anthropic' in model_lower:
+        return 'anthropic'
+    if 'gemini' in model_lower:
+        return 'gemini'
+    if model_lower.startswith('gpt') or 'openai' in model_lower:
+        return 'openai'
+    return None
+
+
+def _get_provider_access(workbook_id: str | None, model: str | None):
+    """Return (provider, api_key, error_reason).
+
+    error_reason is one of: None | 'missing' | 'disabled'
+    """
+    provider = _get_provider_from_model(model)
+    if provider not in {'openai', 'gemini', 'anthropic'}:
+        return provider, None, None
+
+    try:
+        ProviderCredential = apps.get_model('core', 'ProviderCredential')
+        Workbook = apps.get_model('core', 'Workbook')
+
+        user = None
+        if workbook_id:
+            workbook = Workbook.objects.filter(uuid=workbook_id).select_related('user').first()
+            user = workbook.user if workbook else None
+
+        if user is None:
+            # Fallback to default user in non-workbook contexts
+            from django.contrib.auth.models import User
+            user = User.objects.filter(username='rohanashik').first()
+
+        if user is None:
+            return provider, None, 'missing'
+
+        cred = ProviderCredential.objects.filter(user=user, provider=provider).first()
+        api_key = (cred.api_key or '').strip() if cred else ''
+        if not api_key:
+            return provider, None, 'missing'
+        if not cred.enabled:
+            return provider, None, 'disabled'
+        return provider, api_key, None
+    except Exception:
+        # Credentials must come from DB.
+        return provider, None, 'missing'
 
 def trim_conversation(conversation, max_messages=MAX_CONVERSATION_MESSAGES):
     """
@@ -69,7 +123,7 @@ def trim_conversation(conversation, max_messages=MAX_CONVERSATION_MESSAGES):
     return system_messages + other_messages
 
 
-def ai_filter_result(raw_result, prompt, source_type="data", model=settings.DEFAULT_AI_MODEL, return_full_context=False):
+def ai_filter_result(raw_result, prompt, source_type="data", model=settings.DEFAULT_AI_MODEL, return_full_context=False, workbook_id=None):
     """
     Filter raw tool results using a secondary AI call based on the main AI's objective.
     
@@ -120,7 +174,7 @@ Your response:"""
         message=filter_prompt,
         conversation_obj=None,
         include_sheet_tools=False,
-        workbook_id=None,
+        workbook_id=workbook_id,
         model=model
     )
     
@@ -781,6 +835,34 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
         "tool_choice": "auto",  # Let model decide when to use tools
         # "max_tokens": AI_MAX_TOKENS,
     }
+
+    # Inject per-user provider API key from DB (and enforce enabled/has_key)
+    provider, api_key, access_error = _get_provider_access(workbook_id, model)
+    if provider in {'openai', 'gemini', 'anthropic'} and access_error in {'missing', 'disabled'}:
+        if access_error == 'disabled':
+            error_message = (
+                f"The '{provider}' provider is disabled. Enable it in Settings → Model Providers (and make sure an API key is set)."
+            )
+        else:
+            error_message = (
+                f"No API key found for '{provider}'. Add your API key in Settings → Model Providers to use this model."
+            )
+
+        if conversation_obj:
+            conversation.append({"role": "assistant", "content": error_message})
+            conversation_obj.conversations = conversation
+            conversation_obj.save()
+
+        if include_sheet_tools:
+            return {
+                'type': 'message',
+                'content': error_message,
+                'conversation_id': str(conversation_obj.uuid) if conversation_obj else None
+            }
+        return error_message
+
+    if api_key:
+        completion_params['api_key'] = api_key
     # For Gemini models, add reasoning_effort parameter
     if 'gemini' in model.lower():
         completion_params['reasoning_effort'] = 'low'  # low or 'medium', 'high
@@ -1857,7 +1939,7 @@ def tool_query_file_data(query, filename, prompt, max_results=5, search_type='qu
             raw_result = raw_result.strip()
         
         # Use reusable AI filter to extract relevant information
-        return ai_filter_result(raw_result, prompt, source_type="file query results")
+        return ai_filter_result(raw_result, prompt, source_type="file query results", workbook_id=workbook_id)
         
     except Exception as e:
         import traceback
@@ -1891,5 +1973,8 @@ def test_ai():
         }
     }
     import litellm
+    provider, api_key, _ = _get_provider_access(None, completion_params.get('model'))
+    if api_key:
+        completion_params['api_key'] = api_key
     response = litellm.completion(**completion_params)
     return response.choices[0].message['content']

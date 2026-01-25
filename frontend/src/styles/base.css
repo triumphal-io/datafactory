@@ -1007,8 +1007,10 @@ table tr td {
 }
 
 .button.mini-button {
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 7px 10px;
+    font-size: 10px;
+    border-radius: 4px;
+    line-height: normal;
 }
 .button:hover {
     background: #3E55E1;

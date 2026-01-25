@@ -143,6 +143,41 @@ class MCPServer(models.Model):
         ]
 
 
+class ProviderCredential(models.Model):
+    """Per-user credentials for LLM providers (OpenAI/Gemini/Anthropic)."""
+
+    PROVIDERS = [
+        ('openai', 'OpenAI'),
+        ('gemini', 'Gemini'),
+        ('anthropic', 'Anthropic'),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='provider_credentials')
+
+    provider = models.CharField(max_length=50, choices=PROVIDERS)
+    enabled = models.BooleanField(default=False)
+
+    # Stored as plain text (do not return via API). If you need at-rest encryption,
+    # add it at the field level with a dedicated encryption library.
+    api_key = models.TextField(blank=True, default='')
+    api_key_last4 = models.CharField(max_length=8, blank=True, default='')
+
+    created_at = models.DateTimeField('Created at', auto_now_add=True)
+    last_modified = models.DateTimeField('Last modified', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Provider Credential'
+        verbose_name_plural = 'Provider Credentials'
+        ordering = ['provider']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'provider'], name='unique_provider_credential_per_user')
+        ]
+
+    def __str__(self):
+        return f"{self.user.username if self.user else 'Unknown'} - {self.provider}"
+
+
 class BackgroundJob(models.Model):
     """
     Background processing jobs for workbooks (file processing, AI enrichment).
