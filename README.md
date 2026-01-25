@@ -17,7 +17,7 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
 
 ## Product Demo
 
-![Demo Video](./frontend/public/product-demo.gif)
+https://github.com/user-attachments/assets/0a473cab-0bbf-4011-80d5-a009e9b39ca8
 
 
 ## Features
