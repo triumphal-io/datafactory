@@ -532,8 +532,6 @@ def api_files(request, did, action):
         
         response['files'] = []
         for file in files:
-            if file.is_processing:
-                start_background_processing()
             response['files'].append({
                 'id': str(file.uuid),
                 'name': file.filename,

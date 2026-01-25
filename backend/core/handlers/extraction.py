@@ -7,6 +7,10 @@ from openpyxl import load_workbook
 import PyPDF2
 from docx import Document as DocxDocument
 
+# Global lock to prevent multiple processing threads
+_processing_lock = threading.Lock()
+_processing_active = False
+
 
 class FileExtractor:
     """
@@ -457,13 +461,43 @@ def process_pending_files():
 def start_background_processing():
     """
     Start background file processing in a separate thread.
+    Only starts if no processing thread is currently active.
     """
-    print("🚀 Initiating background file processing thread...")
+    global _processing_active
+    
+    # Check if already processing without blocking
+    if _processing_active:
+        return  # Already processing, skip
+    
+    # Try to acquire lock without blocking
+    if not _processing_lock.acquire(blocking=False):
+        return  # Another thread is starting, skip
+    
     try:
-        thread = threading.Thread(target=process_pending_files, daemon=True)
+        # Double-check after acquiring lock
+        if _processing_active:
+            return
+        
+        print("🚀 Initiating background file processing thread...")
+        _processing_active = True
+        thread = threading.Thread(target=_process_with_cleanup, daemon=True)
         thread.start()
         print("✓ Background file processing thread started successfully")
     except Exception as e:
         print(f"✗ Failed to start background thread: {str(e)}")
+        _processing_active = False
         import traceback
         traceback.print_exc()
+    finally:
+        _processing_lock.release()
+
+
+def _process_with_cleanup():
+    """
+    Wrapper function to ensure cleanup after processing.
+    """
+    global _processing_active
+    try:
+        process_pending_files()
+    finally:
+        _processing_active = False
