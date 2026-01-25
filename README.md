@@ -1,5 +1,5 @@
 # DataFactory
----
+
 ### Spreadsheet AI /  Agents in Every Cell
 
 
@@ -15,7 +15,7 @@ The core idea is to create **workbooks** that contain:
 
 Unlike traditional spreadsheets, DataFactory allows you to ask natural language questions about your uploaded documents, automatically populate spreadsheet cells using AI, link spreadsheet rows to relevant files, and perform bulk enrichment operations across thousands of rows—all while maintaining real-time collaboration through WebSockets.
 
----
+
 
 ## Featrues
 - **Spreadsheet Manipulation**: Create and edit sheets with AI assistance
@@ -25,7 +25,6 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
 - **Web Search & Scraping**: AI can search the web and scrape content
 - **Real-time Collaboration**: WebSocket support for live updates
 
----
 
 ## Tech Stack
 - **Backend**: [Django](https://github.com/django/django), Django REST Framework, Playwright (for web scraping), LangChain, FAISS
@@ -38,7 +37,7 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
     - [Pandas](https://github.com/pandas-dev/pandas)
     - [python-docx](https://github.com/python-openxml/python-docx)
     - [python-pptx](https://github.com/scanny/python-pptx)
----
+
 
 ## Setup
 
