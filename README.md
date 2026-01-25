@@ -15,7 +15,11 @@ The core idea is to create **workbooks** that contain:
 
 Unlike traditional spreadsheets, DataFactory allows you to ask natural language questions about your uploaded documents, automatically populate spreadsheet cells using AI, link spreadsheet rows to relevant files, and perform bulk enrichment operations across thousands of rows—all while maintaining real-time collaboration through WebSockets.
 
-
+## Product Demo
+<video width="100%" controls>
+  <source src="/frontend/public/product-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="/frontend/public/product-demo.mp4">Download the demo video</a>.
+</video>
 
 ## Features
 - **Spreadsheet Manipulation**: Create and edit sheets with AI assistance
