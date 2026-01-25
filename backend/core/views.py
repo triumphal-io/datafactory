@@ -747,8 +747,8 @@ def api_assistant(request, did, action):
             if sheet_name:
                 metadata_parts.append(f"[Selected sheet: {sheet_name} (ID: {sheet_id})]")
             else:
-                # When no sheet is selected, user is on Project Files
-                metadata_parts.append("[Active page: Project Files]")
+                # When no sheet is selected, user is on Resource Files
+                metadata_parts.append("[Active page: Resource Files]")
             
             # Add selected cells info
             if selected_range:
@@ -993,7 +993,8 @@ def api_sheets(request, did, sheet_id):
                 'status': 'success',
                 'sheet_data': data,
                 'last_modified': sheet.last_modified.isoformat(),
-                'sheet_id': str(sheet.uuid)
+                'sheet_id': str(sheet.uuid),
+                'name': sheet.name
             })
     elif request.method == 'POST':
         

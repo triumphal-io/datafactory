@@ -218,8 +218,31 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
 
     useEffect(() => {
         setSheetId(propSheetId);
-        setActiveView(propSheetId ? 'sheet' : 'resources');
-    }, [propSheetId]);
+        const newView = propSheetId ? 'sheet' : 'resources';
+        setActiveView(newView);
+
+        // Update sheet name for assistant context
+        if (newView === 'sheet' && onSheetNameChange) {
+            let currentSheetName = '';
+            // If default-sheet, use the first sheet's name
+            if (propSheetId === 'default-sheet' && sheetsList.length > 0) {
+                currentSheetName = sheetsList[0].name;
+            } 
+            // Otherwise find the sheet by ID
+            else if (sheetsList.length > 0) {
+                const sheet = sheetsList.find(s => s.id === propSheetId);
+                if (sheet) {
+                    currentSheetName = sheet.name;
+                }
+            }
+            
+            if (currentSheetName) {
+                onSheetNameChange(currentSheetName);
+            }
+        } else if (newView === 'resources' && onSheetNameChange) {
+            onSheetNameChange('');
+        }
+    }, [propSheetId, sheetsList, onSheetNameChange]);
 
     // Initialize workbook name when it first loads
     useEffect(() => {
