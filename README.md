@@ -17,7 +17,7 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
 
 ## Product Demo
 
-https://github.com/redible/datafactory/blob/main/frontend/public/product-demo.mp4
+![Demo Video](./frontend/public/product-demo.gif)
 
 
 ## Features
