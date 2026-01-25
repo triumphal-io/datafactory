@@ -286,6 +286,7 @@ class EnrichmentProcessor:
             old_jobs.delete()
             print(f"Cleaned up {deleted_count} old enrichment jobs for workbook {workbook.uuid}")
 
-
+ 
 # Global instance
 enricher = EnrichmentProcessor(max_concurrent=10)
+ 

@@ -905,6 +905,29 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
             import litellm
             response = litellm.completion(**completion_params)
             
+            # Validate response has choices before accessing
+            if not response.choices or len(response.choices) == 0:
+                error_message = "The AI model returned an empty response. This may be due to content filtering, token limits, or a temporary API issue. Please try rephrasing your request or try again."
+                print(f"ERROR: Empty response from LiteLLM. Response: {response}")
+                
+                conversation.append({
+                    "role": "assistant",
+                    "content": error_message
+                })
+                
+                if conversation_obj:
+                    conversation_obj.conversations = conversation
+                    conversation_obj.save()
+                
+                if include_sheet_tools:
+                    return {
+                        'type': 'message',
+                        'content': error_message,
+                        'conversation_id': str(conversation_obj.uuid) if conversation_obj else None
+                    }
+                else:
+                    return error_message
+            
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
             
