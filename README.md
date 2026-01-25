@@ -17,7 +17,7 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
 
 
 
-## Featrues
+## Features
 - **Spreadsheet Manipulation**: Create and edit sheets with AI assistance
 - **Enrich Data**: Bulk enrich thousands of cells individually using AI
 - **File Processing**: Upload and extract content from CSV, XLSX, PDF, DOCX, PPTX, TXT, MD
