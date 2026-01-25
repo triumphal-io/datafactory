@@ -40,7 +40,9 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
     // Expose tool execution methods to parent via ref
     useImperativeHandle(ref, () => ({
         getSheetData: () => {
-            if (sheetViewRef.current && activeView === 'sheet') {
+            // Check both activeView state and propSheetId to handle state sync delays
+            const isSheetActive = (activeView === 'sheet' || propSheetId) && sheetViewRef.current;
+            if (isSheetActive) {
                 return sheetViewRef.current.getSheetData();
             }
             return null;
@@ -62,7 +64,9 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
                     
                     switch (tool.name) {
                         case 'tool_add_rows':
-                            if (sheetViewRef.current && activeView === 'sheet') {
+                            // Check both activeView state and propSheetId to handle state sync delays
+                            const isSheetActive = (activeView === 'sheet' || propSheetId) && sheetViewRef.current;
+                            if (isSheetActive) {
                                 result = await sheetViewRef.current.addRows(
                                     tool.arguments.count, 
                                     tool.arguments.position || 'end'
@@ -86,7 +90,8 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
                             break;
                         
                         case 'tool_delete_rows':
-                            if (sheetViewRef.current && activeView === 'sheet') {
+                            const isSheetActive2 = (activeView === 'sheet' || propSheetId) && sheetViewRef.current;
+                            if (isSheetActive2) {
                                 result = await sheetViewRef.current.deleteRows(
                                     tool.arguments.row_numbers
                                 );
@@ -109,7 +114,8 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
                             break;
                         
                         case 'tool_delete_column':
-                            if (sheetViewRef.current && activeView === 'sheet') {
+                            const isSheetActive3 = (activeView === 'sheet' || propSheetId) && sheetViewRef.current;
+                            if (isSheetActive3) {
                                 result = await sheetViewRef.current.deleteColumns(
                                     tool.arguments.columns
                                 );
@@ -132,7 +138,8 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
                             break;
                         
                         case 'tool_add_column':
-                            if (sheetViewRef.current && activeView === 'sheet') {
+                            const isSheetActive4 = (activeView === 'sheet' || propSheetId) && sheetViewRef.current;
+                            if (isSheetActive4) {
                                 result = await sheetViewRef.current.addColumns(
                                     tool.arguments.columns, 
                                     tool.arguments.position || 'end'
@@ -156,7 +163,8 @@ const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propShee
                             break;
                         
                         case 'tool_populate_cells':
-                            if (sheetViewRef.current && activeView === 'sheet') {
+                            const isSheetActive5 = (activeView === 'sheet' || propSheetId) && sheetViewRef.current;
+                            if (isSheetActive5) {
                                 result = await sheetViewRef.current.populateCells(
                                     tool.arguments.cells
                                 );

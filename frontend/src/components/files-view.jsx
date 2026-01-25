@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import IconAdd from '../assets/add-circle.svg';
 import IconFile from '../assets/file.svg';
 import IconFolder from '../assets/folder.svg';
@@ -6,6 +6,7 @@ import IconChevronRight from '../assets/chevron-right.svg';
 import IconDismiss from '../assets/dismiss.svg';
 import IconLoader from '../assets/loader.gif';
 import IconMore from '../assets/more.svg';
+import IconFileAttach from '../assets/file-attach.svg';
 import { apiFetch } from '../utils/api';
 import { showToast, getTimeAgo, convertMarkdownToHtml } from '../utils/utils';
 
@@ -21,6 +22,8 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
     const [renamingFolder, setRenamingFolder] = useState(null);
     const [renamingFile, setRenamingFile] = useState(null);
     const [renameValue, setRenameValue] = useState('');
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const dragCounterRef = useRef(0);
 
     // Expose methods to parent via ref
     useImperativeHandle(ref, () => ({
@@ -413,6 +416,42 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
         setOpenDropdownIndex(openDropdownIndex === index ? null : index);
     }, [openDropdownIndex]);
 
+    // Drag and drop handlers for file upload
+    const handleDragEnter = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current++;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsDraggingOver(true);
+        }
+    }, []);
+
+    const handleDragLeave = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current--;
+        if (dragCounterRef.current === 0) {
+            setIsDraggingOver(false);
+        }
+    }, []);
+
+    const handleDragOver = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+    const handleDrop = useCallback(async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOver(false);
+        dragCounterRef.current = 0;
+
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+            await uploadFiles(files);
+        }
+    }, [uploadFiles]);
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = () => {
@@ -699,7 +738,14 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
                 </div>
             )}
             
-            <div className="sheet-content flex-expanded scroll-x scroll-y thin-scroll">
+            <div 
+                className="sheet-content flex-expanded scroll-x scroll-y thin-scroll"
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                style={{ position: 'relative' }}
+            >
                 <div className="flex flex-column" style={{ padding: '20px' }}>
                     
                     {resourceFiles.length === 0 && resourceFolders.length === 0 ? (
@@ -936,6 +982,16 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
                 )}
             </div>
         </div>
+        
+        {/* Drag and Drop Overlay */}
+        {isDraggingOver && (
+            <div className="drop-overlay">
+                <div className="flex flex-column gap-15">
+                    <img src={IconFileAttach} alt="File Icon" height="80" />
+                    <p className="text-mega">Drop files here to upload to Resources</p>
+                </div>
+            </div>
+        )}
         </>
     );
 });
