@@ -18,10 +18,10 @@ export default function SettingsPage() {
 
     return (
         <div className="sheet-container">
-            <main>
-                <div className="flex flex-row">
+            <main style={{ overflow: 'hidden' }}>
+                <div className="flex flex-row" style={{ height: '100%' }}>
                     <Drawer isOpen={true} onClose={() => {}} />
-                    <div className="settings-content  flex flex-column flex-expanded">
+                    <div className="settings-content flex flex-column flex-expanded scroll-y">
                         {/* Tab Navigation */}
                         <div className="pad-20 padl-30 flex flex-row flex-row-center gap-25">
                             <p 
@@ -125,7 +125,8 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                     </div>
-
+                                    <br></br>
+                                    <br></br>
                                 </div>
                             )}
 
