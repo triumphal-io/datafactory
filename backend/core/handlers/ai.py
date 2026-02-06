@@ -17,7 +17,7 @@ from .mcp import get_mcp_tools, execute_mcp_tool
 
 # Load environment variables from root folder
 env_path = Path(__file__).resolve().parents[3] / '.env'
-load_dotenv(dotenv_path=env_path)
+load_dotenv(dotenv_path=env_path) 
 
 # os.environ['LITELLM_LOG'] = 'DEBUG'
 
@@ -869,6 +869,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     # completion_params['temperature'] = 1.0  # REQUIRED for Gemini 3
     # Main conversation loop - continues until AI decides no more tool calls needed
     # Safety: Limit iterations to prevent infinite tool calling loops
+    import litellm
     tool_iteration_count = 0
     
     while True:
@@ -902,7 +903,6 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
             # print(conversation)
             # Call LiteLLM with full conversation history and available tools
             # Model decides whether to respond directly or call tools
-            import litellm
             response = litellm.completion(**completion_params)
             
             # Validate response has choices before accessing
