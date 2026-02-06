@@ -1217,34 +1217,33 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
         prompt += " You have access to uploaded files that may contain relevant information. Use tool_query_file_data to search within files if needed."
         prompt += "\n\n🚨 CRITICAL: Before calling tool_query_file_data, you MUST check the 'WORKBOOK STRUCTURE' context to verify which files exist. Look for the '## Files' section. If no files are listed, DO NOT call the tool. If files exist, use the EXACT filename shown (e.g., 'customers.csv'). DO NOT guess or make up filenames like 'companies.csv' if they don't appear in the structure. Guessing will cause errors."
 
-    # prompt += """
-    # RESEARCH PROTOCOL - When to Use Tools:
+    prompt += """
 
-    # QUERY FILES FIRST (tool_query_file_data) when:
-    # - Files are available in the workbook (listed above)
-    # - The context contains identifiers, codes, names, or keys that may be in the files
-    # - You need additional details beyond what's in the row context
-    # - The enrichment requires information that typically comes from documents
-    # - Use search_type='identifier' for exact ID/code lookups, 'query' for semantic searches
+RESEARCH PROTOCOL - When to Use Tools:
 
-    # WEB SEARCH (tool_search + tool_web_scraper) when:
-    # - Information about current/recent events, prices, news, or people
-    # - Verifying facts that change over time (positions, policies, status)
-    # - Looking up entities or terms not in your training data
-    # - No relevant files exist OR file search returned nothing useful
+1. QUERY FILES FIRST (tool_query_file_data) when:
+   - Files are available in the workbook (listed in WORKBOOK STRUCTURE under '## Files')
+   - The context contains identifiers, codes, names, or keys that may be in the files
+   - Use search_type='identifier' for exact ID/code lookups, 'query' for semantic searches
 
-    # SKIP ALL SEARCHES when:
-    # - The answer is explicitly stated in the row context
-    # - Simple logic or calculation is sufficient
-    # - You have reliable training knowledge (historical facts, definitions)
+2. WEB SEARCH (tool_search + tool_web_scraper) when:
+   - No relevant files exist in the workbook OR file search returned nothing useful
+   - Information about current/recent events, statistics, prices, news, or people
+   - Verifying facts that change over time (populations, positions, policies, status)
+   - Looking up entities or terms not found in uploaded files
+   - Use tool_search FIRST to find relevant sources, then tool_web_scraper to get details
 
-    # SEARCH GUIDELINES:
-    # 1. Prioritize file queries over web searches when files are available
-    # 2. For files: Search relevant file UUIDs if known, or omit file_ids to search all
-    # 3. For web: Use 1-5 targeted keywords, scrape authoritative sources first
-    # 4. Limits: Max 3-4 web searches and 3 scrapes per enrichment
-    # 5. If nothing found after proper research, respond: "Not found"
-    # """
+3. SKIP ALL SEARCHES when:
+   - The answer is explicitly stated in the row context
+   - Simple logic or calculation is sufficient
+   - You have reliable training knowledge (well-known historical facts, definitions, stable data)
+
+SEARCH GUIDELINES:
+- Prioritize file queries over web searches when files are available
+- For web: Use 1-5 targeted keywords, scrape authoritative sources first
+- Max 3-4 web searches and 3 scrapes per enrichment
+- If nothing found after proper research, respond: "Not found"
+"""
     
     # Create a temporary conversation for enrichment tracking
     Conversation = apps.get_model('core', 'Conversation')
