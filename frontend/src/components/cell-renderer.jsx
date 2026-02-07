@@ -23,14 +23,15 @@ const getCellMeta = (cellData) => {
     return null;
 };
 
-const CellRenderer = ({ 
-    value, 
-    columnType, 
-    columnOptions, 
-    isSelected, 
+const CellRenderer = ({
+    value,
+    columnType,
+    columnOptions,
+    isSelected,
     onEdit,
     rowIndex,
-    colIndex 
+    colIndex,
+    onDropdownToggle
 }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -61,13 +62,39 @@ const CellRenderer = ({
     useEffect(() => {
         if (dropdownOpen && triggerRef.current) {
             const rect = triggerRef.current.getBoundingClientRect();
-            setDropdownPosition({
-                top: rect.bottom + 12,
-                left: rect.left - 13,
-                width: Math.max(rect.width + 25, 150)
-            });
+            const dropdownMaxHeight = 200;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+
+            if (spaceBelow < dropdownMaxHeight + 20 && spaceAbove > dropdownMaxHeight + 20) {
+                // Open above the trigger
+                setDropdownPosition({
+                    bottom: window.innerHeight - rect.top + 4,
+                    left: rect.left - 13,
+                    width: Math.max(rect.width + 25, 150),
+                    openAbove: true
+                });
+            } else {
+                // Open below the trigger (default)
+                setDropdownPosition({
+                    top: rect.bottom + 12,
+                    left: rect.left - 13,
+                    width: Math.max(rect.width + 25, 150),
+                    openAbove: false
+                });
+            }
+        } else if (!dropdownOpen && onDropdownToggle) {
+            onDropdownToggle(false);
         }
     }, [dropdownOpen]);
+
+    // Notify parent after dropdown renders with correct position
+    useEffect(() => {
+        if (dropdownOpen && dropdownRef.current && onDropdownToggle) {
+            const dropdownRect = dropdownRef.current.getBoundingClientRect();
+            onDropdownToggle(true, { row: rowIndex, col: colIndex, dropdownRect, openAbove: dropdownPosition.openAbove });
+        }
+    }, [dropdownPosition]);
 
     // Render Select field
     const renderSelect = () => {
@@ -117,12 +144,13 @@ const CellRenderer = ({
                         )}
                     </div>
                     {dropdownOpen && (
-                        <div 
+                        <div
                             ref={dropdownRef}
                             className="dropdown-menu"
                             style={{
                                 position: 'fixed',
-                                top: `${dropdownPosition.top}px`,
+                                top: dropdownPosition.openAbove ? undefined : `${dropdownPosition.top}px`,
+                                bottom: dropdownPosition.openAbove ? `${dropdownPosition.bottom}px` : undefined,
                                 left: `${dropdownPosition.left}px`,
                                 width: `${dropdownPosition.width}px`,
                                 backgroundColor: '#2a2a2a',
@@ -261,12 +289,13 @@ const CellRenderer = ({
                         )}
                     </div>
                     {dropdownOpen && (
-                        <div 
+                        <div
                             ref={dropdownRef}
                             className="dropdown-menu"
                             style={{
                                 position: 'fixed',
-                                top: `${dropdownPosition.top}px`,
+                                top: dropdownPosition.openAbove ? undefined : `${dropdownPosition.top}px`,
+                                bottom: dropdownPosition.openAbove ? `${dropdownPosition.bottom}px` : undefined,
                                 left: `${dropdownPosition.left}px`,
                                 width: `${dropdownPosition.width}px`,
                                 backgroundColor: '#2a2a2a',
@@ -511,12 +540,13 @@ const CellRenderer = ({
                         )}
                     </div>
                     {dropdownOpen && (
-                        <div 
+                        <div
                             ref={dropdownRef}
                             className="dropdown-menu"
                             style={{
                                 position: 'fixed',
-                                top: `${dropdownPosition.top}px`,
+                                top: dropdownPosition.openAbove ? undefined : `${dropdownPosition.top}px`,
+                                bottom: dropdownPosition.openAbove ? `${dropdownPosition.bottom}px` : undefined,
                                 left: `${dropdownPosition.left}px`,
                                 width: `${dropdownPosition.width}px`,
                                 backgroundColor: '#2a2a2a',

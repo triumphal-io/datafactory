@@ -461,6 +461,34 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
         }
     };
 
+    const handlePaste = (e) => {
+        // Prevent default paste behavior
+        e.preventDefault();
+        
+        // Get plain text from clipboard
+        const text = e.clipboardData.getData('text/plain');
+        
+        // Insert plain text at cursor position
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            range.deleteContents();
+            
+            // Insert text node
+            const textNode = document.createTextNode(text);
+            range.insertNode(textNode);
+            
+            // Move cursor to end of inserted text
+            range.setStartAfter(textNode);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+        
+        // Trigger input event to update state
+        handleInput({ target: e.target });
+    };
+
     const handleInput = (e) => {
         if (isComposingRef.current) return;
         
@@ -918,6 +946,7 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
                             aria-multiline="true"
                             data-placeholder='How can I help you today?'
                             onInput={handleInput}
+                            onPaste={handlePaste}
                             onKeyDown={handleKeyDown}
                             onCompositionStart={() => isComposingRef.current = true}
                             onCompositionEnd={() => {

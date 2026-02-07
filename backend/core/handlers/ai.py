@@ -1344,26 +1344,26 @@ SEARCH GUIDELINES:
     if result and isinstance(result, str):
         # Remove common prefixes and clean up the response
         result = result.strip()
-        
+
         # For select/multiselect types, try to extract the option from quotes or end of sentence
         if data_type in ['select', 'multiselect'] and options:
             # Check if any option appears in the result
             for option in options:
                 if option.lower() in result.lower():
-                    # Return the exact option (preserving case)
-                    return option
-        
+                    result = option
+                    break
+
         # Try to extract value from common patterns like "The answer is X" or "X is the answer"
         # Look for quoted values
         import re
         quoted_match = re.search(r'"([^"]+)"', result)
         if quoted_match:
-            return quoted_match.group(1)
-        
-        # Look for patterns like "is X" at the end
-        is_match = re.search(r'is\s+"?([^."]+)"?\.?$', result, re.IGNORECASE)
-        if is_match:
-            return is_match.group(1).strip()
+            result = quoted_match.group(1)
+        else:
+            # Look for patterns like "is X" at the end
+            is_match = re.search(r'is\s+"?([^."]+)"?\.?$', result, re.IGNORECASE)
+            if is_match:
+                result = is_match.group(1).strip()
     
     # Return result with metadata if requested
     if return_metadata:
