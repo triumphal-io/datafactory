@@ -34,6 +34,9 @@ MAX_TOOLS_PER_TURN = 15  # Maximum number of tools that can be called in one ite
 
 AI_MAX_TOKENS = 2048  # Max tokens for AI responses (adjust based on model capabilities)
 
+# Reusable DDGS client to avoid creating new HTTP sessions per search
+_ddgs_client = DDGS()
+
 
 def _get_provider_from_model(model: str | None) -> str | None:
     if not model:
@@ -1416,7 +1419,7 @@ def tool_search(keyword):
     Returns:
         str: JSON string containing list of search results with title, href, and body
     """
-    results = DDGS().text(keyword, region='in-en', safesearch='off', backend="auto")
+    results = _ddgs_client.text(keyword, region='in-en', safesearch='off', backend="auto")
     
     # Filter results to only include title, href, and body (snippet)
     filtered_results = []
