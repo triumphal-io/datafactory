@@ -1,10 +1,12 @@
 # DataFactory
 
-### Spreadsheet AI /  Agents in Every Cell
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![GitHub stars](https://img.shields.io/github/stars/rohanashik/datafactory)](https://github.com/rohanashik/datafactory/stargazers)
 
+### Spreadsheet AI / Agents in Every Cell
 
-DataFactory is an AI-powered spreadsheet platform that combines the flexibility of traditional spreadsheets with advanced AI capabilities for data enrichment, analysis, and knowledge extraction. 
-
+DataFactory is an AI-powered spreadsheet platform that combines the flexibility of traditional spreadsheets with advanced AI capabilities for data enrichment, analysis, and knowledge extraction.
 
 Built on Django and React, it enables users to work with tabular data alongside uploaded documents (CSV, XLSX, PDF, DOCX, PPTX, TXT, MD) in a unified workspace, leveraging large language models for intelligent automation.
 
@@ -13,34 +15,31 @@ The core idea is to create **workbooks** that contain:
 - **Resources**: A document library where you can upload and organize files for AI-powered querying
 - **AI Assistant**: A conversational interface that can manipulate sheets, query documents, search the web, and enrich data using RAG (Retrieval-Augmented Generation)
 
-Unlike traditional spreadsheets, DataFactory allows you to ask natural language questions about your uploaded documents, automatically populate spreadsheet cells using AI, link spreadsheet rows to relevant files, and perform bulk enrichment operations across thousands of rows—all while maintaining real-time collaboration through WebSockets.
+Unlike traditional spreadsheets, DataFactory allows you to ask natural language questions about your uploaded documents, automatically populate spreadsheet cells using AI, link spreadsheet rows to relevant files, and perform bulk enrichment operations across thousands of rows—all while maintaining real-time updates through WebSockets.
 
 ## Product Demo
 
 https://github.com/user-attachments/assets/0a473cab-0bbf-4011-80d5-a009e9b39ca8
 
-
 ## Features
+
 - **Spreadsheet Manipulation**: Create and edit sheets with AI assistance
 - **Enrich Data**: Bulk enrich thousands of cells individually using AI
 - **File Processing**: Upload and extract content from CSV, XLSX, PDF, DOCX, PPTX, TXT, MD
 - **RAG-based Querying**: Query uploaded documents using semantic search
 - **Web Search & Scraping**: AI can search the web and scrape content
-- **Real-time Collaboration**: WebSocket support for live updates
-
+- **Real-time Updates**: WebSocket support for live updates
+- **Multi-provider AI**: Configure OpenAI, Anthropic, or Google models per workbook
+- **MCP Integration**: Connect external AI tool servers
 
 ## Tech Stack
-- **Backend**: [Django](https://github.com/django/django), Django REST Framework, Playwright (for web scraping), LangChain, FAISS
-- **Frontend**: [React](https://github.com/facebook/react), Vite, Tailwind CSS, React Query, Socket.IO
-- **Database**: SQLite (for development), PostgreSQL (recommended for production)
-- **AI Models**: OpenAI, Anthropic, Gemini
-- **Libraries**: 
-    - [Litellm](https://github.com/BerriAI/litellm)
-    - [ChromaDB](https://github.com/chroma-core/chroma)
-    - [Pandas](https://github.com/pandas-dev/pandas)
-    - [python-docx](https://github.com/python-openxml/python-docx)
-    - [python-pptx](https://github.com/scanny/python-pptx)
 
+- **Backend**: [Django](https://github.com/django/django), Django REST Framework, [Django Channels](https://github.com/django/channels) (WebSockets), Playwright (web scraping)
+- **Frontend**: [React](https://github.com/facebook/react), [Vite](https://github.com/vitejs/vite)
+- **AI**: [LiteLLM](https://github.com/BerriAI/litellm) (multi-provider abstraction for OpenAI, Anthropic, Gemini)
+- **Vector Search**: [ChromaDB](https://github.com/chroma-core/chroma) (embeddings and RAG)
+- **Database**: SQLite (development), PostgreSQL (recommended for production)
+- **Libraries**: [Pandas](https://github.com/pandas-dev/pandas), [python-docx](https://github.com/python-openxml/python-docx), [python-pptx](https://github.com/scanny/python-pptx)
 
 ## Setup
 
@@ -57,12 +56,18 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-3. Run migrations:
+3. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your API keys (at minimum one LLM provider key)
+```
+
+4. Run migrations:
 ```bash
 python manage.py migrate
 ```
 
-4. Start the backend server:
+5. Start the backend server:
 ```bash
 python manage.py runserver 0.0.0.0:50
 ```
@@ -80,5 +85,12 @@ npm install
 npm run dev
 ```
 
-The frontend will run on port 80 and proxy `/api` requests to the backend on port 50.
+The frontend runs on port 5173 and proxies `/api` requests to the backend on port 50.
 
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started, branch naming conventions, commit message format, and the PR process.
+
+## License
+
+DataFactory is licensed under the [GNU Affero General Public License v3.0](LICENSE). See the [LICENSE](LICENSE) file for details.
