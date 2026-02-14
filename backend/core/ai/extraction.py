@@ -411,7 +411,7 @@ def process_pending_files():
                 file_extension = os.path.splitext(file_instance.filename)[1].lower()
                 if file_extension in ['.csv', '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.txt', '.md', '.pptx', '.ppt']:
                     try:
-                        from core.handlers.knowledge import index_file, delete_file_chunks
+                        from core.ai.knowledge import index_file, delete_file_chunks
                         
                         # Delete old chunks first (in case of re-indexing)
                         # This prevents duplicate ID errors

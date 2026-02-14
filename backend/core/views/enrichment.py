@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
-from core.handlers import ai
+from core.ai import ai
 
 
 @api_view(['POST'])
@@ -27,7 +27,7 @@ def api_enrich(request, action):
 @permission_classes([AllowAny])
 def api_bulk_enrich(request):
     """Bulk enrichment endpoint - accepts multiple cells and processes them with threading"""
-    from core.handlers.enrich import enricher
+    from core.ai.enrich import enricher
     
     try:
         body = json.loads(request.body)

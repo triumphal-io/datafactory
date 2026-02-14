@@ -70,7 +70,7 @@ def api_mcp_servers(request, action):
         )
         
         # Reload MCP manager with new servers
-        from core.handlers import mcp
+        from core.ai import mcp
         mcp.reload_mcp_manager()
 
         # Force tool discovery to populate DB and get count
@@ -137,7 +137,7 @@ def api_mcp_servers(request, action):
         server.save()
         
         # Reload MCP manager with updated servers
-        from core.handlers import mcp
+        from core.ai import mcp
         mcp.reload_mcp_manager()
         
         # Refresh tools if enabled (force rediscovery)
@@ -194,7 +194,7 @@ def api_mcp_servers(request, action):
             response['status'] = 'success'
             
             # Reload MCP manager after deletion
-            from core.handlers import mcp
+            from core.ai import mcp
             mcp.reload_mcp_manager()
         except MCPServer.DoesNotExist:
             response['message'] = 'MCP server not found'

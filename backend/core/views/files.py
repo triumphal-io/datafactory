@@ -6,8 +6,8 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
 from core.models import Workbook, File, Folder
-from core.handlers import knowledge
-from core.handlers.extraction import start_background_processing
+from core.ai import knowledge
+from core.ai.extraction import start_background_processing
 
 
 @api_view(['GET', 'POST', 'DELETE', 'PATCH'])

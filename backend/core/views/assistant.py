@@ -7,8 +7,8 @@ from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
 from core.models import Workbook, File, Conversation
-from core.handlers import ai
-from core.handlers.extraction import start_background_processing
+from core.ai import ai
+from core.ai.extraction import start_background_processing
 
 
 @api_view(['POST'])

@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
 from core.models import Workbook, Folder
-from core.handlers import knowledge
+from core.ai import knowledge
 
 
 @api_view(['GET', 'POST', 'DELETE', 'PATCH'])

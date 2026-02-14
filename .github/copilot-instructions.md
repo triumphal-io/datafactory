@@ -62,7 +62,7 @@ The assistant uses a **client-side tool execution** model (not server-side):
 3. Frontend sends tool results back to `/api/workbooks/{uuid}/assistant/respond`
 4. Backend continues conversation with tool results
 
-**Tool categories** (see [handlers/ai.py](backend/core/handlers/ai.py)):
+**Tool categories** (see [ai/ai.py](backend/core/ai/ai.py)):
 - `get_ai_tools()`: Web search (`tool_search`), web scraping (`tool_web_scraper`)
 - `get_workbook_tools()`: Get workbook structure (`tool_get_workbook_structure`), view sheet data (`tool_get_sheet_data`)
 - `get_file_tools()`: Read file content (`tool_read_file`), RAG-based file querying (`tool_query_file_data`)
@@ -73,18 +73,18 @@ The assistant uses a **client-side tool execution** model (not server-side):
 - **File Tools** (`tool_query_file_data`, `tool_read_file`) → Query uploaded Resources (CSV/XLSX/PDF/DOCX/TXT/MD/PPTX files in Resources section)
 - **Workbook Tools** (`tool_get_workbook_structure`, `tool_get_sheet_data`) → Get overview of workbook and view data from other sheets
 
-**AI Conversation Limits** (see [handlers/ai.py](backend/core/handlers/ai.py)):
+**AI Conversation Limits** (see [ai/ai.py](backend/core/ai/ai.py)):
 - `MAX_CONVERSATION_MESSAGES = 30`: Maximum messages to keep (excludes system message)
 - `MAX_TOOL_ITERATIONS = 5`: Maximum tool calling cycles per request
 - `MAX_TOOLS_PER_TURN = 10`: Maximum parallel tool calls per iteration
 - `AI_MAX_TOKENS = 2048`: Maximum tokens for AI responses
 
 ### 4. File Processing Pipeline
-Files go through async processing (see [handlers/extraction.py](backend/core/handlers/extraction.py)):
+Files go through async processing (see [ai/extraction.py](backend/core/ai/extraction.py)):
 
 1. Upload → `File` model created with `is_processing=True`
 2. Background thread extracts to markdown (CSV/XLSX → tables, PDF/DOCX/PPTX/TXT/MD → text)
-3. Content indexed to ChromaDB via [handlers/knowledge.py](backend/core/handlers/knowledge.py)
+3. Content indexed to ChromaDB via [ai/knowledge.py](backend/core/ai/knowledge.py)
 4. `is_processing=False` → file ready for RAG queries
 
 **Supported file types**: CSV, XLSX, PDF, DOCX, PPTX, TXT, MD
@@ -94,7 +94,7 @@ Files go through async processing (see [handlers/extraction.py](backend/core/han
 **File Linking**: Files can be linked via the `file` datatype in columns. This enables relationship mapping between spreadsheet data and uploaded documents.
 
 ### 5. Bulk Enrichment System
-[handlers/enrich.py](backend/core/handlers/enrich.py) handles concurrent AI enrichment:
+[ai/enrich.py](backend/core/ai/enrich.py) handles concurrent AI enrichment:
 - Uses `threading.Queue` + worker threads (default: 4 concurrent)
 - Creates `BackgroundJob` models for tracking
 - Sends WebSocket updates: `queued` → `generating` → `completed`/`failed`
@@ -135,13 +135,13 @@ python manage.py migrate
 ```
 
 ### Adding New AI Tools
-1. Define tool in [handlers/ai.py](backend/core/handlers/ai.py) (e.g., `get_custom_tools()`)
+1. Define tool in [ai/ai.py](backend/core/ai/ai.py) (e.g., `get_custom_tools()`)
 2. Implement tool function: `def tool_your_name(params):`
 3. Add to tool list in `api_assistant` view ([views.py](backend/core/views.py))
 4. Frontend auto-receives tool calls via chat API
 
 ### Working with ChromaDB
-Collections use OpenAI `text-embedding-3-small`. Key functions in [handlers/knowledge.py](backend/core/handlers/knowledge.py):
+Collections use OpenAI `text-embedding-3-small`. Key functions in [ai/knowledge.py](backend/core/ai/knowledge.py):
 - `index_csv_file()`, `index_xlsx_file()` → Create row-level chunks with metadata
 - `query_file_data()` → Semantic search with metadata filtering
 
@@ -156,7 +156,7 @@ Collections use OpenAI `text-embedding-3-small`. Key functions in [handlers/know
 
 ## File Organization
 
-- **Handlers**: Business logic in [backend/core/handlers/](backend/core/handlers/)—AI, extraction, knowledge, enrichment
+- **AI**: Business logic in [backend/core/ai/](backend/core/ai/)—AI, extraction, knowledge, enrichment
 - **API Views**: All in [backend/core/views.py](backend/core/views.py) (single large file, ~900 lines)
 - **Models**: Single file [backend/core/models.py](backend/core/models.py) (Workbook model for workbooks)
 - **Frontend Components**: Feature-based in [frontend/src/components/](frontend/src/components/)—assistant, workbook-view, files-view, sheet-view
@@ -180,7 +180,7 @@ Collections use OpenAI `text-embedding-3-small`. Key functions in [handlers/know
 ## Settings & Configuration
 
 - Stage-based config via `STAGE='local'` in [settings.py](backend/datafactory/settings.py)
-- Environment variables loaded from root `.env` (see [handlers/ai.py](backend/core/handlers/ai.py) line 14)
+- Environment variables loaded from root `.env` (see [ai/ai.py](backend/core/ai/ai.py) line 14)
 - Default AI model: `DEFAULT_AI_MODEL='gpt-5-nano'`
 
 ## Planned Features (from NOTES.md)
