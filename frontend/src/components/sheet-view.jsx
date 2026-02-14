@@ -1,52 +1,19 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import ExcelJS from 'exceljs';
-import IconStar from '../assets/logo-icon.svg';
-import IconDelete from '../assets/delete.svg';
 import IconDeleteBlack from '../assets/delete-black.svg';
-import IconAdd from '../assets/add-circle.svg';
 import IconAddBlack from '../assets/add-black.svg';
-import IconExport from '../assets/export.svg';
 import { apiFetch } from '../utils/api';
 import { useWebSocket } from '../utils/websocket-context';
 import { DEFAULT_AI_MODEL } from '../utils/utils';
-import IconCheck from '../assets/checkmark.svg';
-import IconDismiss from '../assets/dismiss.svg';
-import IconChevronDown from '../assets/chevron-down.svg';
-import IconText from '../assets/text.svg';
-import IconNumber from '../assets/number.svg';
-import IconSelect from '../assets/select.svg';
-import IconMultiselect from '../assets/multiselect.svg';
-import IconMail from '../assets/mail.svg';
-import IconCheckbox from '../assets/checkbox.svg';
-import IconUrl from '../assets/url.svg';
-import IconFile from '../assets/file.svg';
 import IconChevronRight from '../assets/chevron-right-black.svg';
 import CellRenderer from './cell-renderer.jsx';
-import IconDocument from '../assets/document.svg';
+import SheetInfoPanel from './sheet-info-panel.jsx';
+import SheetToolbar from './sheet-toolbar.jsx';
+import SheetColumnHeader from './sheet-column-header.jsx';
+import { getCellValue, getCellMeta, createCellWithMeta } from '../utils/sheet-helpers.jsx';
+import { useSheetSelection } from '../hooks/use-sheet-selection';
+import { useSheetKeyboard } from '../hooks/use-sheet-keyboard';
 
-// Helper function to get icon based on column type
-const getColumnTypeIcon = (type) => {
-    switch (type) {
-        case 'text':
-            return IconText;
-        case 'number':
-            return IconNumber;
-        case 'checkbox':
-            return IconCheckbox;
-        case 'select':
-            return IconSelect;
-        case 'multiselect':
-            return IconMultiselect;
-        case 'url':
-            return IconUrl;
-        case 'email':
-            return IconMail;
-        case 'file':
-            return IconFile;
-        default:
-            return IconText;
-    }
-};
 
 // Inject CSS for enrichment status indicators and AI changes
 if (typeof document !== 'undefined' && !document.getElementById('enrichment-styles')) {
@@ -92,210 +59,24 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
     document.head.appendChild(style);
 }
 
-// Helper function to convert column index to Excel-style letter (A, B, C, ..., Z, AA, AB, ...)
-const getColumnLetter = (index) => {
-    let letter = '';
-    let num = index;
-    while (num >= 0) {
-        letter = String.fromCharCode(65 + (num % 26)) + letter;
-        num = Math.floor(num / 26) - 1;
-    }
-    return letter;
-};
 
-// Helper function to extract display value from cell (handles both simple values and metadata objects)
-const getCellValue = (cellData) => {
-    if (cellData === null || cellData === undefined) {
-        return '';
-    }
-    // If cell has metadata structure, extract the value
-    if (typeof cellData === 'object' && cellData.value !== undefined) {
-        return cellData.value;
-    }
-    // Otherwise return as-is (string, number, etc.)
-    return cellData;
-};
-
-// Helper function to get cell metadata
-const getCellMeta = (cellData) => {
-    if (typeof cellData === 'object' && cellData.meta !== undefined) {
-        return cellData.meta;
-    }
-    return null;
-};
-
-// Helper function to create cell value with metadata
-const createCellWithMeta = (value, meta = null) => {
-    return { value, meta };
-};
-
-// Helper function to humanize tool execution display
-const humanizeToolExecution = (tool) => {
-    const { tool: toolName, args, summary } = tool;
-
-    let mainText = '';
-    let summaryText = summary;
-    switch (toolName) {
-        case 'tool_search':
-            mainText = `Searched for "${args.keyword || ''}"`;
-            // Parse JSON results and display as chips
-            let searchResults = [];
-            try {
-                searchResults = JSON.parse(summary);
-            } catch (e) {
-                // Fallback to old counting method if parsing fails
-                const results = (summary.match(/href/g) || []).length;
-                summaryText = `Found ${results || 0} results`;
-                break;
-            }
-            
-            if (searchResults && searchResults.length > 0) {
-                summaryText = (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                        {searchResults.map((result, idx) => {
-                            // Extract domain for favicon
-                            let faviconUrl = '';
-                            let domain = '';
-                            try {
-                                const url = new URL(result.href);
-                                domain = url.hostname.replace('www.', '');
-                                faviconUrl = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=16`;
-                            } catch (e) {
-                                // Invalid URL, no favicon
-                            }
-
-                            return (
-                                <a
-                                    key={idx}
-                                    href={result.href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title={result.body || result.title || result.href}
-                                    style={{
-                                        display: 'flex',
-                                        // alignItems: 'start',
-                                        gap: '8px',
-                                        padding: '4px 6px',
-                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                        borderRadius: '4px',
-                                        textDecoration: 'none',
-                                        color: '#e0e0e0',
-                                        transition: 'background-color 0.2s',
-                                        fontSize: '10px',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
-                                >
-                                    {faviconUrl && (
-                                        <img
-                                            src={faviconUrl}
-                                            alt=""
-                                            style={{
-                                                width: '16px',
-                                                height: '16px',
-                                                flexShrink: 0,
-                                                marginTop: '2px',
-                                                borderRadius: '2px'
-                                            }}
-                                            onError={(e) => e.target.style.display = 'none'}
-                                        />
-                                    )}
-                                    <div>
-                                        <div style={{
-                                            fontSize: '10px',
-                                            color: '#e0e0e0',
-                                            marginBottom: '2px',
-                                            // fontStyle: 'normal',
-                                            // overflow: 'hidden',
-                                            // textOverflow: 'ellipsis',
-                                            // whiteSpace: 'nowrap'
-                                        }}>
-                                            {result.title}
-                                        </div>
-                                        {/* {result.body && (
-                                            <div style={{
-                                                color: '#b0b0b0',
-                                                fontSize: '9px',
-                                                lineHeight: '1.4',
-                                                display: '-webkit-box',
-                                                WebkitLineClamp: 2,
-                                                WebkitBoxOrient: 'vertical',
-                                                overflow: 'hidden'
-                                            }}>
-                                                {result.body}
-                                            </div>
-                                        )} */}
-                                        {/* <div style={{
-                                            color: '#808080',
-                                            fontSize: '8px',
-                                            marginTop: '2px',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap'
-                                        }}>
-                                            {domain}
-                                        </div> */}
-                                    </div>
-                                </a>
-                            );
-                        })}
-                    </div>
-                );
-            } else {
-                summaryText = 'No results found';
-            }
-            break;
-
-        case 'tool_web_scraper':
-            mainText = `Read ${args.url || ''}`;
-            break;
-
-        case 'tool_query_file_data':
-            if (args.search_type === 'identifier') {
-                mainText = `Searched for ID "${args.query || ''}" in ${args.filename || ''}`;
-            } else {
-                mainText = `Queried "${args.query || ''}" in ${args.filename || ''}`;
-            }
-            break;
-
-        case 'tool_get_sheet_data':
-            mainText = `Retrieved data from sheet ${args.sheet_identifier || ''}`;
-            break;
-
-        case 'tool_read_file':
-            mainText = `Read file ${args.file_id || ''}`;
-            break;
-
-        default:
-            // For unrecognized tools, show tool name and args as JSON
-            mainText = (
-                <>
-                    <span style={{ fontWeight: '600', color: '#e0e0e0' }}>{toolName}</span>
-                    {args && Object.keys(args).length > 0 && (
-                        <>
-                            <br />
-                            <span style={{ opacity: 0.8 }}>
-                                {JSON.stringify(args, null, 2)}
-                            </span>
-                        </>
-                    )}
-                </>
-            );
-    }
-
-    return { mainText, summary: summaryText || '' };
-};
 
 const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
     // WebSocket connection
     const { isConnected } = useWebSocket();
     
+    // Selection state (extracted to hook)
+    const {
+        selectedCells, setSelectedCells,
+        selectedRows, setSelectedRows,
+        selectedColumns, setSelectedColumns,
+        toggleCellSelection, selectCellRange,
+        clearSelection,
+        checkCompleteRowsSelected, checkCompleteColumnsSelected,
+    } = useSheetSelection();
+
     // State management
     const [actualSheetId, setActualSheetId] = useState(null); // Store actual UUID from backend
-    const [selectedCells, setSelectedCells] = useState(new Set());
-    const [selectedRows, setSelectedRows] = useState(new Set());
-    const [selectedColumns, setSelectedColumns] = useState(new Set());
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartCell, setDragStartCell] = useState(null);
     const [currentEditingCell, setCurrentEditingCell] = useState(null);
@@ -317,8 +98,6 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     });
     const [isLoading, setIsLoading] = useState(true);
     const [columnWidths, setColumnWidths] = useState({});
-    const [isResizing, setIsResizing] = useState(false);
-    const [resizingColumn, setResizingColumn] = useState(null);
     const [overlayEditor, setOverlayEditor] = useState(null);
     const [overlayEditorHeight, setOverlayEditorHeight] = useState(0);
     const [pendingAiChanges, setPendingAiChanges] = useState(new Set());
@@ -335,8 +114,6 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const isSelectionModeRef = useRef(false);
     const clickTimerRef = useRef(null);
     const saveTimerRef = useRef(null);
-    const resizeStartXRef = useRef(null);
-    const resizeStartWidthRef = useRef(null);
     const loadedDataRef = useRef(null);
     const autoScrollIntervalRef = useRef(null);
     const lastMousePositionRef = useRef({ x: 0, y: 0 });
@@ -521,8 +298,8 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     useEffect(() => {
         const totalColumns = sheetData.columns.length;
         const totalRows = sheetData.rows.length;
-        const completeRowsSelected = checkCompleteRowsSelected();
-        const completeColumnsSelected = checkCompleteColumnsSelected();
+        const completeRowsSelected = checkCompleteRowsSelected(sheetData);
+        const completeColumnsSelected = checkCompleteColumnsSelected(sheetData);
 
         setShowDeleteRow(
             totalColumns > 0 && 
@@ -535,102 +312,6 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
             (selectedColumns.size > 0 || completeColumnsSelected.length > 0)
         );
     }, [selectedCells, selectedRows, selectedColumns, sheetData]);
-
-    // Cell selection functions
-    const selectCell = useCallback((rowIndex, colIndex) => {
-        setSelectedCells(prev => {
-            const newSet = new Set(prev);
-            newSet.add(`${rowIndex}-${colIndex}`);
-            return newSet;
-        });
-    }, []);
-
-    const deselectCell = useCallback((rowIndex, colIndex) => {
-        setSelectedCells(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(`${rowIndex}-${colIndex}`);
-            return newSet;
-        });
-    }, []);
-
-    const toggleCellSelection = useCallback((rowIndex, colIndex, event) => {
-        const cellKey = `${rowIndex}-${colIndex}`;
-        if (event.ctrlKey || event.metaKey) {
-            setSelectedCells(prev => {
-                const newSet = new Set(prev);
-                if (newSet.has(cellKey)) {
-                    newSet.delete(cellKey);
-                } else {
-                    newSet.add(cellKey);
-                }
-                return newSet;
-            });
-        } else {
-            setSelectedCells(new Set([cellKey]));
-        }
-    }, []);
-
-    const selectCellRange = useCallback((startRow, startCol, endRow, endCol) => {
-        const minRow = Math.min(startRow, endRow);
-        const maxRow = Math.max(startRow, endRow);
-        const minCol = Math.min(startCol, endCol);
-        const maxCol = Math.max(startCol, endCol);
-
-        const newSelection = new Set();
-        for (let row = minRow; row <= maxRow; row++) {
-            for (let col = minCol; col <= maxCol; col++) {
-                newSelection.add(`${row}-${col}`);
-            }
-        }
-        setSelectedCells(newSelection);
-    }, []);
-
-    const clearSelection = useCallback(() => {
-        setSelectedCells(new Set());
-        setSelectedRows(new Set());
-        setSelectedColumns(new Set());
-    }, []);
-
-    // Check complete row/column selection
-    const checkCompleteRowsSelected = useCallback(() => {
-        const totalColumns = sheetData.columns.length;
-        if (totalColumns === 0) return [];
-
-        const rowsWithAllCellsSelected = [];
-        sheetData.rows.forEach((_, rowIndex) => {
-            let allCellsSelected = true;
-            for (let colIndex = 0; colIndex < totalColumns; colIndex++) {
-                if (!selectedCells.has(`${rowIndex}-${colIndex}`)) {
-                    allCellsSelected = false;
-                    break;
-                }
-            }
-            if (allCellsSelected) {
-                rowsWithAllCellsSelected.push(rowIndex);
-            }
-        });
-        return rowsWithAllCellsSelected;
-    }, [selectedCells, sheetData]);
-
-    const checkCompleteColumnsSelected = useCallback(() => {
-        const totalRows = sheetData.rows.length;
-        const totalColumns = sheetData.columns.length;
-        const columnsWithAllCellsSelected = [];
-
-        for (let colIndex = 0; colIndex < totalColumns; colIndex++) {
-            let allCellsSelected = true;
-            for (let rowIndex = 0; rowIndex < totalRows; rowIndex++) {
-                if (!selectedCells.has(`${rowIndex}-${colIndex}`)) {
-                    allCellsSelected = false;
-                    break;
-                }
-            }
-            if (allCellsSelected) {
-                columnsWithAllCellsSelected.push(colIndex);
-            }
-        }
-        return columnsWithAllCellsSelected;
-    }, [selectedCells, sheetData]);
 
     // Column management
     const handleAddColumn = useCallback(() => {
@@ -668,7 +349,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const handleDeleteColumns = useCallback(() => {
         const columnsToDelete = [
             ...Array.from(selectedColumns),
-            ...checkCompleteColumnsSelected()
+            ...checkCompleteColumnsSelected(sheetData)
         ];
         const uniqueColumns = [...new Set(columnsToDelete)].sort((a, b) => b - a);
 
@@ -684,7 +365,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
         }));
 
         clearSelection();
-    }, [selectedColumns, checkCompleteColumnsSelected, clearSelection]);
+    }, [selectedColumns, checkCompleteColumnsSelected, clearSelection, sheetData]);
 
     // Row management
     const handleAddRow = useCallback(() => {
@@ -697,7 +378,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     const handleDeleteRows = useCallback(() => {
         const rowsToDelete = [
             ...Array.from(selectedRows),
-            ...checkCompleteRowsSelected()
+            ...checkCompleteRowsSelected(sheetData)
         ];
         const uniqueRows = [...new Set(rowsToDelete)].sort((a, b) => b - a);
 
@@ -710,233 +391,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
         }));
 
         clearSelection();
-    }, [selectedRows, checkCompleteRowsSelected, clearSelection]);
-
-    // Reusable info panel content renderer
-    const renderInfoPanelContent = (row, col) => {
-        const cellData = sheetData.rows[row]?.[col];
-        const cellMeta = getCellMeta(cellData);
-
-        if (cellMeta && cellMeta.process && cellMeta.process.length > 0) {
-            const filteredTools = cellMeta.process.filter(tool =>
-                tool.tool !== 'tool_get_workbook_structure'
-            );
-
-            return (
-                <>
-                    <p style={{ margin: '0 0 12px 0', fontWeight: '600', color: '#e0e0e0' }}>Process</p>
-
-                    <div style={{ position: 'relative', paddingLeft: '8px' }}>
-                        {/* Continuous vertical line for entire timeline */}
-                        <div style={{
-                            position: 'absolute',
-                            left: '3.5px',
-                            top: '10px',
-                            bottom: '10px',
-                            width: '1px',
-                            backgroundColor: '#5b5b5b'
-                        }} />
-
-                        {filteredTools.map((tool, idx) => {
-                            const { mainText, summary } = humanizeToolExecution(tool);
-                            const isExpanded = expandedToolSteps.has(idx);
-
-                            return (
-                                <div key={idx} style={{
-                                    position: 'relative',
-                                    marginBottom: idx === filteredTools.length - 1 ? '0' : '16px',
-                                    paddingLeft: '7.5px'
-                                }}>
-                                    {/* Timeline dot */}
-                                    <div style={{
-                                        position: 'absolute',
-                                        left: '-7.5px',
-                                        top: '4px',
-                                        width: '6px',
-                                        height: '6px',
-                                        backgroundColor: '#5b5b5b',
-                                        boxSizing: 'border-box'
-                                    }} />
-
-                                    {/* Main tool description with expand/collapse functionality */}
-                                    <div
-                                        onClick={() => {
-                                            if (summary) {
-                                                setExpandedToolSteps(prev => {
-                                                    const newSet = new Set(prev);
-                                                    if (isExpanded) {
-                                                        newSet.delete(idx);
-                                                    } else {
-                                                        newSet.add(idx);
-                                                    }
-                                                    return newSet;
-                                                });
-                                            }
-                                        }}
-                                        style={{
-                                            cursor: summary ? 'pointer' : 'default',
-                                            display: 'flex',
-                                            alignItems: 'start',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        <p style={{
-                                            margin: '0',
-                                            color: '#d0d0d0',
-                                            lineHeight: '1.6',
-                                            fontSize: '10px',
-                                            wordBreak: 'break-word',
-                                            flex: 1
-                                        }}>
-                                            {mainText}
-                                        </p>
-                                        {summary && (
-                                            <img
-                                                src={IconChevronDown}
-                                                alt="Toggle"
-                                                height="10"
-                                                style={{
-                                                    marginTop: '2px',
-                                                    opacity: 0.6,
-                                                    transition: 'transform 0.2s',
-                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                                                }}
-                                            />
-                                        )}
-                                    </div>
-
-                                    {/* Collapsible summary section */}
-                                    {summary && isExpanded && (
-                                        <div style={{
-                                            paddingTop: '6px',
-                                            fontSize: '10px',
-                                            color: '#b8b8b8',
-                                            fontStyle: 'italic',
-                                            lineHeight: '1.5',
-                                        }}>
-                                            {summary}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {cellMeta.sources?.files && cellMeta.sources.files.length > 0 && (
-                        <div style={{ marginTop: '5px', paddingTop: '12px' }}>
-                            <p className='text--nano opacity-5 mrgnb-5'>Source Files:</p>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
-                                {cellMeta.sources.files.map((file, idx) => (
-                                    <div
-                                        key={idx}
-                                        title={file}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px',
-                                            padding: '4px 8px',
-                                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                            borderRadius: '4px',
-                                            fontSize: '10px',
-                                            color: '#e0e0e0',
-                                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                                            maxWidth: '200px',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap'
-                                        }}
-                                    >
-                                        <img
-                                            src={IconDocument}
-                                            alt=""
-                                            style={{
-                                                width: '14px',
-                                                height: '14px',
-                                                flexShrink: 0,
-                                                opacity: 0.7
-                                            }}
-                                        />
-                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{file}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    {cellMeta.sources?.links && cellMeta.sources.links.length > 0 && (
-                        <div style={{ marginTop: '5px', paddingTop: '12px' }}>
-                            <p className='text--nano opacity-7 mrgnb-5'>Source Links:</p>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
-                                {cellMeta.sources.links.map((link, idx) => {
-                                    let faviconUrl = '';
-                                    let domain = '';
-                                    try {
-                                        const url = new URL(link);
-                                        domain = url.hostname.replace('www.', '');
-                                        faviconUrl = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=16`;
-                                    } catch (e) {
-                                        // Invalid URL, no favicon
-                                    }
-
-                                    return (
-                                        <a
-                                            key={idx}
-                                            href={link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            title={link}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                padding: '4px 8px',
-                                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                                borderRadius: '4px',
-                                                textDecoration: 'none',
-                                                color: '#e0e0e0',
-                                                transition: 'background-color 0.2s',
-                                                fontSize: '10px',
-                                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                                maxWidth: '250px',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
-                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
-                                        >
-                                            {faviconUrl && (
-                                                <img
-                                                    src={faviconUrl}
-                                                    alt=""
-                                                    style={{
-                                                        width: '14px',
-                                                        height: '14px',
-                                                        flexShrink: 0,
-                                                        borderRadius: '2px'
-                                                    }}
-                                                    onError={(e) => e.target.style.display = 'none'}
-                                                />
-                                            )}
-                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{domain || link}</span>
-                                        </a>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </>
-            );
-        }
-
-        return (
-            <>
-                <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#e0e0e0' }}>Information</p>
-                <p style={{ margin: 0 }}>
-                    No enrichment process information available for this cell.
-                </p>
-            </>
-        );
-    };
+    }, [selectedRows, checkCompleteRowsSelected, clearSelection, sheetData]);
 
     // Handle select/multiselect dropdown toggle for info panel
     const handleDropdownToggle = useCallback((isOpen, info) => {
@@ -1283,47 +738,30 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
         openPopupForEditColumn(colIndex);
     }, [openPopupForEditColumn]);
     
-    const handleResizeMouseDown = useCallback((colIndex, event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        
-        setIsResizing(true);
-        setResizingColumn(colIndex);
-        resizeStartXRef.current = event.clientX;
-        resizeStartWidthRef.current = columnWidths[colIndex] || 160;
-    }, [columnWidths]);
-    
-    const handleResizeMouseMove = useCallback((event) => {
-        if (!isResizing || resizingColumn === null) return;
-        
-        const deltaX = event.clientX - resizeStartXRef.current;
-        const newWidth = Math.max(60, resizeStartWidthRef.current + deltaX);
-        
+    // Column width change handlers for SheetColumnHeader
+    const handleColumnWidthChange = useCallback((colIndex, newWidth) => {
         setColumnWidths(prev => ({
             ...prev,
-            [resizingColumn]: newWidth
+            [colIndex]: newWidth
         }));
-    }, [isResizing, resizingColumn]);
-    
-    const handleResizeMouseUp = useCallback(() => {
-        if (resizingColumn !== null && columnWidths[resizingColumn]) {
-            // Update sheetData to persist the column width
-            setSheetData(prev => ({
-                ...prev,
-                columns: prev.columns.map((col, idx) => 
-                    idx === resizingColumn 
-                        ? { ...col, width: columnWidths[resizingColumn] }
-                        : col
-                )
-            }));
-        }
-        
-        setIsResizing(false);
-        setResizingColumn(null);
-        resizeStartXRef.current = null;
-        resizeStartWidthRef.current = null;
-    }, [resizingColumn, columnWidths]);
-    
+    }, []);
+
+    const handleColumnWidthPersist = useCallback((colIndex) => {
+        setColumnWidths(currentWidths => {
+            if (currentWidths[colIndex]) {
+                setSheetData(prev => ({
+                    ...prev,
+                    columns: prev.columns.map((col, idx) =>
+                        idx === colIndex
+                            ? { ...col, width: currentWidths[colIndex] }
+                            : col
+                    )
+                }));
+            }
+            return currentWidths;
+        });
+    }, []);
+
     const handleSelectAllRows = useCallback((checked) => {
         if (checked) {
             // Select all cells in data rows
@@ -1471,18 +909,6 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
             };
         }
     }, [isDragging, handleMouseMove, handleAutoScroll]);
-
-    // Column resize listeners
-    useEffect(() => {
-        if (isResizing) {
-            document.addEventListener('mousemove', handleResizeMouseMove);
-            document.addEventListener('mouseup', handleResizeMouseUp);
-            return () => {
-                document.removeEventListener('mousemove', handleResizeMouseMove);
-                document.removeEventListener('mouseup', handleResizeMouseUp);
-            };
-        }
-    }, [isResizing, handleResizeMouseMove, handleResizeMouseUp]);
 
     // Click outside to deselect cells and close overlay editor
     useEffect(() => {
@@ -1742,118 +1168,18 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
         console.log('AI changes rejected and reverted');
     }, [pendingAiChanges, originalValues, clearSelection]);
 
-    // Keyboard shortcuts and paste handler
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.key === 'Escape' && !currentEditingCell) {
-                clearSelection();
-                setCurrentEditingCell(null);
-            }
-            
-            // Copy selected cells on Ctrl+C or Cmd+C
-            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && 
-                !currentEditingCell && 
-                !overlayEditor && 
-                selectedCells.size > 0 &&
-                !e.target.closest('.assistant') && 
-                e.target.tagName !== 'TEXTAREA' && 
-                e.target.tagName !== 'INPUT') {
-                e.preventDefault();
-                
-                // Get all selected cells and organize by row/column
-                const cellPositions = Array.from(selectedCells).map(cellKey => {
-                    const [row, col] = cellKey.split('-').map(Number);
-                    return { row, col };
-                });
-                
-                // Find the bounding box of selected cells
-                const minRow = Math.min(...cellPositions.map(p => p.row));
-                const maxRow = Math.max(...cellPositions.map(p => p.row));
-                const minCol = Math.min(...cellPositions.map(p => p.col));
-                const maxCol = Math.max(...cellPositions.map(p => p.col));
-                
-                // Build the grid of selected cells
-                const copyData = [];
-                for (let row = minRow; row <= maxRow; row++) {
-                    const rowData = [];
-                    for (let col = minCol; col <= maxCol; col++) {
-                        if (selectedCells.has(`${row}-${col}`)) {
-                            const cellData = sheetData.rows[row]?.[col];
-                            // Extract value from cell (handles both simple values and metadata objects)
-                            let cellValue = '';
-                            if (cellData !== null && cellData !== undefined) {
-                                if (typeof cellData === 'object' && cellData.value !== undefined) {
-                                    cellValue = cellData.value;
-                                } else {
-                                    cellValue = cellData;
-                                }
-                            }
-                            // Remove status markers if present
-                            const cleanValue = typeof cellValue === 'string' && cellValue.startsWith('__STATUS__') 
-                                ? '' 
-                                : cellValue;
-                            rowData.push(cleanValue);
-                        } else {
-                            rowData.push('');
-                        }
-                    }
-                    copyData.push(rowData.join('\t'));
-                }
-                
-                const textToCopy = copyData.join('\n');
-                navigator.clipboard.writeText(textToCopy).then(() => {
-                    console.log(`Copied ${selectedCells.size} cell(s) to clipboard`);
-                }).catch(err => {
-                    console.error('Failed to copy to clipboard:', err);
-                });
-            }
-            
-            // Clear selected cells on Backspace or Delete (only when not editing)
-            // Don't handle if target is assistant, textarea, or input elements
-            if ((e.key === 'Backspace' || e.key === 'Delete') && 
-                !currentEditingCell && 
-                !overlayEditor && 
-                selectedCells.size > 0 &&
-                !e.target.closest('.assistant') && 
-                e.target.tagName !== 'TEXTAREA' && 
-                e.target.tagName !== 'INPUT') {
-                e.preventDefault();
-                
-                // Clear all selected cells
-                setSheetData(prev => ({
-                    ...prev,
-                    rows: prev.rows.map((row, rowIndex) =>
-                        row.map((cell, colIndex) => {
-                            const cellKey = `${rowIndex}-${colIndex}`;
-                            return selectedCells.has(cellKey) ? '' : cell;
-                        })
-                    )
-                }));
-            }
-        };
-
-        const handlePaste = (e) => {
-            // Don't handle paste if target is assistant or other input/textarea elements
-            if (e.target.closest('.assistant') || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-                return;
-            }
-            
-            if (!currentEditingCell && lastClickedCellRef.current) {
-                e.preventDefault();
-                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-                if (pastedText.trim()) {
-                    handleMultiLinePaste(lastClickedCellRef.current, pastedText);
-                }
-            }
-        };
-
-        document.addEventListener('keydown', handleKeyDown);
-        document.addEventListener('paste', handlePaste);
-        return () => {
-            document.removeEventListener('keydown', handleKeyDown);
-            document.removeEventListener('paste', handlePaste);
-        };
-    }, [clearSelection, currentEditingCell, overlayEditor, handleMultiLinePaste, selectedCells, sheetData]);
+    // Keyboard shortcuts and paste handler (extracted to hook)
+    useSheetKeyboard({
+        clearSelection,
+        selectedCells,
+        sheetData,
+        setSheetData,
+        currentEditingCell,
+        setCurrentEditingCell,
+        overlayEditor,
+        handleMultiLinePaste,
+        lastClickedCellRef,
+    });
 
     // Calculate info box position based on available space
     useEffect(() => {
@@ -1877,85 +1203,24 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
     useEffect(() => {
         if (onNavigationChange) {
             onNavigationChange(
-                <div className="flex flex-row-center">
-                {pendingAiChanges.size > 0 ? (
-                    <>
-                        <div 
-                            onClick={handleAcceptAiChanges}
-                            className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                            style={{ backgroundColor: 'rgba(34, 197, 94, 0.2)' }}
-                        >
-                            <img src={IconCheck} alt="Check Icon" height="16" />
-                            <p className="text--micro">Accept Changes</p>
-                        </div>
-                        <div 
-                            onClick={handleRejectAiChanges}
-                            className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                            style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)' }}
-                        >
-                            <img src={IconDismiss} alt="Dismiss Icon" height="16" />
-                            <p className="text--micro">Reject Changes</p>
-                        </div>
-                    </>
-                ) : (
-                    <div 
-                        onClick={handleEnrichCells}
-                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                    >
-                        <img src={IconStar} alt="Star Icon" height="16" />
-                        <p className="text--micro">{enrichText}</p>
-                    </div>
-                )}
-                
-                {showDeleteRow && (
-                    <div 
-                        onClick={handleDeleteRows}
-                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                    >
-                        <img src={IconDelete} alt="Delete Icon" height="16" />
-                        <p className="text--micro">Delete Row</p>
-                    </div>
-                )}
-                
-                {showDeleteColumn && (
-                    <div 
-                        onClick={handleDeleteColumns}
-                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                    >
-                        <img src={IconDelete} alt="Delete Icon" height="16" />
-                        <p className="text--micro">Delete Column</p>
-                    </div>
-                )}
-                
-                {sheetData.columns.length > 0 && (
-                    <div 
-                        onClick={handleAddRow}
-                        className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                    >
-                        <img src={IconAdd} alt="Add Icon" height="16" />
-                        <p className="text--micro">Add Row</p>
-                    </div>
-                )}
-                
-                <div 
-                    onClick={openPopupForNewColumn}
-                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                >
-                    <img src={IconAdd} alt="Add Icon" height="16" />
-                    <p className="text--micro">Add Column</p>
-                </div>
-                
-                <div 
-                    onClick={handleExportXLSX}
-                    className="sheet-nav-menu-item pad-14 pointer flex flex-row-center gap-10"
-                >
-                    <img src={IconExport} alt="Export Icon" height="16" />
-                    <p className="text--micro">Export</p>
-                </div>
-            </div>
+                <SheetToolbar
+                    pendingAiChanges={pendingAiChanges}
+                    onAcceptAiChanges={handleAcceptAiChanges}
+                    onRejectAiChanges={handleRejectAiChanges}
+                    onEnrichCells={handleEnrichCells}
+                    enrichText={enrichText}
+                    showDeleteRow={showDeleteRow}
+                    showDeleteColumn={showDeleteColumn}
+                    onDeleteRows={handleDeleteRows}
+                    onDeleteColumns={handleDeleteColumns}
+                    onAddRow={handleAddRow}
+                    onAddColumn={openPopupForNewColumn}
+                    onExport={handleExportXLSX}
+                    hasColumns={sheetData.columns.length > 0}
+                />
             );
         }
-    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportXLSX, pendingAiChanges, handleAcceptAiChanges, handleRejectAiChanges]);
+    }, [onNavigationChange, enrichText, showDeleteRow, showDeleteColumn, handleEnrichCells, handleDeleteRows, handleDeleteColumns, handleAddRow, openPopupForNewColumn, handleExportXLSX, pendingAiChanges, handleAcceptAiChanges, handleRejectAiChanges, sheetData.columns.length]);
 
     // Expose navigation menu to parent component (for imperative access if needed)
     useImperativeHandle(ref, () => ({
@@ -2435,66 +1700,18 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                 ) : (
                     <div className="sheet-grid-container">
                         {/* Header Row */}
-                        <div className="sheet-row header-row">
-                            {sheetData.columns.length > 0 && (
-                                <div className="sheet-row-head">
-                                    <input 
-                                        type="checkbox" 
-                                        className="cbx" 
-                                        id="cbxbnall"
-                                        style={{ display: 'none' }}
-                                        checked={sheetData.rows.length > 0 && selectedRows.size === sheetData.rows.length}
-                                        onChange={(e) => handleSelectAllRows(e.target.checked)}
-                                    />
-                                    <label className="check" htmlFor="cbxbnall">
-                                        <svg width="16px" height="16px" viewBox="0 0 18 18">
-                                            <path d="M1,9 L1,3.5 C1,2 2,1 3.5,1 L14.5,1 C16,1 17,2 17,3.5 L17,14.5 C17,16 16,17 14.5,17 L3.5,17 C2,17 1,16 1,14.5 L1,9 Z"></path>
-                                            <polyline points="1 9 7 14 15 4"></polyline>
-                                        </svg>
-                                    </label>
-                                </div>
-                            )}
-                            {sheetData.columns.map((column, colIndex) => (
-                                <div
-                                    key={colIndex}
-                                    className={`sheet-row-item header-cell ${
-                                        selectedColumns.has(colIndex) ? 'column-selected' : ''
-                                    }`}
-                                    style={{ width: `${columnWidths[colIndex] || 160}px` }}
-                                    data-col={colIndex}
-                                    data-description={column.prompt}
-                                    onClick={(e) => handleHeaderClick(colIndex, e)}
-                                    onDoubleClick={(e) => handleHeaderDoubleClick(colIndex, e)}
-                                >
-                                    <div className="flex flex-row-center gap-10 flex-space-between">
-                                        <div className="flex flex-row-center" style={{
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            flex: 1,
-                                            gap: 8,
-                                            minWidth: 0
-                                        }}>
-                                            <img 
-                                                src={getColumnTypeIcon(column.type)} 
-                                                alt={column.type || 'text'} 
-                                                height="14"
-                                                style={{ flexShrink: 0, opacity: 1 }}
-                                            />
-                                            <p style={{
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
-                                            }}>{column.title}</p>
-                                        </div>
-                                        <p className='opacity-5 text--micro' style={{ flexShrink: 0 }}>{getColumnLetter(colIndex)}</p>
-                                    </div>
-                                    <div
-                                        className="column-resize-handle"
-                                        onMouseDown={(e) => handleResizeMouseDown(colIndex, e)}
-                                    />
-                                </div>
-                            ))}
-                        </div>
+                        <SheetColumnHeader
+                            columns={sheetData.columns}
+                            columnWidths={columnWidths}
+                            selectedColumns={selectedColumns}
+                            selectedRows={selectedRows}
+                            rows={sheetData.rows}
+                            onHeaderClick={handleHeaderClick}
+                            onHeaderDoubleClick={handleHeaderDoubleClick}
+                            onSelectAllRows={handleSelectAllRows}
+                            onColumnWidthChange={handleColumnWidthChange}
+                            onColumnWidthPersist={handleColumnWidthPersist}
+                        />
 
                         {/* Data Rows */}
                         {sheetData.rows.map((row, rowIndex) => (
@@ -2717,7 +1934,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                         }}
                     >
                         <div style={{ fontSize: '11px', color: '#b0b0b0', lineHeight: '1.5', padding: '12px' }}>
-                            {renderInfoPanelContent(overlayEditor.row, overlayEditor.col)}
+                            <SheetInfoPanel row={overlayEditor.row} col={overlayEditor.col} sheetData={sheetData} expandedToolSteps={expandedToolSteps} setExpandedToolSteps={setExpandedToolSteps} />
                         </div>
                     </div>
                 </>
@@ -2750,7 +1967,7 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
                     }}
                 >
                     <div style={{ fontSize: '11px', color: '#b0b0b0', lineHeight: '1.5', padding: '12px' }}>
-                        {renderInfoPanelContent(selectInfoPanel.row, selectInfoPanel.col)}
+                        <SheetInfoPanel row={selectInfoPanel.row} col={selectInfoPanel.col} sheetData={sheetData} expandedToolSteps={expandedToolSteps} setExpandedToolSteps={setExpandedToolSteps} />
                     </div>
                 </div>
             )}
@@ -2908,8 +2125,5 @@ const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSaved
         </>
     );
 });
-
-// Export helper functions for use in other components
-export { getCellValue, getCellMeta, createCellWithMeta };
 
 export default SheetView;
