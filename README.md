@@ -21,7 +21,11 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
 
 ## Product Demo
 
-https://github.com/user-attachments/assets/0a473cab-0bbf-4011-80d5-a009e9b39ca8
+### Bulk Enrichment
+![Bulk Enrichment Demo](frontend/public/enrich.gif)
+
+### Source Validation
+![Source Validation Demo](frontend/public/validate-sources.gif)
 
 ## Features
 
