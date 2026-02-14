@@ -1,10 +1,12 @@
 # DataFactory
 
+> AI-powered spreadsheets with agents in every cell
+
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![CI](https://github.com/rohanashik/datafactory/actions/workflows/ci.yml/badge.svg)](https://github.com/rohanashik/datafactory/actions)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![GitHub stars](https://img.shields.io/github/stars/rohanashik/datafactory)](https://github.com/rohanashik/datafactory/stargazers)
-
-### Spreadsheet AI / Agents in Every Cell
+[![Discussions](https://img.shields.io/github/discussions/rohanashik/datafactory)](https://github.com/rohanashik/datafactory/discussions)
 
 DataFactory is an AI-powered spreadsheet platform that combines the flexibility of traditional spreadsheets with advanced AI capabilities for data enrichment, analysis, and knowledge extraction.
 
@@ -40,6 +42,15 @@ https://github.com/user-attachments/assets/0a473cab-0bbf-4011-80d5-a009e9b39ca8
 - **Vector Search**: [ChromaDB](https://github.com/chroma-core/chroma) (embeddings and RAG)
 - **Database**: SQLite (development), PostgreSQL (recommended for production)
 - **Libraries**: [Pandas](https://github.com/pandas-dev/pandas), [python-docx](https://github.com/python-openxml/python-docx), [python-pptx](https://github.com/scanny/python-pptx)
+
+## Built With
+
+[![Django](https://img.shields.io/badge/Django-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![LiteLLM](https://img.shields.io/badge/LiteLLM-000000?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/BerriAI/litellm)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6F00?style=for-the-badge&logo=database&logoColor=white)](https://www.trychroma.com/)
+[![Django Channels](https://img.shields.io/badge/Django_Channels-092E20?style=for-the-badge&logo=django&logoColor=white)](https://channels.readthedocs.io/)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 
 ## Setup
 
@@ -90,6 +101,16 @@ The frontend runs on port 5173 and proxies `/api` requests to the backend on por
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started, branch naming conventions, commit message format, and the PR process.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=rohanashik/datafactory&type=Date)](https://star-history.com/#rohanashik/datafactory&Date)
+
+## Contributors
+
+Thanks to all contributors who have helped make DataFactory better!
+
+[![Contributors](https://contrib.rocks/image?repo=rohanashik/datafactory)](https://github.com/rohanashik/datafactory/graphs/contributors)
 
 ## License
 
