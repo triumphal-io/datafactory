@@ -1,5 +1,25 @@
 import { useState, useCallback } from 'react';
 
+/**
+ * Hook for managing spreadsheet cell, row, and column selection state.
+ * Provides methods for selecting, deselecting, toggling, and range-selecting cells.
+ *
+ * @returns {{
+ *   selectedCells: Set<string>,
+ *   setSelectedCells: function,
+ *   selectedRows: Set<number>,
+ *   setSelectedRows: function,
+ *   selectedColumns: Set<number>,
+ *   setSelectedColumns: function,
+ *   selectCell: (rowIndex: number, colIndex: number) => void,
+ *   deselectCell: (rowIndex: number, colIndex: number) => void,
+ *   toggleCellSelection: (rowIndex: number, colIndex: number, event: MouseEvent) => void,
+ *   selectCellRange: (startRow: number, startCol: number, endRow: number, endCol: number) => void,
+ *   clearSelection: () => void,
+ *   checkCompleteRowsSelected: (sheetData: Object) => number[],
+ *   checkCompleteColumnsSelected: (sheetData: Object) => number[]
+ * }}
+ */
 export const useSheetSelection = () => {
     const [selectedCells, setSelectedCells] = useState(new Set());
     const [selectedRows, setSelectedRows] = useState(new Set());

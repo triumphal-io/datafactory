@@ -1,6 +1,13 @@
 import { useState, useCallback, useRef } from 'react';
 import IconFileAttach from '../../assets/file-attach.svg';
 
+/**
+ * Drag-and-drop file upload wrapper. Shows an overlay when files are dragged over.
+ *
+ * @param {Object} props
+ * @param {function} props.onFilesDropped - Callback with an array of dropped File objects
+ * @param {React.ReactNode} props.children - Content to render inside the upload area
+ */
 const FileUpload = ({ onFilesDropped, children }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const dragCounterRef = useRef(0);

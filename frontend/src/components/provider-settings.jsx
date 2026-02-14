@@ -12,6 +12,10 @@ const PROVIDERS = [
     { provider: 'anthropic', display_name: 'Claude', description: 'Anthropic Claude models' },
 ];
 
+/**
+ * Settings panel for managing LLM provider API keys (OpenAI, Gemini, Anthropic).
+ * Allows users to add, update, and delete provider credentials.
+ */
 export default function ProviderSettings() {
     const [providers, setProviders] = useState([]);
     const [loading, setLoading] = useState(true);

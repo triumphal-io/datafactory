@@ -7,6 +7,13 @@ const WebSocketContext = createContext(null);
 const wsConnections = new Map();
 const connectingDocs = new Set();
 
+/**
+ * Context provider that manages a singleton WebSocket connection per workbook.
+ * Dispatches incoming messages as `websocket-message` CustomEvents on `window`.
+ *
+ * @param {Object} props
+ * @param {React.ReactNode} props.children - Child components that can access the WebSocket via useWebSocket()
+ */
 export function WebSocketProvider({ children }) {
     const { workbookId } = useParams();
     const wsRef = useRef(null);
@@ -113,6 +120,12 @@ export function WebSocketProvider({ children }) {
     );
 }
 
+/**
+ * Hook to access the WebSocket connection for the current workbook.
+ * Must be used within a WebSocketProvider.
+ *
+ * @returns {{ sendMessage: (message: string) => boolean, isConnected: boolean }}
+ */
 export function useWebSocket() {
     const context = useContext(WebSocketContext);
     if (!context) {

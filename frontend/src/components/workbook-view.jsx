@@ -12,6 +12,23 @@ import FilesView from './files/view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo, showToast } from '../utils/utils';
 
+/**
+ * Main workbook layout container managing sheets, files, navigation, and drag-and-drop.
+ * Coordinates between SheetView and FilesView, exposes tool execution to the Assistant.
+ *
+ * @param {Object} props
+ * @param {string} props.workbookId - UUID of the workbook
+ * @param {string} [props.sheetId] - UUID of the initially active sheet
+ * @param {function} props.onSelectionChange - Callback when cell selection changes
+ * @param {function} props.onSheetNameChange - Callback when the active sheet name changes
+ * @param {function} props.onFilesDropped - Callback when files are dropped onto the workbook
+ * @param {string} props.selectedModel - Currently selected LiteLLM model identifier
+ * @param {Array} props.sheetsList - List of sheet objects in the workbook
+ * @param {string} props.workbookName - Display name of the workbook
+ * @param {function} props.onWorkbookNameChange - Callback when workbook name is edited
+ * @param {function} props.onSheetsListChange - Callback when sheets list is updated
+ * @param {React.Ref} ref - Exposes `getSheetData()` and `executeTools(tools)` to parent
+ */
 const WorkbookView = forwardRef(({ workbookId: propWorkbookId, sheetId: propSheetId, onSelectionChange, onSheetNameChange, onFilesDropped, selectedModel, sheetsList: propSheetsList, workbookName: propWorkbookName, onWorkbookNameChange, onSheetsListChange }, ref) => {
     const navigate = useNavigate();
     const sheetViewRef = useRef(null);

@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react';
 
+/**
+ * Draggable resize handle for adjusting the width of the adjacent aside panel.
+ * Supports mouse, touch, and keyboard (arrow keys) interaction. Double-click resets width.
+ */
 export default function Resizer() {
     const ref = useRef(null);
     const resizing = useRef(false);

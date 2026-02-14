@@ -7,7 +7,11 @@ import IconCheckbox from '../assets/checkbox.svg';
 import IconUrl from '../assets/url.svg';
 import IconFile from '../assets/file.svg';
 
-// Helper function to get icon based on column type
+/**
+ * Returns the SVG icon path for a given column type.
+ * @param {string} type - Column type: 'text' | 'number' | 'checkbox' | 'select' | 'multiselect' | 'url' | 'email' | 'file'
+ * @returns {string} SVG icon import path
+ */
 export const getColumnTypeIcon = (type) => {
     switch (type) {
         case 'text':
@@ -31,7 +35,11 @@ export const getColumnTypeIcon = (type) => {
     }
 };
 
-// Helper function to convert column index to Excel-style letter (A, B, C, ..., Z, AA, AB, ...)
+/**
+ * Converts a zero-based column index to an Excel-style letter (0→A, 25→Z, 26→AA, etc.).
+ * @param {number} index - Zero-based column index
+ * @returns {string} Excel-style column letter
+ */
 export const getColumnLetter = (index) => {
     let letter = '';
     let num = index;
@@ -42,7 +50,11 @@ export const getColumnLetter = (index) => {
     return letter;
 };
 
-// Helper function to extract display value from cell (handles both simple values and metadata objects)
+/**
+ * Extracts the display value from a cell. Handles both simple values and metadata objects ({value, meta}).
+ * @param {*} cellData - Raw cell data (string, number, or {value, meta} object)
+ * @returns {*} The display value, or empty string if null/undefined
+ */
 export const getCellValue = (cellData) => {
     if (cellData === null || cellData === undefined) {
         return '';
@@ -55,7 +67,11 @@ export const getCellValue = (cellData) => {
     return cellData;
 };
 
-// Helper function to get cell metadata
+/**
+ * Extracts metadata from a cell data object.
+ * @param {*} cellData - Raw cell data (may be a {value, meta} object)
+ * @returns {Object|null} The cell metadata object, or null if none exists
+ */
 export const getCellMeta = (cellData) => {
     if (typeof cellData === 'object' && cellData.meta !== undefined) {
         return cellData.meta;
@@ -63,12 +79,24 @@ export const getCellMeta = (cellData) => {
     return null;
 };
 
-// Helper function to create cell value with metadata
+/**
+ * Creates a cell data object with value and optional metadata.
+ * @param {*} value - The cell display value
+ * @param {Object|null} [meta=null] - Optional metadata (e.g., process history, sources)
+ * @returns {{ value: *, meta: Object|null }} Cell data object
+ */
 export const createCellWithMeta = (value, meta = null) => {
     return { value, meta };
 };
 
-// Helper function to humanize tool execution display
+/**
+ * Converts a raw tool execution record into human-readable display text.
+ * @param {Object} tool - Tool execution record
+ * @param {string} tool.tool - Tool name (e.g., 'tool_search', 'tool_web_scraper')
+ * @param {Object} tool.args - Arguments passed to the tool
+ * @param {string} tool.summary - Raw summary/result from the tool execution
+ * @returns {{ mainText: string|JSX.Element, summary: string|JSX.Element }} Display-ready text and summary
+ */
 export const humanizeToolExecution = (tool) => {
     const { tool: toolName, args, summary } = tool;
 

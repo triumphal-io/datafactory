@@ -1,5 +1,20 @@
 import { useEffect } from 'react';
 
+/**
+ * Hook that registers global keyboard handlers for spreadsheet interactions.
+ * Handles Escape (clear selection), Ctrl+C (copy), Backspace/Delete (clear cells), and paste.
+ *
+ * @param {Object} params
+ * @param {function} params.clearSelection - Clears all cell/row/column selections
+ * @param {Set<string>} params.selectedCells - Currently selected cell keys ("rowIndex-colIndex")
+ * @param {Object} params.sheetData - Sheet data object ({columns, rows})
+ * @param {function} params.setSheetData - Setter for sheet data state
+ * @param {Object|null} params.currentEditingCell - Cell currently being edited, or null
+ * @param {function} params.setCurrentEditingCell - Setter for the editing cell
+ * @param {boolean} params.overlayEditor - Whether the overlay editor is open
+ * @param {function} params.handleMultiLinePaste - Handler for multi-line paste operations
+ * @param {React.RefObject} params.lastClickedCellRef - Ref to the last clicked cell position
+ */
 export const useSheetKeyboard = ({
     clearSelection,
     selectedCells,

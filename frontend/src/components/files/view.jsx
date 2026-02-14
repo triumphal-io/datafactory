@@ -8,6 +8,17 @@ import FileTree from './tree.jsx';
 import { apiFetch } from '../../utils/api';
 import { showToast, convertMarkdownToHtml } from '../../utils/utils';
 
+/**
+ * File management view for a workbook's resource library.
+ * Handles file/folder CRUD, upload, preview, and AI visibility toggling.
+ *
+ * @param {Object} props
+ * @param {string} props.workbookId - UUID of the parent workbook
+ * @param {function} props.onSavingChange - Callback with boolean save-in-progress state
+ * @param {function} props.onLastSavedChange - Callback with Date of last successful save
+ * @param {function} props.onNavigationChange - Callback with JSX for the navigation bar
+ * @param {React.Ref} ref - Exposes `uploadFiles(files)` and `loadresourceFiles()` to parent
+ */
 const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
     // State management
     const [resourceFiles, setresourceFiles] = useState([]);

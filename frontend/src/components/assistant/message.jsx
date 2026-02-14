@@ -1,5 +1,14 @@
 import { convertMarkdownToHtml } from '../../utils/utils.js';
 
+/**
+ * Renders a single chat message (user, assistant, or error) in the assistant panel.
+ *
+ * @param {Object} props
+ * @param {Object} props.msg - Message object
+ * @param {'user'|'assistant'|'error'} props.msg.type - Message type
+ * @param {string} props.msg.content - Message text (markdown for assistant messages)
+ * @param {number} props.index - Message index in the conversation list
+ */
 const AssistantMessage = ({ msg, index }) => {
     return (
         <div

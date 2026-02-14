@@ -3,6 +3,23 @@ import IconFolder from '../../assets/folder.svg';
 import IconMore from '../../assets/more.svg';
 import { getTimeAgo } from '../../utils/utils';
 
+/**
+ * Displays a file and folder tree with context menu actions (rename, delete, view, toggle visibility).
+ *
+ * @param {Object} props
+ * @param {Array<Object>} props.folders - List of folder objects
+ * @param {Array<Object>} props.files - List of file objects
+ * @param {Object|null} props.currentFolder - Currently open folder, or null for root
+ * @param {function} props.onOpenFolder - Called with folder object to navigate into it
+ * @param {function} props.onRenameFolder - Called with (folderId, newName) to rename
+ * @param {function} props.onDeleteFolder - Called with folderId to delete
+ * @param {function} props.onRenameFile - Called with (fileId, newName) to rename
+ * @param {function} props.onDeleteFile - Called with fileId to delete
+ * @param {function} props.onViewFile - Called with file object to preview/view
+ * @param {function} props.onToggleVisibility - Called with file object to toggle AI visibility
+ * @param {function} props.formatFileSize - Formats byte count to human-readable string
+ * @param {function} props.getFileType - Returns display type string for a file
+ */
 const FileTree = ({
     folders,
     files,

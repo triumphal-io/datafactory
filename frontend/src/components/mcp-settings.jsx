@@ -6,6 +6,10 @@ import IconDismiss from '../assets/dismiss.svg';
 import IconMore from '../assets/more.svg';
 import IconAdd from '../assets/add.svg';
 
+/**
+ * Settings panel for managing MCP (Model Context Protocol) server connections.
+ * Allows users to add, edit, enable/disable, and delete MCP servers.
+ */
 export default function MCPSettings() {
     const [servers, setServers] = useState([]);
     const [loading, setLoading] = useState(true);

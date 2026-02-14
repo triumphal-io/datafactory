@@ -2,6 +2,11 @@ import IconTick from '../../assets/checkmark.svg';
 import IconDismiss from '../../assets/dismiss.svg';
 import Loader from '../../assets/loader-mini.gif';
 
+/**
+ * Formats tool call arguments for display.
+ * @param {*} args - Tool arguments (object or primitive)
+ * @returns {string} Pretty-printed JSON string or the original value
+ */
 const formatArgs = (args) => {
     if (typeof args === 'object' && args !== null) {
         return JSON.stringify(args, null, 2);
@@ -9,6 +14,18 @@ const formatArgs = (args) => {
     return args;
 };
 
+/**
+ * Renders a tool execution step in the assistant conversation.
+ * Shows tool name, arguments, and status indicator (loading/completed/failed).
+ *
+ * @param {Object} props
+ * @param {Object} props.msg - Tool step message
+ * @param {'working'|string} props.msg.type - Step type ('working' shows a loading indicator)
+ * @param {string} props.msg.toolName - Name of the tool being executed
+ * @param {Object} props.msg.arguments - Arguments passed to the tool
+ * @param {'running'|'completed'|'failed'|'error'} props.msg.status - Execution status
+ * @param {number} props.index - Message index in the conversation list
+ */
 const AssistantToolStep = ({ msg, index }) => {
     if (msg.type === 'working') {
         return (

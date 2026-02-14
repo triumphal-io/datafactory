@@ -15,6 +15,22 @@ import IconHand from '../../assets/hand.svg';
 // (Keeps other mention categories like files/folders/sheets.)
 const ENABLE_COLUMN_MENTIONS = false;
 
+/**
+ * AI chat assistant panel for interacting with workbook data.
+ * Supports tool execution round-trips, file attachments, @-mentions, and model selection.
+ *
+ * @param {Object} props
+ * @param {string} props.workbookId - UUID of the current workbook
+ * @param {function} props.onToolsRequested - Callback invoked with tool calls that need client-side execution
+ * @param {Set<string>} [props.selectedCells=new Set()] - Currently selected cell keys ("rowIndex-colIndex")
+ * @param {string} [props.sheetName=''] - Name of the active sheet (sent as context to AI)
+ * @param {string} [props.sheetId=''] - UUID of the active sheet
+ * @param {function} props.getSheetData - Returns the current sheet data object ({columns, rows})
+ * @param {File[]} props.droppedFiles - Files dropped onto the workbook to attach
+ * @param {string} [props.selectedModel='gemini/gemini-2.5-flash'] - LiteLLM model identifier
+ * @param {function} props.onModelChange - Callback when the user selects a different AI model
+ * @param {React.Ref} ref - Exposes `sendToolResults(toolResults, conversationIdOverride)` to parent
+ */
 const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = new Set(), sheetName = '', sheetId = '', getSheetData, droppedFiles, selectedModel = DEFAULT_AI_MODEL, onModelChange }, ref) => {
     const { sendMessage: sendWebSocketMessage, isConnected: wsConnected } = useWebSocket();
     const [messages, setMessages] = useState([]);

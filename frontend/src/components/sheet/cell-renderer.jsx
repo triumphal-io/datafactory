@@ -23,6 +23,20 @@ const getCellMeta = (cellData) => {
     return null;
 };
 
+/**
+ * Renders an individual spreadsheet cell based on its column type.
+ * Supports text, number, select, multiselect, url, email, checkbox, and file types.
+ *
+ * @param {Object} props
+ * @param {*} props.value - Cell value (string, number, boolean, or object with {value, meta})
+ * @param {string} props.columnType - Column type: 'text' | 'number' | 'select' | 'multiselect' | 'url' | 'email' | 'checkbox' | 'file'
+ * @param {string[]} [props.columnOptions] - Available options for select/multiselect/file columns
+ * @param {boolean} props.isSelected - Whether the cell is currently selected
+ * @param {function} props.onEdit - Callback with the new value when the cell is edited
+ * @param {number} props.rowIndex - Row index of this cell
+ * @param {number} props.colIndex - Column index of this cell
+ * @param {function} [props.onDropdownToggle] - Callback when a dropdown opens/closes (for scroll management)
+ */
 const CellRenderer = ({
     value,
     columnType,

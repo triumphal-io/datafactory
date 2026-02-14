@@ -8,6 +8,13 @@ import IconLogout from '../assets/sign-out.svg';
 import LoaderGif from '../assets/loader.gif';
 import { apiFetch } from '../utils/api';
 
+/**
+ * Slide-out navigation drawer listing all workbooks with create/delete actions.
+ *
+ * @param {Object} props
+ * @param {boolean} props.isOpen - Whether the drawer is visible
+ * @param {function} props.onClose - Callback to close the drawer
+ */
 export default function Drawer({ isOpen, onClose }) {
     const navigate = useNavigate();
     const [opacity, setOpacity] = useState(isOpen ? 1 : 0);

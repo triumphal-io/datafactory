@@ -61,6 +61,20 @@ if (typeof document !== 'undefined' && !document.getElementById('enrichment-styl
 
 
 
+/**
+ * Main spreadsheet view component. Manages grid data, cell editing, enrichment,
+ * auto-saving, column operations, and exposes imperative methods for AI tool execution.
+ *
+ * @param {Object} props
+ * @param {string} props.workbookId - UUID of the parent workbook
+ * @param {string} props.sheetId - UUID of this sheet
+ * @param {function} props.onSavingChange - Callback with boolean save-in-progress state
+ * @param {function} props.onLastSavedChange - Callback with Date of last successful save
+ * @param {function} props.onNavigationChange - Callback with JSX for the sheet navigation bar
+ * @param {function} props.onSelectionChange - Callback with the current cell selection Set
+ * @param {string} [props.selectedModel='gemini/gemini-2.5-flash'] - LiteLLM model identifier for enrichment
+ * @param {React.Ref} ref - Exposes getSheetData, addRows, deleteRows, addColumns, deleteColumns, populateCells
+ */
 const SheetView = forwardRef(({ workbookId, sheetId, onSavingChange, onLastSavedChange, onNavigationChange, onSelectionChange, selectedModel = DEFAULT_AI_MODEL }, ref) => {
     // WebSocket connection
     const { isConnected } = useWebSocket();

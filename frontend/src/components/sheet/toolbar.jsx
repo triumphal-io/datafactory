@@ -5,6 +5,24 @@ import IconExport from '../../assets/export.svg';
 import IconCheck from '../../assets/checkmark.svg';
 import IconDismiss from '../../assets/dismiss.svg';
 
+/**
+ * Toolbar for sheet operations: accept/reject AI changes, enrich cells, add/delete rows and columns, export.
+ *
+ * @param {Object} props
+ * @param {Set} props.pendingAiChanges - Set of cell keys with pending AI changes
+ * @param {function} props.onAcceptAiChanges - Accept all pending AI changes
+ * @param {function} props.onRejectAiChanges - Reject all pending AI changes
+ * @param {function} props.onEnrichCells - Trigger bulk enrichment on selected cells
+ * @param {string} props.enrichText - Label text for the enrich button
+ * @param {boolean} props.showDeleteRow - Whether to show the delete row option
+ * @param {boolean} props.showDeleteColumn - Whether to show the delete column option
+ * @param {function} props.onDeleteRows - Delete selected rows
+ * @param {function} props.onDeleteColumns - Delete selected columns
+ * @param {function} props.onAddRow - Add a new row
+ * @param {function} props.onAddColumn - Add a new column
+ * @param {function} props.onExport - Export sheet data (e.g., as XLSX)
+ * @param {boolean} props.hasColumns - Whether the sheet has any columns
+ */
 const SheetToolbar = ({
     pendingAiChanges,
     onAcceptAiChanges,

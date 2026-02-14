@@ -1,6 +1,22 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { getColumnTypeIcon, getColumnLetter } from '../../utils/sheet-helpers.jsx';
 
+/**
+ * Renders the column header row for the spreadsheet grid.
+ * Supports column selection, double-click rename, and drag-to-resize.
+ *
+ * @param {Object} props
+ * @param {Array<Object>} props.columns - Column definitions ({name, type, options, ...})
+ * @param {Object<number, number>} props.columnWidths - Map of column index to pixel width
+ * @param {Set<number>} props.selectedColumns - Indices of selected columns
+ * @param {Set<number>} props.selectedRows - Indices of selected rows (for select-all styling)
+ * @param {Array<Array>} props.rows - Row data array
+ * @param {function} props.onHeaderClick - Called with (colIndex, event) on column click
+ * @param {function} props.onHeaderDoubleClick - Called with (colIndex) to initiate rename
+ * @param {function} props.onSelectAllRows - Called to select/deselect all rows
+ * @param {function} props.onColumnWidthChange - Called with (colIndex, newWidth) during resize
+ * @param {function} props.onColumnWidthPersist - Called with (colIndex) on resize end to save
+ */
 const SheetColumnHeader = ({
     columns,
     columnWidths,

@@ -1,7 +1,7 @@
 import Showdown from 'showdown';
 import { toast } from 'react-toastify';
 
-// Constants
+/** @constant {string} Default LiteLLM model identifier used when no model is explicitly selected */
 export const DEFAULT_AI_MODEL = 'gemini/gemini-2.5-flash';
 
 /**

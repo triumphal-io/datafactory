@@ -2,6 +2,17 @@ import IconChevronDown from '../../assets/chevron-down.svg';
 import IconDocument from '../../assets/document.svg';
 import { getCellMeta, humanizeToolExecution } from '../../utils/sheet-helpers.jsx';
 
+/**
+ * Displays cell metadata and AI process history for the selected cell.
+ * Shows a timeline of tool executions that produced the cell's value.
+ *
+ * @param {Object} props
+ * @param {number} props.row - Row index of the selected cell
+ * @param {number} props.col - Column index of the selected cell
+ * @param {Object} props.sheetData - Sheet data object ({columns, rows})
+ * @param {Set<number>} props.expandedToolSteps - Indices of expanded tool steps in the timeline
+ * @param {function} props.setExpandedToolSteps - Setter for the expanded tool steps set
+ */
 const SheetInfoPanel = ({ row, col, sheetData, expandedToolSteps, setExpandedToolSteps }) => {
     const cellData = sheetData.rows[row]?.[col];
     const cellMeta = getCellMeta(cellData);
