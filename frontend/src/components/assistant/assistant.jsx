@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { apiFetch } from '../utils/api.js';
-import { convertMarkdownToHtml, DEFAULT_AI_MODEL } from '../utils/utils.js';
-import { useWebSocket } from '../utils/websocket-context.jsx';
-import IconAdd from '../assets/add.svg';
-import IconSend from '../assets/arrow-up.svg';
-import LogoIcon from '../assets/logo-icon.svg';
-import IconTick from '../assets/checkmark.svg';
-import IconDismiss from '../assets/dismiss.svg';
-import IconFile from '../assets/sheet.svg';
-import IconHand from '../assets/hand.svg';
-import Loader from '../assets/loader-mini.gif';
+import { apiFetch } from '../../utils/api.js';
+import { DEFAULT_AI_MODEL } from '../../utils/utils.js';
+import { useWebSocket } from '../../utils/websocket-context.jsx';
+import AssistantMessage from './message.jsx';
+import AssistantToolStep from './tool-step.jsx';
+import IconAdd from '../../assets/add.svg';
+import IconSend from '../../assets/arrow-up.svg';
+import LogoIcon from '../../assets/logo-icon.svg';
+import IconDismiss from '../../assets/dismiss.svg';
+import IconFile from '../../assets/sheet.svg';
+import IconHand from '../../assets/hand.svg';
 
 // Temporarily disable column mentions.
 // (Keeps other mention categories like files/folders/sheets.)
@@ -769,72 +769,11 @@ const Assistant = forwardRef(({ workbookId, onToolsRequested, selectedCells = ne
         return prefix + ranges.join(', ');
     };
 
-    // Move formatArgs outside renderMessage for reuse
-    const formatArgs = (args) => {
-        if (typeof args === 'object' && args !== null) {
-            return JSON.stringify(args, null, 2); // Pretty-print JSON
-        }
-        return args;
-    };
-
-    // Update renderMessage to use formatArgs consistently
     const renderMessage = (msg, index) => {
-        if (msg.type === 'working') {
-            // Render working state exactly like a pending tool call
-            return (
-                <div key={index} className="message message-tool text--micro">
-                    <div className='flex flex-row-center' style={{padding: '6px 0', }}>
-                        <img src={Loader} alt="Loading" height="12" style={{marginRight: '6px', opacity: 0.5}} />
-                        <p className='text--micro'>Working...</p>
-                    </div>
-                </div>
-            );
+        if (msg.type === 'working' || msg.type === 'tool_call') {
+            return <AssistantToolStep key={index} msg={msg} index={index} />;
         }
-        
-        if (msg.type === 'tool_call') {
-            // Render tool call as a special message
-            const toolDisplayName = msg.toolName.replace('tool_', '').replace(/_/g, ' ');
-            const args = formatArgs(msg.arguments);
-
-            // Determine which icon to show based on status
-            let statusIcon = Loader;
-            let iconOpacity = 0.5;
-            
-            if (msg.status === 'completed') {
-                statusIcon = IconTick;
-                iconOpacity = 1;
-            } else if (msg.status === 'failed' || msg.status === 'error') {
-                statusIcon = IconDismiss;
-                iconOpacity = 1;
-            }
-            
-            return (
-                <div key={index} className="message message-tool text--micro">
-                    <p style={{padding: '6px 0', }}>
-                        {/* <span style={{marginRight: '6px'}}>🔧</span> */}
-                        <img src={statusIcon} alt="Status Icon" height="12" style={{marginRight: '6px', opacity: iconOpacity}} />
-                        <strong>{toolDisplayName}</strong>
-                        {/* {args && <span style={{opacity: 0.7}}> ({args})</span>} */}
-                        {msg.status === 'pending' && <span style={{marginLeft: '6px', opacity: 0.5}}>...</span>}
-                    </p>
-                </div>
-            );
-        }
-
-        return (
-            <div 
-                key={index} 
-                className={`message message-${msg.type} text--micro`}
-            >
-                {msg.type === 'assistant' ? (
-                    <p dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(msg.content) }} />
-                ) : msg.type === 'error' ? (
-                    <p style={{color: 'var(--error-color)'}}>{msg.content}</p>
-                ) : (
-                    <p>{msg.content}</p>
-                )}
-            </div>
-        );
+        return <AssistantMessage key={index} msg={msg} index={index} />;
     };
 
     return (

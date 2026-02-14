@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { getColumnTypeIcon, getColumnLetter } from '../utils/sheet-helpers.jsx';
+import { getColumnTypeIcon, getColumnLetter } from '../../utils/sheet-helpers.jsx';
 
 const SheetColumnHeader = ({
     columns,

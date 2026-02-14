@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import Resizer from '../components/resizer.jsx';
-import Assistant from '../components/assistant.jsx';
+import Assistant from '../components/assistant/assistant.jsx';
 import WorkbookView from '../components/workbook-view.jsx';
 import { useParams } from 'react-router-dom';
 import { useWebSocket } from '../utils/websocket-context.jsx';

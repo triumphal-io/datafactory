@@ -1,6 +1,6 @@
-import IconChevronDown from '../assets/chevron-down.svg';
-import IconDocument from '../assets/document.svg';
-import { getCellMeta, humanizeToolExecution } from '../utils/sheet-helpers.jsx';
+import IconChevronDown from '../../assets/chevron-down.svg';
+import IconDocument from '../../assets/document.svg';
+import { getCellMeta, humanizeToolExecution } from '../../utils/sheet-helpers.jsx';
 
 const SheetInfoPanel = ({ row, col, sheetData, expandedToolSteps, setExpandedToolSteps }) => {
     const cellData = sheetData.rows[row]?.[col];

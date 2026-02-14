@@ -7,8 +7,8 @@ import IconProject from '../assets/folder.svg';
 import IconAdd from '../assets/add-circle.svg';
 import IconChevronDown from '../assets/chevron-down.svg';
 import Drawer from './drawer';
-import SheetView from './sheet-view';
-import FilesView from './files-view';
+import SheetView from './sheet/view';
+import FilesView from './files/view';
 import { apiFetch } from '../utils/api';
 import { getTimeAgo, showToast } from '../utils/utils';
 

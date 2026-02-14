@@ -1,30 +1,24 @@
-import { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
-import IconAdd from '../assets/add-circle.svg';
-import IconFile from '../assets/file.svg';
-import IconFolder from '../assets/folder.svg';
-import IconChevronRight from '../assets/chevron-right.svg';
-import IconDismiss from '../assets/dismiss.svg';
-import IconLoader from '../assets/loader.gif';
-import IconMore from '../assets/more.svg';
-import IconFileAttach from '../assets/file-attach.svg';
-import { apiFetch } from '../utils/api';
-import { showToast, getTimeAgo, convertMarkdownToHtml } from '../utils/utils';
+import { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+
+import IconAdd from '../../assets/add-circle.svg';
+import IconChevronRight from '../../assets/chevron-right.svg';
+import IconDismiss from '../../assets/dismiss.svg';
+import FileUpload from './upload.jsx';
+import FileTree from './tree.jsx';
+import { apiFetch } from '../../utils/api';
+import { showToast, convertMarkdownToHtml } from '../../utils/utils';
 
 const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, onNavigationChange }, ref) => {
     // State management
     const [resourceFiles, setresourceFiles] = useState([]);
     const [resourceFolders, setresourceFolders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [openDropdownIndex, setOpenDropdownIndex] = useState(null);
     const [showFolderPopup, setShowFolderPopup] = useState(false);
     const [folderName, setFolderName] = useState('');
     const [currentFolder, setCurrentFolder] = useState(null);
     const [renamingFolder, setRenamingFolder] = useState(null);
     const [renamingFile, setRenamingFile] = useState(null);
     const [renameValue, setRenameValue] = useState('');
-    const [isDraggingOver, setIsDraggingOver] = useState(false);
-    const dragCounterRef = useRef(0);
-
     // Expose methods to parent via ref
     useImperativeHandle(ref, () => ({
         uploadFiles: uploadFiles,
@@ -277,14 +271,12 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
             console.error('Error deleting file:', error);
             showToast('Delete failed', 'error', 3000, toastId);
         }
-        setOpenDropdownIndex(null);
     }, [workbookId, loadresourceFiles]);
 
     // Handle rename file
     const handleRenameFile = useCallback((file) => {
         setRenamingFile(file);
         setRenameValue(file.name);
-        setOpenDropdownIndex(null);
     }, []);
 
     // Handle view file in new window
@@ -407,64 +399,9 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
             console.error('Error updating visibility:', error);
             showToast('Update failed', 'error', 3000, toastId);
         }
-        setOpenDropdownIndex(null);
     }, [workbookId, loadresourceFiles]);
 
-    // Toggle dropdown menu
-    const toggleDropdown = useCallback((index, e) => {
-        e.stopPropagation();
-        setOpenDropdownIndex(openDropdownIndex === index ? null : index);
-    }, [openDropdownIndex]);
-
-    // Drag and drop handlers for file upload
-    const handleDragEnter = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounterRef.current++;
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            setIsDraggingOver(true);
-        }
-    }, []);
-
-    const handleDragLeave = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounterRef.current--;
-        if (dragCounterRef.current === 0) {
-            setIsDraggingOver(false);
-        }
-    }, []);
-
-    const handleDragOver = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-    }, []);
-
-    const handleDrop = useCallback(async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDraggingOver(false);
-        dragCounterRef.current = 0;
-
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) {
-            await uploadFiles(files);
-        }
-    }, [uploadFiles]);
-
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = () => {
-            setOpenDropdownIndex(null);
-        };
-        
-        if (openDropdownIndex !== null) {
-            document.addEventListener('click', handleClickOutside);
-            return () => document.removeEventListener('click', handleClickOutside);
-        }
-    }, [openDropdownIndex]);
-
-    // Helper functions - moved outside map for better performance
+    // Helper functions
     const formatFileSize = useCallback((bytes) => {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -738,260 +675,24 @@ const FilesView = forwardRef(({ workbookId, onSavingChange, onLastSavedChange, o
                 </div>
             )}
             
-            <div 
-                className="sheet-content flex-expanded scroll-x scroll-y thin-scroll"
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                style={{ position: 'relative' }}
-            >
+            <FileUpload onFilesDropped={uploadFiles}>
                 <div className="flex flex-column" style={{ padding: '20px' }}>
-                    
-                    {resourceFiles.length === 0 && resourceFolders.length === 0 ? (
-                        <div className="flex flex-column flex-center" style={{ padding: '40px' }}>
-                            <p style={{ color: '#6b7280' }}>No resources yet</p>
-                        </div>
-                    ) : (
-                        <div className="grid-flexible gap-10">
-                            {/* Render folders first (only when not inside a folder) */}
-                            {!currentFolder && resourceFolders.map((folder, index) => (
-                                <div 
-                                    key={`folder-${index}`}
-                                    className="file flex flex-row-center flex-space-between"
-                                    style={{
-                                        border: '3px solid #2b2b2b',
-                                        cursor: 'pointer',
-                                        position: 'relative'
-                                    }}
-                                    onClick={() => handleOpenFolder(folder)}
-                                >
-                                    <div className="flex flex-column wdth-100">
-                                        <div className='flex flex-column flex-center' style={{
-                                            padding: '28px 10px', margin: 'auto',
-                                            opacity: folder.in_use ? 1 : 0.2,
-                                            transition: 'opacity 0.3s'
-                                        }}>
-                                            <img src={IconFolder} alt="Folder" width="64" style={{ marginBottom: '16px', opacity: 0.7 }} />
-                                        </div>
-                                        <div className='flex flex-column gap-5 padl-15 padr-15 padb-10'>
-                                            <div className='flex flex-row-center flex-space-between'>
-                                                <p className='text--micro'>{folder.name}</p>
-                                                <p className='text--nano opacity-5'>{folder.file_count} files</p>
-                                            </div>
-                                            <div className='flex flex-row-center flex-space-between'>
-                                                <p className='text--micro opacity-5'>{getTimeAgo(new Date(folder.last_uploaded || folder.created_at))}</p>
-                                                {/* Folder actions menu */}
-                                                <div style={{ position: 'relative' }}>
-                                                    <img 
-                                                        src={IconMore} 
-                                                        alt="More Options" 
-                                                        height="22" 
-                                                        style={{ cursor: 'pointer' }}
-                                                        onClick={(e) => toggleDropdown(`folder-${index}`, e)}
-                                                    />
-                                                    {openDropdownIndex === `folder-${index}` && (
-                                            <div 
-                                                className="dropdown-menu"
-                                                style={{
-                                                    position: 'absolute',
-                                                    right: '0',
-                                                    top: '100%',
-                                                    marginTop: '4px',
-                                                    backgroundColor: '#222',
-                                                    border: '1px solid #3b3b3b',
-                                                    borderRadius: '4px',
-                                                    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                                                    zIndex: 1000,
-                                                    minWidth: '150px'
-                                                }}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <div 
-                                                    className="dropdown-item"
-                                                    style={{
-                                                        padding: '8px 12px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '12px',
-                                                        borderBottom: '1px solid #3b3b3b'
-                                                    }}
-                                                    onClick={() => {
-                                                        handleRenameFolder(folder);
-                                                        setOpenDropdownIndex(null);
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    Rename
-                                                </div>
-                                                <div 
-                                                    className="dropdown-item"
-                                                    style={{
-                                                        padding: '8px 12px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '12px',
-                                                        color: '#ff6b6b'
-                                                    }}
-                                                    onClick={() => {
-                                                        handleDeleteFolder(folder.id, folder.name);
-                                                        setOpenDropdownIndex(null);
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    Delete
-                                                </div>
-                                            </div>
-                                        )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            
-                            {/* Render files */}
-                            {filesWithHtml.map((file, index) => {
-                            return (
-                                <div 
-                                    key={file.id || index}
-                                    className="file flex flex-row-center flex-space-between"
-                                    style={{
-                                        // padding: '12px 16px',
-                                        border: '3px solid #2b2b2b',
-                                        // borderRadius: '6px',
-                                        cursor: 'pointer'
-                                    }}
-                                    onClick={() => handleViewFile(file)}
-                                >
-                                    <div className="flex flex-column wdth-100">
-                                        {file.is_processing ? (
-                                            <div style={{ padding: '12px' }}>
-                                                <div className="shimmer" style={{ height: '110px' }}></div>
-                                            </div>
-                                        ) : (
-                                            // <img src={IconFile} alt="File" width="50" className='mrgnt-5 mrgnb-20' />
-                                            // <div className='flex flex-row flex-row-center flex-horizontal-center wdth-100'>
-                                            <div className='markdown-html-container' style={{
-                                                opacity: file.use ? 1 : 0.2,
-                                                transition: 'opacity 0.3s'
-                                            }}>
-                                                <div style={{
-                                                    border: '1px solid #dedcd126',
-                                                    fontSize: '10px',
-                                                    // maxWidth: '150px',
-                                                    margin: 'auto',
-                                                    borderRadius: '8px 8px 0 0',
-                                                    transitionDuration: '0.3s',
-                                                    overflow: 'hidden',
-                                                    // transform: 'scale(0.5)',
-                                                    textOverflow: 'ellipsis',
-                                                }}>
-                                                {file.htmlContent ? (
-                                                    <div className='markdown-html thumbnail' dangerouslySetInnerHTML={{ __html: file.htmlContent }} />
-                                                ) : (
-                                                    <div style={{ color: '#6b7280' }}>No preview available</div>
-                                                )}
-                                            </div>
-                                            </div>
-                                        )}
-                                        <div className='flex flex-column gap-5 padl-15 padr-15 padb-10'>
-                                            <div className='flex flex-row-center flex-space-between'>
-                                                <p className='text--micro'>{file.name} {file.use ? '' : '(AI cannot use)'}</p>
-                                                <p className='text--nano opacity-5'>{formatFileSize(file.size)} • {getFileType(file.name)}</p>
-                                            </div>
-                                            <div className='flex flex-row-center flex-space-between'>
-                                                <p className='text--micro opacity-5'>{getTimeAgo(new Date(file.uploaded_at))}</p>
-                                                <div style={{ position: 'relative' }}>
-                                                    <img 
-                                                        src={IconMore} 
-                                                        alt="More Options" 
-                                                        height="22" 
-                                                        style={{ cursor: 'pointer' }}
-                                                        onClick={(e) => toggleDropdown(index, e)}
-                                                    />
-                                                    {openDropdownIndex === index && (
-                                                        <div 
-                                                            className="dropdown-menu"
-                                                            style={{
-                                                                position: 'absolute',
-                                                                right: '0',
-                                                                top: '100%',
-                                                                marginTop: '4px',
-                                                                backgroundColor: '#222',
-                                                                border: '1px solid #3b3b3b',
-                                                                borderRadius: '4px',
-                                                                boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                                                                zIndex: 1000,
-                                                                minWidth: '150px'
-                                                            }}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            <div 
-                                                                className="dropdown-item"
-                                                                style={{
-                                                                    padding: '8px 12px',
-                                                                    cursor: 'pointer',
-                                                                    fontSize: '12px',
-                                                                    borderBottom: '1px solid #3b3b3b'
-                                                                }}
-                                                                onClick={() => handleRenameFile(file)}
-                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
-                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                            >
-                                                                Rename
-                                                            </div>
-                                                            <div 
-                                                                className="dropdown-item"
-                                                                style={{
-                                                                    padding: '8px 12px',
-                                                                    cursor: 'pointer',
-                                                                    fontSize: '12px',
-                                                                    borderBottom: '1px solid #3b3b3b'
-                                                                }}
-                                                                onClick={() => handleToggleVisibility(file.id, file.name, file.use)}
-                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
-                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                            >
-                                                                {file.use ? 'Make Invisible' : 'Make Visible'}
-                                                            </div>
-                                                            <div 
-                                                                className="dropdown-item"
-                                                                style={{
-                                                                    padding: '8px 12px',
-                                                                    cursor: 'pointer',
-                                                                    fontSize: '12px',
-                                                                    color: '#ff6b6b'
-                                                                }}
-                                                                onClick={() => handleDeleteFile(file.id, file.name)}
-                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2b2b2b'}
-                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                            >
-                                                                Delete
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-        </div>
-        
-        {/* Drag and Drop Overlay */}
-        {isDraggingOver && (
-            <div className="drop-overlay">
-                <div className="flex flex-column gap-15">
-                    <img src={IconFileAttach} alt="File Icon" height="80" />
-                    <p className="text-mega">Drop files here to upload to Resources</p>
+                    <FileTree
+                        folders={resourceFolders}
+                        files={filesWithHtml}
+                        currentFolder={currentFolder}
+                        onOpenFolder={handleOpenFolder}
+                        onRenameFolder={handleRenameFolder}
+                        onDeleteFolder={handleDeleteFolder}
+                        onRenameFile={handleRenameFile}
+                        onDeleteFile={handleDeleteFile}
+                        onViewFile={handleViewFile}
+                        onToggleVisibility={handleToggleVisibility}
+                        formatFileSize={formatFileSize}
+                        getFileType={getFileType}
+                    />
                 </div>
-            </div>
-        )}
+            </FileUpload>
         </>
     );
 });

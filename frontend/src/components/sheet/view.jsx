@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import ExcelJS from 'exceljs';
-import IconDeleteBlack from '../assets/delete-black.svg';
-import IconAddBlack from '../assets/add-black.svg';
-import { apiFetch } from '../utils/api';
-import { useWebSocket } from '../utils/websocket-context';
-import { DEFAULT_AI_MODEL } from '../utils/utils';
-import IconChevronRight from '../assets/chevron-right-black.svg';
+import IconDeleteBlack from '../../assets/delete-black.svg';
+import IconAddBlack from '../../assets/add-black.svg';
+import { apiFetch } from '../../utils/api';
+import { useWebSocket } from '../../utils/websocket-context';
+import { DEFAULT_AI_MODEL } from '../../utils/utils';
+import IconChevronRight from '../../assets/chevron-right-black.svg';
 import CellRenderer from './cell-renderer.jsx';
-import SheetInfoPanel from './sheet-info-panel.jsx';
-import SheetToolbar from './sheet-toolbar.jsx';
-import SheetColumnHeader from './sheet-column-header.jsx';
-import { getCellValue, getCellMeta, createCellWithMeta } from '../utils/sheet-helpers.jsx';
-import { useSheetSelection } from '../hooks/use-sheet-selection';
-import { useSheetKeyboard } from '../hooks/use-sheet-keyboard';
+import SheetInfoPanel from './info-panel.jsx';
+import SheetToolbar from './toolbar.jsx';
+import SheetColumnHeader from './column-header.jsx';
+import { getCellValue, getCellMeta, createCellWithMeta } from '../../utils/sheet-helpers.jsx';
+import { useSheetSelection } from '../../hooks/use-sheet-selection';
+import { useSheetKeyboard } from '../../hooks/use-sheet-keyboard';
 
 
 // Inject CSS for enrichment status indicators and AI changes

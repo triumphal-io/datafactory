@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import IconSheet from '../assets/sheet.svg';
-import IconDocument from '../assets/document-black.svg';
+import IconSheet from '../../assets/sheet.svg';
+import IconDocument from '../../assets/document-black.svg';
 
 // Helper function to extract display value from cell (handles both simple values and metadata objects)
 const getCellValue = (cellData) => {

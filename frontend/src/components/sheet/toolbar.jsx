@@ -1,9 +1,9 @@
-import IconStar from '../assets/logo-icon.svg';
-import IconDelete from '../assets/delete.svg';
-import IconAdd from '../assets/add-circle.svg';
-import IconExport from '../assets/export.svg';
-import IconCheck from '../assets/checkmark.svg';
-import IconDismiss from '../assets/dismiss.svg';
+import IconStar from '../../assets/logo-icon.svg';
+import IconDelete from '../../assets/delete.svg';
+import IconAdd from '../../assets/add-circle.svg';
+import IconExport from '../../assets/export.svg';
+import IconCheck from '../../assets/checkmark.svg';
+import IconDismiss from '../../assets/dismiss.svg';
 
 const SheetToolbar = ({
     pendingAiChanges,
