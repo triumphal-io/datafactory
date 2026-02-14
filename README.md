@@ -24,8 +24,29 @@ Unlike traditional spreadsheets, DataFactory allows you to ask natural language 
 ### Bulk Enrichment
 ![Bulk Enrichment Demo](frontend/public/enrich.gif)
 
+Automatically enrich thousands of spreadsheet cells using AI. Select a column, define what data you want to populate, and DataFactory will use the context from your entire row to generate relevant information. The enrichment runs concurrently with real-time progress updates via WebSockets, allowing you to enrich large datasets efficiently.
+
+### RAG-Powered Document Search
+![RAG Sources Demo](frontend/public/rag-sources.gif)
+
+Upload documents (PDF, DOCX, PPTX, CSV, XLSX, TXT, MD) and query them using natural language. DataFactory extracts content, creates vector embeddings with ChromaDB, and uses semantic search to find relevant information. Link spreadsheet cells directly to source documents for full traceability.
+
 ### Source Validation
 ![Source Validation Demo](frontend/public/validate-sources.gif)
+
+Validate and verify data by linking spreadsheet rows to uploaded source documents. The AI assistant can automatically identify relevant sources from your document library, populate file references in your spreadsheet, and ensure data integrity through document-backed evidence.
+
+## Use Cases
+
+### Market Research
+![Market Research Use Case](frontend/public/use-case-market-research.gif)
+
+Conduct comprehensive market research by gathering company information, analyzing competitors, and enriching business data at scale. Upload industry reports, financial documents, and market analysis files, then use AI to extract insights, populate company profiles, and validate findings against source documents. Perfect for investment research, competitive analysis, and business intelligence workflows.
+
+### Resume Screening
+![Resume Screening Use Case](frontend/public/user-case-resume-screening.gif)
+
+Streamline recruitment by automating resume analysis and candidate screening. Upload candidate resumes (PDF, DOCX) and job descriptions, then use AI to extract skills, experience, and qualifications into a structured spreadsheet. Match candidates to job requirements, score applications, and link each assessment back to the original resume for verification. Ideal for HR teams processing high volumes of applications.
 
 ## Features
 
