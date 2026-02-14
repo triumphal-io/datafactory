@@ -1,3 +1,4 @@
+"""WebSocket consumer for real-time workbook updates via Django Channels."""
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
 

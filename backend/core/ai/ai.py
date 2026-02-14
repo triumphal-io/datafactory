@@ -1,3 +1,4 @@
+"""Core AI conversation handler managing LLM interactions, tool call orchestration, and chat streaming."""
 import asyncio
 import time
 import json

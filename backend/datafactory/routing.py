@@ -1,3 +1,4 @@
+"""WebSocket URL routing for Django Channels."""
 from django.urls import re_path
 from . import consumers
 

@@ -1,3 +1,4 @@
+"""API views for managing MCP (Model Context Protocol) server configurations."""
 import json
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, authentication_classes

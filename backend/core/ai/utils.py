@@ -1,3 +1,4 @@
+"""AI utility functions including web search, URL scraping, and LiteLLM client helpers."""
 import os
 from pathlib import Path
 

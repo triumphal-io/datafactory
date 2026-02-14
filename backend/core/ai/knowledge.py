@@ -1,3 +1,4 @@
+"""ChromaDB-backed knowledge base for indexing uploaded documents and performing RAG queries."""
 import chromadb
 from chromadb.utils import embedding_functions
 import pandas as pd

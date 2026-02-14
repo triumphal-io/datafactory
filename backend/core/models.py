@@ -1,3 +1,4 @@
+"""Data models for workbooks, sheets, files, folders, conversations, background jobs, MCP servers, and provider credentials."""
 from django.db import models
 import uuid
 

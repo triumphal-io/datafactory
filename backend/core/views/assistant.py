@@ -1,3 +1,4 @@
+"""API views for the AI assistant chat, tool response handling, and conversation management."""
 import json
 import os
 import re

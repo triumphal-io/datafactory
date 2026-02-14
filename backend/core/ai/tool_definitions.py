@@ -1,3 +1,4 @@
+"""Definitions and implementations of AI assistant tools for sheet manipulation, file queries, and web operations."""
 import asyncio
 import json
 import re

@@ -1,3 +1,4 @@
+"""API views for development testing utilities such as WebSocket broadcast and AI tests."""
 from django.http import JsonResponse
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync

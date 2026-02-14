@@ -1,3 +1,4 @@
+"""API views for retrieving cell processing history from background jobs."""
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny

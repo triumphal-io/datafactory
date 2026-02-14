@@ -1,3 +1,4 @@
+"""File-to-markdown extraction pipeline for CSV, XLSX, PDF, DOCX, PPTX, TXT, and MD uploads."""
 import csv
 import os
 import threading

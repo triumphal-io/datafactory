@@ -1,3 +1,4 @@
+"""AI tool registry that collects and returns available tool definitions for the assistant."""
 from django.apps import apps
 
 

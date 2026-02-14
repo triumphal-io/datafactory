@@ -1,3 +1,4 @@
+"""Django admin configuration for registering and customizing core model interfaces."""
 from django.contrib import admin
 from .models import Workbook, Sheet, File, Folder, Conversation, BackgroundJob, MCPServer, ProviderCredential
 
