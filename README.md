@@ -52,6 +52,60 @@ https://github.com/user-attachments/assets/0a473cab-0bbf-4011-80d5-a009e9b39ca8
 [![Django Channels](https://img.shields.io/badge/Django_Channels-092E20?style=for-the-badge&logo=django&logoColor=white)](https://channels.readthedocs.io/)
 [![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend["Frontend (React + Vite)"]
+        UI[Spreadsheet UI]
+        Chat[AI Assistant Chat]
+        Files[File Manager]
+        WS_Client[WebSocket Client]
+    end
+
+    subgraph Backend["Backend (Django + Channels)"]
+        API[REST API<br/>Django REST Framework]
+        WS_Server[WebSocket Server<br/>Django Channels / Daphne]
+        AI[AI Handler<br/>LiteLLM]
+        Extraction[File Extraction]
+        Enrichment[Bulk Enrichment<br/>Thread Pool]
+    end
+
+    subgraph Storage
+        SQLite[(SQLite<br/>Models & Data)]
+        ChromaDB[(ChromaDB<br/>Vector Embeddings)]
+        FileStore[File Storage<br/>User Uploads]
+    end
+
+    subgraph LLM_Providers["LLM Providers"]
+        OpenAI[OpenAI]
+        Anthropic[Anthropic]
+        Google[Google Gemini]
+    end
+
+    UI -- "HTTP /api/*" --> API
+    Chat -- "POST /api/.../chat" --> API
+    Chat -- "POST /api/.../respond<br/>(tool results)" --> API
+    Files -- "Upload/Query" --> API
+    WS_Client <-- "ws://host/ws/workbook/{uuid}/" --> WS_Server
+
+    API --> AI
+    API --> Extraction
+    API --> Enrichment
+    AI --> LLM_Providers
+    Enrichment --> AI
+
+    AI --> SQLite
+    AI --> ChromaDB
+    Extraction --> ChromaDB
+    Extraction --> FileStore
+    API --> SQLite
+
+    WS_Server -- "Real-time updates<br/>(enrichment progress, file processing)" --> WS_Client
+```
+
+> For a deeper dive into the data model, client-side tool execution pattern, and WebSocket architecture, see [docs/architecture.md](docs/architecture.md).
+
 ## Setup
 
 ### Backend Setup
