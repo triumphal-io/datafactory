@@ -96,8 +96,8 @@ class EnrichmentProcessor:
         for job in jobs:
             job_queue.put(job)
         
-        # Worker function that continuously processes jobs from the queue
         def worker():
+            """Pull jobs from the queue and process them until the queue is empty."""
             while True:
                 try:
                     # Get a job from the queue (non-blocking with timeout)

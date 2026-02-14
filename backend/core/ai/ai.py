@@ -858,6 +858,7 @@ def test_assistant():
 
 
 def test_ai():
+    """Send a test completion request to verify AI provider connectivity."""
     completion_params = {
         "model": "openai/gpt-5-nano",
         "messages": [
