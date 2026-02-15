@@ -64,11 +64,6 @@ def _get_provider_access(workbook_id: str | None, model: str | None):
             user = workbook.user if workbook else None
 
         if user is None:
-            # Fallback to default user in non-workbook contexts
-            from django.contrib.auth.models import User
-            user = User.objects.filter(username='rohanashik').first()
-
-        if user is None:
             return provider, None, 'missing'
 
         cred = ProviderCredential.objects.filter(user=user, provider=provider).first()

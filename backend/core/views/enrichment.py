@@ -8,8 +8,6 @@ from core.ai import ai
 
 
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_enrich(request, action):
     """Legacy single cell enrichment endpoint - kept for backwards compatibility"""
     response = {'status': 'error'}
@@ -18,14 +16,15 @@ def api_enrich(request, action):
     workbook_id = body.get('workbookId')
     model = body.get('model', settings.DEFAULT_AI_MODEL)
     print(data)
-    response['result'] = ai.enrichment(data, workbook_id=workbook_id, model=model)
+    
+    # Pass authenticated user for MCP tool access
+    user = request.user if request.user and request.user.is_authenticated else None
+    response['result'] = ai.enrichment(data, user=user, workbook_id=workbook_id, model=model)
     response['status'] = 'success'
     return JsonResponse(response)
 
 
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_bulk_enrich(request):
     """Bulk enrichment endpoint - accepts multiple cells and processes them with threading"""
     from core.ai.enrich import enricher

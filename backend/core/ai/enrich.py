@@ -161,8 +161,16 @@ class EnrichmentProcessor:
             
             print(f"Processing enrichment for cell [{position['Row']}, {position['Column']}] with model {model}")
             
+            # Get user from workbook for MCP tool access
+            from core.models import Workbook
+            try:
+                workbook = Workbook.objects.get(uuid=workbook_id)
+                user = workbook.user
+            except Workbook.DoesNotExist:
+                user = None
+            
             # Call the enrichment AI function with metadata tracking
-            enrichment_result = ai.enrichment(cell_data, workbook_id=workbook_id, model=model, return_metadata=True)
+            enrichment_result = ai.enrichment(cell_data, user=user, workbook_id=workbook_id, model=model, return_metadata=True)
             
             # Build cell value with metadata structure
             if isinstance(enrichment_result, dict):

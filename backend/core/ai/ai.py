@@ -45,7 +45,7 @@ from .tool_definitions import (
 )
 
 
-def assistant(message, conversation_obj=None, include_sheet_tools=False, workbook_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL, include_read_file_tool=True):
+def assistant(message, user=None, conversation_obj=None, include_sheet_tools=False, workbook_id=None, sheet_context=None, model=settings.DEFAULT_AI_MODEL, include_read_file_tool=True):
     """
     AI assistant with optional conversation persistence, sheet tool support, and file access.
 
@@ -56,6 +56,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
 
     Args:
         message (str or None): User message string. Can be None if continuing from tool results
+        user: Django User object for user-specific MCP tools. Optional.
         conversation_obj (Conversation, optional): Django model instance for conversation persistence
         include_sheet_tools (bool): If True, includes sheet tools and returns tool calls for frontend execution
         workbook_id (str, optional): Workbook UUID to enable file access tools
@@ -219,11 +220,11 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
     # Base tools (search, web scraping) are always available
     tools = get_ai_tools()
 
-    # Add MCP tools (Model Context Protocol integrations)
-    mcp_tools = get_mcp_tools()
+    # Add MCP tools (Model Context Protocol integrations) - user-specific
+    mcp_tools = get_mcp_tools(user) if user else []
     if mcp_tools:
         tools = mcp_tools + tools
-        print(f"MCP: Loaded {len(mcp_tools)} MCP tool(s)")
+        print(f"MCP: Loaded {len(mcp_tools)} MCP tool(s) for user {user.username if user else 'None'}")
 
     # Add sheet manipulation tools if working with spreadsheets
     if include_sheet_tools:
@@ -501,7 +502,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                         # Execute MCP tools (async execution required)
                         if tool_info['name'] in mcp_tool_names:
                             print(f"Executing MCP tool: {tool_info['name']}")
-                            tool_result = asyncio.run(execute_mcp_tool(tool_info['name'], tool_info['arguments']))
+                            tool_result = asyncio.run(execute_mcp_tool(tool_info['name'], tool_info['arguments'], user))
                         else:
                             # Execute standard tool function by name lookup
                             tool_result = globals()[tool_info['name']](**tool_info['arguments'])
@@ -583,7 +584,7 @@ def assistant(message, conversation_obj=None, include_sheet_tools=False, workboo
                 raise
 
 
-def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_metadata=False):
+def enrichment(data, user=None, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_metadata=False):
     """
     Enrich a spreadsheet cell using AI based on context from other cells.
 
@@ -600,6 +601,7 @@ def enrichment(data, workbook_id=None, model=settings.DEFAULT_AI_MODEL, return_m
             - 'type' (str, optional): Data type (text, number, select, multiselect, etc.)
             - 'format' (str, optional): Format specification
             - 'options' (list, optional): Available options for select/multiselect types
+        user: Django User object for user-specific MCP tools. Optional.
         workbook_id (str, optional): Workbook UUID for file access
         model (str, optional): AI model to use. Defaults to settings.DEFAULT_AI_MODEL
         return_metadata (bool, optional): If True, returns dict with value and metadata. Defaults to False.
@@ -717,7 +719,7 @@ SEARCH GUIDELINES:
 
     # Use AI assistant to generate enrichment value
     # include_read_file_tool=False restricts enrichment from accessing tool_read_file
-    result = assistant(prompt, conversation_obj=temp_conversation, workbook_id=workbook_id, model=model, include_read_file_tool=False)
+    result = assistant(prompt, user=user, conversation_obj=temp_conversation, workbook_id=workbook_id, model=model, include_read_file_tool=False)
     print(f"Enrichment result: {result}")
 
     # Extract tool usage metadata from conversation if enabled

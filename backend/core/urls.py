@@ -5,6 +5,8 @@ from . import views
 
 urlpatterns = [
     path('auth/', include('rest_framework.urls')),
+    path('auth/signup', views.api_signup, name='api_signup'),
+    path('auth/login', views.api_login, name='api_login'),
     path('workbooks/<str:action>', views.api_workbooks, name='api_workbooks'),
     # path('workbooks/<str:did>/sheets', views.api_sheets, name='api_sheets'),
     path('workbooks/<str:did>/sheets/<str:sheet_id>', views.api_sheets, name='api_sheets'),

@@ -27,7 +27,7 @@ export function getApiUrl(path) {
  * Helper function to make authenticated fetch requests
  * @param {string} path - API endpoint path
  * @param {object} options - Fetch options
- * @param {string} authToken - Authentication token
+ * @param {string} authToken - Optional authentication token (if not provided, will use localStorage)
  * @returns {Promise<Response>}
  */
 export async function apiFetch(path, options = {}, authToken = null) {
@@ -35,8 +35,10 @@ export async function apiFetch(path, options = {}, authToken = null) {
     ...options.headers,
   };
 
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  // Get token from parameter or localStorage
+  const token = authToken || localStorage.getItem('token');
+  if (token) {
+    headers['Authorization'] = `Token ${token}`;
   }
 
   // Don't set Content-Type or stringify body for FormData

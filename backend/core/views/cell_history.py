@@ -6,8 +6,6 @@ from core.models import BackgroundJob
 
 
 @api_view(['GET'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_cell_history(request, did, sheet_id):
     """
     Get enrichment history for a specific cell
@@ -19,6 +17,14 @@ def api_cell_history(request, did, sheet_id):
     Returns most recent completed enrichment job with tool usage metadata
     """
     try:
+        # Verify workbook ownership
+        if not request.user or not request.user.is_authenticated:
+            return JsonResponse({'status': 'error', 'message': 'Authentication required'}, status=401)
+        
+        workbook = Workbook.objects.filter(uuid=did, user=request.user).first()
+        if not workbook:
+            return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
+        
         # Get query parameters
         row = request.GET.get('row')
         column = request.GET.get('column')

@@ -8,8 +8,6 @@ from core.ai import ai
 
 
 @api_view(['GET', 'POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_test(request, action):
     """A simple test API endpoint for admin actions"""
     response = {'status': 'error'}

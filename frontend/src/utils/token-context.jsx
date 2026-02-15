@@ -1,6 +1,5 @@
 import { createContext, useContext } from 'react';
 
-/** @type {React.Context<string|null>} Context for the authentication token */
 export const TokenContext = createContext();
 
 /**
@@ -8,5 +7,14 @@ export const TokenContext = createContext();
  * @returns {string|null} The auth token, or null if not set
  */
 export function useToken() {
+  const ctx = useContext(TokenContext);
+  return ctx?.token || ctx;
+}
+
+/**
+ * Hook to access the full auth context (token, setToken, logout).
+ * @returns {{ token: string|null, setToken: function, logout: function }}
+ */
+export function useAuth() {
   return useContext(TokenContext);
 }

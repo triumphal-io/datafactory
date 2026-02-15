@@ -552,65 +552,85 @@ class MCPManager:
         ]
 
 
-# Global MCP manager instance
-# This is initialized once and shared across the application
-_mcp_manager: Optional[MCPManager] = None
+# Per-user MCP manager instances
+# Each user gets their own manager with their configured MCP servers
+_mcp_managers: Dict[int, MCPManager] = {}
 
 
-def get_mcp_manager() -> MCPManager:
+def get_mcp_manager(user=None) -> MCPManager:
     """
-    Get the global MCP manager instance.
+    Get the MCP manager instance for a specific user.
     
-    Initializes the manager on first call and loads MCP servers from database.
+    Initializes a new manager on first call for each user and loads their MCP servers from database.
     Falls back to JSON configuration for backward compatibility.
     
+    Args:
+        user: Django User object. If None, returns empty manager.
+    
     Returns:
-        MCPManager: Global MCP manager instance
+        MCPManager: User-specific MCP manager instance
     """
-    global _mcp_manager
+    global _mcp_managers
     
-    if _mcp_manager is None:
-        _mcp_manager = MCPManager() 
-        _load_mcp_servers_from_db()
+    # Return empty manager if no user provided
+    if user is None:
+        return MCPManager()
     
-    return _mcp_manager
+    # Get or create manager for this user
+    if user.id not in _mcp_managers:
+        _mcp_managers[user.id] = MCPManager() 
+        _load_mcp_servers_from_db(user)
+    
+    return _mcp_managers[user.id]
 
 
-def reload_mcp_manager():
+def reload_mcp_manager(user):
     """
-    Reload the MCP manager with updated configuration from database.
+    Reload the MCP manager for a specific user with updated configuration from database.
     Call this after adding/removing/updating MCP servers.
+    
+    Args:
+        user: Django User object
     """
-    global _mcp_manager
-    _mcp_manager = MCPManager()
-    _load_mcp_servers_from_db()
-    print("MCP: Manager reloaded with updated configuration")
+    global _mcp_managers
+    
+    if user is None:
+        print("MCP Warning: Cannot reload manager without user context")
+        return
+    
+    _mcp_managers[user.id] = MCPManager()
+    _load_mcp_servers_from_db(user)
+    print(f"MCP: Manager reloaded for user {user.username}")
 
 
-def _load_mcp_servers_from_db():
+def _load_mcp_servers_from_db(user):
     """
-    Load MCP servers from database.
+    Load MCP servers from database for a specific user.
     Internal function used by get_mcp_manager() and reload_mcp_manager().
+    
+    Args:
+        user: Django User object
     """
-    global _mcp_manager
+    global _mcp_managers
+    
+    if user is None:
+        print("MCP Warning: Cannot load servers without user context")
+        return
     
     try:
         # Import here to avoid circular dependency
         from core.models import MCPServer as MCPServerModel
-        from django.contrib.auth.models import User
         
-        # Get user (hardcoded for now - TODO: make dynamic when auth is implemented)
-        user = User.objects.filter(username='rohanashik').first()
-        if not user:
-            print("MCP Warning: User 'rohanashik' not found, no MCP servers loaded")
-            return
-        
-        # Load MCP servers from database
+        # Load MCP servers from database for this specific user
         db_servers = MCPServerModel.objects.filter(user=user)
         
         if not db_servers.exists():
-            print("MCP: No MCP servers found in database, loading from JSON config as fallback")
-            _load_mcp_servers_from_json()
+            print(f"MCP: No MCP servers found in database for user {user.username}")
+            return
+        
+        manager = _mcp_managers.get(user.id)
+        if not manager:
+            print(f"MCP Warning: Manager not found for user {user.username}")
             return
         
         for server_config in db_servers:
@@ -637,85 +657,45 @@ def _load_mcp_servers_from_db():
                 # Tools will be discovered on first access (lazy loading)
                 # This avoids async complexity during initialization
                 
-                _mcp_manager.add_server(server)
+                manager.add_server(server)
                 
             except Exception as e:
                 print(f"MCP Error: Failed to initialize server {name}: {e}")
         
-        print(f"MCP: Initialized {len(_mcp_manager.servers)} server(s) from database")
+        print(f"MCP: Initialized {len(manager.servers)} server(s) from database for user {user.username}")
         
     except Exception as e:
-        print(f"MCP Error: Failed to load servers from database: {e}")
-        print("MCP: Falling back to JSON configuration")
-        _load_mcp_servers_from_json()
+        print(f"MCP Error: Failed to load servers from database for user {user.username}: {e}")
 
 
 def _load_mcp_servers_from_json():
     """
     Load MCP servers from JSON configuration file (fallback/legacy).
-    Internal function used when database is not available.
+    Internal function - DEPRECATED, kept for backward compatibility only.
     """
-    global _mcp_manager
+    # This function is no longer used but kept for potential legacy support
+    pass
     
-    config = load_mcp_config()
-    
-    for server_config in config.get('servers', []):
-        try:
-            name = server_config.get('name')
-            url = server_config.get('url')
-            enabled = server_config.get('enabled', True)
-            description = server_config.get('description', '')
-            headers = server_config.get('headers', {})
-            
-            if not name or not url:
-                print(f"MCP Warning: Skipping server config missing name or url: {server_config}")
-                continue
-            
-            # Create RemoteMCPServer instance for all user-defined servers
-            server = RemoteMCPServer(
-                name=name,
-                url=url,
-                enabled=enabled,
-                description=description,
-                headers=headers
-            )
-            
-            # Discover tools asynchronously
-            if enabled:
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(server.discover_tools())
-                    else:
-                        loop.run_until_complete(server.discover_tools())
-                except RuntimeError:
-                    # No event loop available, tools will be discovered on first use
-                    pass
-            
-            _mcp_manager.add_server(server)
-            
-        except Exception as e:
-            print(f"MCP Error: Failed to initialize server {server_config.get('name', 'unknown')}: {e}")
-    
-    print(f"MCP: Initialized {len(_mcp_manager.servers)} server(s) from JSON configuration")
 
 
-
-def get_mcp_tools() -> List[Dict[str, Any]]:
+def get_mcp_tools(user=None) -> List[Dict[str, Any]]:
     """
     Get all MCP tools for inclusion in AI tool definitions.
     
     This is the main entry point for integrating MCP tools into the
     DataFactory assistant. Call this from ai.py to include MCP tools.
     
+    Args:
+        user: Django User object. If None, returns empty list.
+    
     Returns:
-        List[Dict]: All tools from all enabled MCP servers
+        List[Dict]: All tools from all enabled MCP servers for this user
     """
-    manager = get_mcp_manager()
+    manager = get_mcp_manager(user)
     return manager.get_all_tools()
 
 
-async def execute_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
+async def execute_mcp_tool(tool_name: str, arguments: Dict[str, Any], user=None) -> Any:
     """
     Execute an MCP tool.
     
@@ -724,9 +704,13 @@ async def execute_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
     Args:
         tool_name (str): Name of the MCP tool
         arguments (Dict): Tool arguments
+        user: Django User object. If None, returns error.
         
     Returns:
         Any: Tool execution result
     """
-    manager = get_mcp_manager()
+    if user is None:
+        return "Error: User context required for MCP tool execution"
+    
+    manager = get_mcp_manager(user)
     return await manager.execute_tool(tool_name, arguments)

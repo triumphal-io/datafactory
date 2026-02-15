@@ -7,18 +7,15 @@ from core.models import ProviderCredential
 
 
 @api_view(['GET', 'POST', 'PATCH', 'DELETE'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_provider_credentials(request, action):
     """Manage per-user LLM provider API keys and enable/disable flags."""
     response = {'status': 'error'}
 
-    # Get current user (hardcoded for now)
-    from django.contrib.auth.models import User
-    user = User.objects.filter(username='rohanashik').first()
-    if not user:
-        response['message'] = 'User not found'
-        return JsonResponse(response, status=404)
+    # Get current authenticated user
+    if not request.user or not request.user.is_authenticated:
+        response['message'] = 'Authentication required'
+        return JsonResponse(response, status=401)
+    user = request.user
 
     PROVIDERS = {
         'openai': 'OpenAI',

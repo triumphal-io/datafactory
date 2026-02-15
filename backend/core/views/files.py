@@ -12,8 +12,6 @@ from core.ai.extraction import start_background_processing
 
 
 @api_view(['GET', 'POST', 'DELETE', 'PATCH'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_files(request, did, action):
     """
     Handle workbook Resources (uploaded files like CSV, XLSX, PDF, DOCX, etc.).
@@ -21,6 +19,14 @@ def api_files(request, did, action):
     Resources = user-uploaded files stored in folders for reference/RAG.
     """
     response = {'status': 'error'}
+    
+    # Verify workbook ownership
+    if not request.user or not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Authentication required'}, status=401)
+    
+    workbook = Workbook.objects.filter(uuid=did, user=request.user).first()
+    if not workbook:
+        return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
     
     # Handle file-specific operations (DELETE/PATCH) when action is a UUID
     if request.method in ['DELETE', 'PATCH']:

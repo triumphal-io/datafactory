@@ -7,6 +7,7 @@ import IconSettings from '../assets/settings.svg';
 import IconLogout from '../assets/sign-out.svg';
 import LoaderGif from '../assets/loader.gif';
 import { apiFetch } from '../utils/api';
+import { useAuth } from '../utils/token-context';
 
 /**
  * Slide-out navigation drawer listing all workbooks with create/delete actions.
@@ -17,6 +18,7 @@ import { apiFetch } from '../utils/api';
  */
 export default function Drawer({ isOpen, onClose }) {
     const navigate = useNavigate();
+    const { logout } = useAuth();
     const [opacity, setOpacity] = useState(isOpen ? 1 : 0);
     const [transition, setTransition] = useState(isOpen ? 'opacity 0.2s ease' : 'none');
     const [workbooks, setWorkbooks] = useState([]);
@@ -136,10 +138,18 @@ export default function Drawer({ isOpen, onClose }) {
                 <img src={IconSettings} alt="Settings" height="16" />
                 <p className='text--micro text__medium'>Settings</p>
             </Link>
-            <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}  className='drawer-item flex flex-row-center gap-12'>
-                <img src={IconLogout} alt="New Workbook" height="16" />
+            <div 
+                onClick={() => {
+                    logout();
+                    navigate('/login');
+                    onClose();
+                }} 
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}  
+                className='drawer-item flex flex-row-center gap-12'
+            >
+                <img src={IconLogout} alt="Logout" height="16" />
                 <p className='text--micro text__medium'>Logout</p>
-            </Link>
+            </div>
         </div>
         </div>
     </div>

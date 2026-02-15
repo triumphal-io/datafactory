@@ -8,14 +8,20 @@ from core.models import Workbook, Sheet
 
 
 @api_view(['GET', 'POST', 'DELETE', 'PATCH'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_sheets(request, did, sheet_id):
     """
     Handle workbook Sheets (spreadsheet tabs) operations.
     Note: Sheets = spreadsheet tabs with columns/rows (like Excel sheets).
     These are different from uploaded sheet files (CSV/XLSX) in Resources.
     """
+    
+    # Verify workbook ownership
+    if not request.user or not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Authentication required'}, status=401)
+    
+    workbook = Workbook.objects.filter(uuid=did, user=request.user).first()
+    if not workbook:
+        return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
     
     if request.method == 'GET':
         if sheet_id == 'list':
@@ -56,14 +62,7 @@ def api_sheets(request, did, sheet_id):
     elif request.method == 'POST':
         
         if sheet_id == 'new':
-            # Create a new sheet
-            workbook = Workbook.objects.filter(uuid=did).first()
-            if not workbook:
-                return JsonResponse(
-                    {'status': 'error', 'message': 'Workbook not found'},
-                    status=404
-                )
-
+            # Create a new sheet (workbook already verified at function start)
             # Get existing sheets to determine the next sheet name
             existing_sheets = Sheet.objects.filter(workbook=workbook)
             sheet_numbers = []

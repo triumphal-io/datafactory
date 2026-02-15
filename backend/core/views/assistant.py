@@ -13,8 +13,6 @@ from core.ai.extraction import start_background_processing
 
 
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_assistant(request, did, action):
     """
     Handle AI assistant messages with conversation persistence and tool support.
@@ -34,6 +32,14 @@ def api_assistant(request, did, action):
         - selected_range: Selected cell range
     """
     try:
+        # Verify workbook ownership
+        if not request.user or not request.user.is_authenticated:
+            return JsonResponse({'status': 'error', 'message': 'Authentication required'}, status=401)
+        
+        workbook = Workbook.objects.filter(uuid=did, user=request.user).first()
+        if not workbook:
+            return JsonResponse({'status': 'error', 'message': 'Workbook not found'}, status=404)
+        
         # Check if this is FormData (with attachments) or JSON request
         content_type = request.content_type
         is_form_data = 'multipart/form-data' in content_type if content_type else False
@@ -172,6 +178,7 @@ def api_assistant(request, did, action):
             
             result = ai.assistant(
                 message=message,
+                user=request.user,
                 conversation_obj=conversation,
                 include_sheet_tools=include_sheet_tools,
                 workbook_id=did,

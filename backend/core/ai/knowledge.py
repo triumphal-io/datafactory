@@ -8,18 +8,17 @@ from django.conf import settings
 from django.apps import apps
 
 
-def _get_openai_api_key_from_db() -> str | None:
+def _get_openai_api_key_from_db(user=None) -> str | None:
     """Best-effort lookup for OpenAI API key in DB.
 
-    Note: auth is currently hardcoded elsewhere; we mirror that behavior here.
+    Args:
+        user: Django User object to look up credentials for
     """
     try:
-        ProviderCredential = apps.get_model('core', 'ProviderCredential')
-        from django.contrib.auth.models import User
-
-        user = User.objects.filter(username='rohanashik').first()
         if not user:
             return None
+
+        ProviderCredential = apps.get_model('core', 'ProviderCredential')
 
         cred = ProviderCredential.objects.filter(user=user, provider='openai').first()
         key = (cred.api_key or '').strip() if cred else ''
@@ -28,9 +27,9 @@ def _get_openai_api_key_from_db() -> str | None:
         return None
 
 
-def _get_openai_api_key() -> str | None:
+def _get_openai_api_key(user=None) -> str | None:
     # Credentials must come from DB.
-    return _get_openai_api_key_from_db()
+    return _get_openai_api_key_from_db(user)
 
 # ChromaDB client configuration
 CHROMA_DB_PATH = os.path.join(settings.BASE_DIR, 'storage', 'chromadb')
@@ -49,9 +48,12 @@ def get_chroma_client():
     return _chroma_client
 
 
-def get_embedding_function():
+def get_embedding_function(user=None):
     """
     Get the configured embedding function based on settings.
+    
+    Args:
+        user: Optional Django User object for API key lookup (required for OpenAI embeddings)
     
     Returns:
         EmbeddingFunction: Configured embedding function for ChromaDB
@@ -61,7 +63,7 @@ def get_embedding_function():
     if embedding_type == 'openai':
         model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
         return embedding_functions.OpenAIEmbeddingFunction(
-            api_key=_get_openai_api_key(),
+            api_key=_get_openai_api_key(user),
             model_name=model_name
         )
     elif embedding_type == 'sentence-transformers':
@@ -76,18 +78,19 @@ def get_embedding_function():
         raise ValueError(f"Unsupported embedding model type: {embedding_type}")
 
 
-def get_or_create_collection(collection_name="file_chunks"):
+def get_or_create_collection(collection_name="file_chunks", user=None):
     """
     Get or create a ChromaDB collection for storing file chunks.
     Uses the embedding model configured in settings.
     
     Args:
         collection_name (str): Name of the collection
+        user: Optional Django User object for API key lookup (required for OpenAI embeddings)
         
     Returns:
         Collection: ChromaDB collection instance
     """
-    embedding_func = get_embedding_function()
+    embedding_func = get_embedding_function(user)
     embedding_type = getattr(settings, 'EMBEDDING_MODEL_TYPE', 'default')
     embedding_model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'default')
     

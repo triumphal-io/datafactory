@@ -7,8 +7,6 @@ from core.models import MCPServer
 
 
 @api_view(['GET', 'POST', 'PATCH', 'DELETE'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_mcp_servers(request, action):
     """
     Handle MCP server management (list, create, update, delete).
@@ -16,12 +14,11 @@ def api_mcp_servers(request, action):
     """
     response = {'status': 'error'}
 
-    # Get current user (hardcoded for now)
-    from django.contrib.auth.models import User
-    user = User.objects.filter(username='rohanashik').first()
-    if not user:
-        response['message'] = 'User not found'
-        return JsonResponse(response, status=404)
+    # Get current authenticated user
+    if not request.user or not request.user.is_authenticated:
+        response['message'] = 'Authentication required'
+        return JsonResponse(response, status=401)
+    user = request.user
 
     if action == "list":
         # Get all MCP servers for the user
@@ -70,14 +67,14 @@ def api_mcp_servers(request, action):
             config=data.get('config', {})
         )
         
-        # Reload MCP manager with new servers
+        # Reload MCP manager with new servers for this user
         from core.ai import mcp
-        mcp.reload_mcp_manager()
+        mcp.reload_mcp_manager(user)
 
         # Force tool discovery to populate DB and get count
         tools_count = 0
         try:
-            manager = mcp.get_mcp_manager()
+            manager = mcp.get_mcp_manager(user)
             srv = manager.get_server(data['name'])
             if srv and srv.is_enabled():
                 print(f"MCP: Triggering background tool discovery for {data['name']}")
@@ -145,7 +142,7 @@ def api_mcp_servers(request, action):
         tools_count = len(server.tools) if server.tools else 0
         if server.enabled:
             try:
-                manager = mcp.get_mcp_manager()
+                manager = mcp.get_mcp_manager(user)
                 srv = manager.get_server(server.name)
                 if srv:
                     # Force refresh of tools
@@ -194,9 +191,9 @@ def api_mcp_servers(request, action):
             server.delete()
             response['status'] = 'success'
             
-            # Reload MCP manager after deletion
+            # Reload MCP manager after deletion for this user
             from core.ai import mcp
-            mcp.reload_mcp_manager()
+            mcp.reload_mcp_manager(user)
         except MCPServer.DoesNotExist:
             response['message'] = 'MCP server not found'
             return JsonResponse(response, status=404)

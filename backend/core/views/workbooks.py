@@ -8,8 +8,6 @@ from core.models import Workbook, Sheet, File, Conversation
 
 
 @api_view(['GET', 'POST', 'PATCH'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_workbooks(request, action):
     """
     Handle workbook operations (list, create, get details).
@@ -18,7 +16,11 @@ def api_workbooks(request, action):
     response = {'status': 'error'}
 
     if action == "list":
-        workbooks = Workbook.objects.all()
+        # Filter workbooks by authenticated user
+        if not request.user or not request.user.is_authenticated:
+            return Response({'status': 'error', 'message': 'Authentication required'}, status=401)
+        
+        workbooks = Workbook.objects.filter(user=request.user)
         response['workbooks'] = []
         for workbook in workbooks:
             response['workbooks'].append({
@@ -34,9 +36,11 @@ def api_workbooks(request, action):
     elif action == "create":
         # Create a new workbook with a default sheet (Sheet 1)
         from django.contrib.auth.models import User
-        
-        # Get or create a default user (you may want to use actual authenticated user)
-        user = User.objects.get(username='rohanashik')
+
+        # Use authenticated user
+        if not request.user or not request.user.is_authenticated:
+            return Response({'status': 'error', 'message': 'Authentication required'}, status=401)
+        user = request.user
 
         # Create the workbook
         workbook = Workbook.objects.create(
@@ -162,7 +166,11 @@ def api_workbooks(request, action):
                 status=500
             )
     else:
-        workbook = Workbook.objects.filter(uuid=action).first()
+        # Verify authentication for workbook access
+        if not request.user or not request.user.is_authenticated:
+            return Response({'status': 'error', 'message': 'Authentication required'}, status=401)
+        
+        workbook = Workbook.objects.filter(uuid=action, user=request.user).first()
         if not workbook:
             return JsonResponse(
                 {'status': 'error', 'message': 'Workbook not found'},
@@ -233,12 +241,14 @@ def api_workbooks(request, action):
 
 
 @api_view(['PATCH'])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def api_update_workbook(request, did):
     """Update workbook properties like name"""
     try:
-        workbook = Workbook.objects.filter(uuid=did).first()
+        # Verify authentication and ownership
+        if not request.user or not request.user.is_authenticated:
+            return JsonResponse({'status': 'error', 'message': 'Authentication required'}, status=401)
+        
+        workbook = Workbook.objects.filter(uuid=did, user=request.user).first()
         if not workbook:
             return JsonResponse(
                 {'status': 'error', 'message': 'Workbook not found'},

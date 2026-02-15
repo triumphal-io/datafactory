@@ -25,6 +25,7 @@ from .cell_history import api_cell_history
 from .mcp import api_mcp_servers
 from .providers import api_provider_credentials
 from .testing import api_test
+from .auth import api_signup, api_login
 
 # Export all views for easy importing
 __all__ = [
@@ -40,4 +41,6 @@ __all__ = [
     'api_mcp_servers',
     'api_provider_credentials',
     'api_test',
+    'api_signup',
+    'api_login',
 ]
