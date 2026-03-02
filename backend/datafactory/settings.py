@@ -27,9 +27,9 @@ STAGE = 'local'
 DEFAULT_AI_MODEL = 'gemini/gemini-2.5-flash-lite'
 
 # Embedding Model Configuration
-# Options: 'openai', 'default', 'sentence-transformers'
-EMBEDDING_MODEL_TYPE = 'openai'  # 'openai' | 'default' | 'sentence-transformers'
-EMBEDDING_MODEL_NAME = 'text-embedding-3-small'  # Used for OpenAI and sentence-transformers
+# Options: 'openai', 'gemini', 'default', 'sentence-transformers'
+EMBEDDING_MODEL_TYPE = 'gemini'  # 'openai' | 'gemini' | 'default' | 'sentence-transformers'
+EMBEDDING_MODEL_NAME = 'gemini-embedding-001'  # Used for OpenAI/Gemini and sentence-transformers
 
 # MCP Servers Configuration
 MCP_CONFIG_PATH = None  # None = default to backend/mcp_servers.json

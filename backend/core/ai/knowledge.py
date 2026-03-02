@@ -31,6 +31,34 @@ def _get_openai_api_key(user=None) -> str | None:
     # Credentials must come from DB.
     return _get_openai_api_key_from_db(user)
 
+
+def _get_google_api_key_from_db(user=None) -> str | None:
+    """Best-effort lookup for Google/Gemini API key in DB.
+
+    Args:
+        user: Django User object to look up credentials for
+    """
+    try:
+        if not user:
+            return None
+
+        ProviderCredential = apps.get_model('core', 'ProviderCredential')
+
+        cred = ProviderCredential.objects.filter(user=user, provider='gemini').first()
+        key = (cred.api_key or '').strip() if cred else ''
+        return key or None
+    except Exception:
+        return None
+
+
+def _get_google_api_key(user=None) -> str | None:
+    # First try DB credentials, then fall back to environment variable
+    key = _get_google_api_key_from_db(user)
+    if not key:
+        import os
+        key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY') or None
+    return key
+
 # ChromaDB client configuration
 CHROMA_DB_PATH = os.path.join(settings.BASE_DIR, 'storage', 'chromadb')
 _chroma_client = None  # Lazy-loaded singleton
@@ -46,6 +74,29 @@ def get_chroma_client():
         Path(CHROMA_DB_PATH).mkdir(parents=True, exist_ok=True)
         _chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     return _chroma_client
+
+
+class _GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
+    """
+    Custom Gemini embedding function using the google-genai SDK.
+    Uses gemini-embedding-001 (text-embedding-004 was shut down Jan 14 2026).
+    gemini-embedding-001 only accepts one input per request, so we loop.
+    """
+    def __init__(self, api_key: str, model_name: str = 'gemini-embedding-001'):
+        self._api_key = api_key
+        self._model_name = model_name
+
+    def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
+        from google import genai as google_genai
+        client = google_genai.Client(api_key=self._api_key)
+        embeddings = []
+        for text in input:
+            result = client.models.embed_content(
+                model=self._model_name,
+                contents=text,
+            )
+            embeddings.append(result.embeddings[0].values)
+        return embeddings
 
 
 def get_embedding_function(user=None):
@@ -64,6 +115,12 @@ def get_embedding_function(user=None):
         model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
         return embedding_functions.OpenAIEmbeddingFunction(
             api_key=_get_openai_api_key(user),
+            model_name=model_name
+        )
+    elif embedding_type == 'gemini':
+        model_name = getattr(settings, 'EMBEDDING_MODEL_NAME', 'gemini-embedding-001')
+        return _GeminiEmbeddingFunction(
+            api_key=_get_google_api_key(user),
             model_name=model_name
         )
     elif embedding_type == 'sentence-transformers':
