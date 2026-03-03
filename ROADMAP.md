@@ -23,4 +23,4 @@ This is a high-level overview of where DataFactory is headed. Priorities may shi
 
 ## Contributing
 
-If any of these items interest you, check the [issues](https://github.com/rohanashik/datafactory/issues) for related tasks or open a new one to discuss your approach. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
+If any of these items interest you, check the [issues](https://github.com/triumphal-io/datafactory/issues) for related tasks or open a new one to discuss your approach. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.

@@ -3,10 +3,10 @@
 > AI-powered spreadsheets with agents in every cell
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![CI](https://github.com/rohanashik/datafactory/actions/workflows/ci.yml/badge.svg)](https://github.com/rohanashik/datafactory/actions)
+[![CI](https://github.com/triumphal-io/datafactory/actions/workflows/ci.yml/badge.svg)](https://github.com/triumphal-io/datafactory/actions)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![GitHub stars](https://img.shields.io/github/stars/rohanashik/datafactory)](https://github.com/rohanashik/datafactory/stargazers)
-[![Discussions](https://img.shields.io/github/discussions/rohanashik/datafactory)](https://github.com/rohanashik/datafactory/discussions)
+[![GitHub stars](https://img.shields.io/github/stars/triumphal-io/datafactory)](https://github.com/triumphal-io/datafactory/stargazers)
+[![Discussions](https://img.shields.io/github/discussions/triumphal-io/datafactory)](https://github.com/triumphal-io/datafactory/discussions)
 
 DataFactory is an AI-powered spreadsheet platform that combines the flexibility of traditional spreadsheets with advanced AI capabilities for data enrichment, analysis, and knowledge extraction.
 
@@ -183,13 +183,13 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=rohanashik/datafactory&type=Date)](https://star-history.com/#rohanashik/datafactory&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=triumphal-io/datafactory&type=Date)](https://star-history.com/#triumphal-io/datafactory&Date)
 
 ## Contributors
 
 Thanks to all contributors who have helped make DataFactory better!
 
-[![Contributors](https://contrib.rocks/image?repo=rohanashik/datafactory)](https://github.com/rohanashik/datafactory/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=triumphal-io/datafactory)](https://github.com/triumphal-io/datafactory/graphs/contributors)
 
 ## License
 

@@ -7,7 +7,7 @@ If you discover a security vulnerability in DataFactory, **please do not open a 
 ### How to Report
 
 1. **GitHub Private Vulnerability Reporting** (preferred)
-   Go to the [Security Advisories](https://github.com/rohanashik/datafactory/security/advisories) page and click **"Report a vulnerability"**.
+   Go to the [Security Advisories](https://github.com/triumphal-io/datafactory/security/advisories) page and click **"Report a vulnerability"**.
 
 2. **Email**
    If you prefer email, contact the maintainer directly through their [GitHub profile](https://github.com/rohanashik).

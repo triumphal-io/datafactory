@@ -18,7 +18,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/rohanashik/datafactory.git
+   git clone https://github.com/triumphal-io/datafactory.git
    cd datafactory
    ```
 
@@ -48,7 +48,7 @@ For more details, see the [Setup section in the README](README.md#setup).
 
 ### Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/rohanashik/datafactory/issues) with:
+Open a [GitHub Issue](https://github.com/triumphal-io/datafactory/issues) with:
 - Steps to reproduce
 - Expected vs actual behavior
 - Browser/OS/Python/Node versions
@@ -56,7 +56,7 @@ Open a [GitHub Issue](https://github.com/rohanashik/datafactory/issues) with:
 
 ### Suggesting Features
 
-Open a [GitHub Issue](https://github.com/rohanashik/datafactory/issues) with the **feature request** label, or start a thread in [GitHub Discussions](https://github.com/rohanashik/datafactory/discussions).
+Open a [GitHub Issue](https://github.com/triumphal-io/datafactory/issues) with the **feature request** label, or start a thread in [GitHub Discussions](https://github.com/triumphal-io/datafactory/discussions).
 
 ### Submitting Code
 
@@ -157,8 +157,8 @@ frontend/
 
 ## Questions?
 
-- Open a thread in [GitHub Discussions](https://github.com/rohanashik/datafactory/discussions) for general questions
-- Open a [GitHub Issue](https://github.com/rohanashik/datafactory/issues) for bugs or feature requests
+- Open a thread in [GitHub Discussions](https://github.com/triumphal-io/datafactory/discussions) for general questions
+- Open a [GitHub Issue](https://github.com/triumphal-io/datafactory/issues) for bugs or feature requests
 
 ## License
 
